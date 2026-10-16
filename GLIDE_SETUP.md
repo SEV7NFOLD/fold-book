@@ -37,12 +37,14 @@ Steps
    - If this app will contain sensitive/student data, set Privacy to "Sign in (Email)" and require sign-in. Configure allowed domains if you want to limit access to your university domain.
    - Glide supports user profiles; you can map signed-in users to student reg numbers for personalized views.
 
+   Public-site note: the static Vercel build compiles `students.csv` and `results.csv` into downloadable client-side JavaScript to support the results search. It does not provide sign-in or make those results private. Only deploy the static results lookup if the department has authorized the records for public release.
+
 7. Sharing
    - Publish the app and use the Share → Link to copy a short URL. Share the URL via WhatsApp/Telegram.
    - You may also publish as a Progressive Web App — Glide provides an install prompt for mobile users.
 
 Security note
-- The repository contains example data only. For a production deployment with real student results, DO NOT keep raw student data in a public GitHub repository — move data to a protected Google Sheet (with restricted sharing) or a secure backend and enforce authentication.
+- The CSV exports include student names, registration numbers, and academic results. For a restricted results portal, do not use the static Vercel lookup; use a protected Google Sheet or secure backend with authentication and authorization. Restrict access to those CSVs in the repository as appropriate for their publication status.
 
 Need help?
 - I can prepare a Google Sheet for you and (optionally) import the CSVs if you provide a Google account email that can be used for an editor (I cannot access your Google account directly). Alternatively, I can export the CSVs here for you to upload to Google Sheets.
