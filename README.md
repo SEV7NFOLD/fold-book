@@ -16,6 +16,8 @@ npm run dev
 
 Open <http://127.0.0.1:4173>. The development script builds the site first, so the results lookup works in the local preview.
 
+Students with an A or B in one or more courses see a celebration card after looking up their results. They can preview each qualifying course and export a 1080 × 1920 PNG for social status or stories; the image is generated in the browser without an additional dependency.
+
 ## Build and preview a deployment
 
 ```sh

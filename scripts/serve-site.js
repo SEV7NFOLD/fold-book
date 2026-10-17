@@ -15,6 +15,8 @@ const files = new Map([
   ["/assets/brand/mark.svg", "assets/brand/mark.svg"],
   ["/assets/css/styles.css", "assets/css/styles.css"],
   ["/assets/js/app.js", "assets/js/app.js"],
+  ["/data/announcements.csv", "data/announcements.csv"],
+  ["/data/timetable.csv", "data/timetable.csv"],
 ]);
 const contentTypes = new Map([
   [".css", "text/css; charset=utf-8"],

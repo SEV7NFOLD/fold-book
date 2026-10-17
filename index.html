@@ -108,5 +108,60 @@
       <span class="footer-note">ECONOMICS 100L <span>·</span> UNIVERSITY OF UYO</span>
       <a class="footer-top" href="#top">BACK TO TOP <span aria-hidden="true">↑</span></a>
     </footer>
+
+    <dialog class="celebration-modal" id="celebration-modal" aria-labelledby="celebration-title">
+      <div class="celebration-shell">
+        <div class="celebration-confetti" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <button class="celebration-close" id="celebration-close" type="button" aria-label="Close celebration">×</button>
+        <h2 class="celebration-title" id="celebration-title">Your hard work deserves a moment.</h2>
+        <p class="celebration-intro" id="celebration-course-count"></p>
+
+        <article class="sevenfold-card" id="export-card" aria-label="Grade celebration card preview">
+          <div class="card-header">
+            <div class="card-brand">
+              <svg class="card-logo" aria-hidden="true" viewBox="0 0 40 40" fill="none">
+                <path d="M5 5h30L19.6 32l-5.2-8.8h5.8l5.6-11.4H10.8l3 5.6H8.5L5 5Z" stroke="currentColor" stroke-width="2"/>
+                <path d="M11 10h14l-5.5 9" stroke="currentColor" stroke-width="2"/>
+              </svg>
+              <span class="card-brand-copy"><strong>SEV7NFOLD</strong><small>Make More</small></span>
+            </div>
+            <span class="card-department">IDEAS / BRANDS / DIGITAL SOLUTIONS <span>DEPARTMENT OF ECONOMICS | UNIUYO</span></span>
+          </div>
+          <div class="card-body">
+            <span class="card-badge">ACADEMIC EXCELLENCE</span>
+            <p class="card-congratulations">CONGRATULATIONS!</p>
+            <h3 class="card-student-name" id="card-student-name"></h3>
+            <p class="card-registration" id="card-registration"></p>
+            <div class="card-grade-box">
+              <div class="card-grade-block"><span>GRADE</span><strong class="card-grade" id="card-grade"></strong></div>
+              <div class="card-course-info">
+                <strong id="card-course"></strong>
+                <span id="card-course-title"></span>
+                <span>Score: <strong id="card-score"></strong> / 100</span>
+                <span>Remark: <strong id="card-remark"></strong></span>
+              </div>
+            </div>
+          </div>
+          <footer class="card-footer">
+            <span class="card-accent-rule"></span>
+            <strong class="card-tagline">BUILD STRONGER BRANDS. CREATE REAL VALUE.</strong>
+            <span class="card-services">STRATEGY <i>•</i> DESIGN <i>•</i> TECHNOLOGY</span>
+            <span class="card-powered">POWERED BY SEVENFOLD CREATIVE TECH AGENCY</span>
+            <span class="card-website">www.sevenfold.agency</span>
+          </footer>
+        </article>
+
+        <div class="celebration-course-nav" id="celebration-course-nav" hidden>
+          <button type="button" id="celebration-previous" aria-label="Previous qualifying course">←</button>
+          <span id="celebration-course-position"></span>
+          <button type="button" id="celebration-next" aria-label="Next qualifying course">→</button>
+        </div>
+        <button class="celebration-export" id="celebration-export" type="button">Export Image / Share to Status</button>
+        <p class="celebration-export-status" id="celebration-export-status" role="status" aria-live="polite"></p>
+      </div>
+    </dialog>
   </body>
 </html>

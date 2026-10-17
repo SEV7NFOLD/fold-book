@@ -10,6 +10,8 @@ const allowedFiles = [
   "assets/brand/mark.svg",
   "assets/css/styles.css",
   "assets/js/app.js",
+  "data/announcements.csv",
+  "data/timetable.csv",
 ];
 
 function parseCsv(text, fileName) {

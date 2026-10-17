@@ -115,6 +115,8 @@ test("public timetable and announcement exports are valid and contain usable ent
 });
 
 test("students can look up and view their compiled results in the production app", async () => {
+  const downloads = [];
+  const canvases = [];
   class Element {
     constructor() {
       this.children = [];
@@ -146,6 +148,18 @@ test("students can look up and view their compiled results in the production app
       this.attributes[name] = value;
     }
 
+    showModal() {
+      this.open = true;
+    }
+
+    close() {
+      this.open = false;
+    }
+
+    click() {
+      downloads.push({ download: this.download, href: this.href });
+    }
+
     focus() {}
   }
 
@@ -163,6 +177,23 @@ test("students can look up and view their compiled results in the production app
     "#result-summary",
     "#results-table",
     "#results-empty",
+    "#celebration-modal",
+    "#celebration-close",
+    "#celebration-title",
+    "#celebration-course-count",
+    "#celebration-course-nav",
+    "#celebration-course-position",
+    "#celebration-previous",
+    "#celebration-next",
+    "#celebration-export",
+    "#celebration-export-status",
+    "#card-student-name",
+    "#card-registration",
+    "#card-grade",
+    "#card-course",
+    "#card-course-title",
+    "#card-score",
+    "#card-remark",
   ].map((selector) => [selector, new Element()]));
   const filterButtons = ["all", "Mon", "Tue", "Wed", "Thu", "Fri"].map((day) => {
     const button = new Element();
@@ -178,8 +209,22 @@ test("students can look up and view their compiled results in the production app
       assert.equal(selector, ".filter-button");
       return filterButtons;
     },
-    createElement() {
-      return new Element();
+    createElement(tagName) {
+      const element = new Element();
+      element.tagName = tagName;
+      if (tagName === "canvas") {
+        const context = new Proxy({
+          measureText: (text) => ({ width: String(text).length * 5 }),
+        }, {
+          get(target, property) {
+            return property in target ? target[property] : () => {};
+          },
+        });
+        element.getContext = () => context;
+        element.toBlob = (callback, mimeType) => callback({ type: mimeType });
+        canvases.push(element);
+      }
+      return element;
     },
     createDocumentFragment() {
       return new Element();
@@ -187,10 +232,20 @@ test("students can look up and view their compiled results in the production app
   };
 
   const app = fs.readFileSync(path.join(output, "assets/js/app.js"), "utf8");
-  vm.runInNewContext(app, {
+  const runtime = {
     document,
     fetch: async () => ({ ok: true, text: async () => "" }),
-  });
+    URL: {
+      createObjectURL: (blob) => {
+        assert.equal(blob.type, "image/png");
+        return "blob:grade-card";
+      },
+      revokeObjectURL: (url) => assert.equal(url, "blob:grade-card"),
+    },
+    setTimeout: (callback) => callback(),
+  };
+  vm.runInNewContext(app, runtime);
+  const lookup = vm.runInNewContext("RESULT_LOOKUP", runtime);
 
   const form = elements.get("#results-form");
   const registration = elements.get("#registration-number");
@@ -203,6 +258,26 @@ test("students can look up and view their compiled results in the production app
   assert.equal(panel.hidden, false);
   assert.equal(elements.get("#result-name").textContent, "Godspower Esther Gift");
   assert.equal(elements.get("#result-registration").textContent, "25/SS/EC/001");
+  const celebration = elements.get("#celebration-modal");
+  assert.equal(celebration.open, true);
+  assert.equal(elements.get("#card-grade").textContent, "B");
+  assert.equal(elements.get("#card-course").textContent, "ECO 127");
+  assert.match(elements.get("#celebration-course-count").textContent, /2 courses earned an A or B/);
+  elements.get("#celebration-next").listeners.click();
+  assert.equal(elements.get("#card-course").textContent, "GST 121");
+  elements.get("#celebration-previous").listeners.click();
+  assert.equal(elements.get("#card-course").textContent, "ECO 127");
+  elements.get("#celebration-export").listeners.click();
+  assert.equal(canvases[0].width, 1080);
+  assert.equal(canvases[0].height, 1920);
+  assert.equal(canvases[0].width / canvases[0].height, 9 / 16);
+  assert.deepEqual(downloads, [{
+    download: "GODSPOWER_ESTHER_GIFT_ECO_127_SevenFold_Grade.png",
+    href: "blob:grade-card",
+  }]);
+  assert.match(elements.get("#celebration-export-status").textContent, /1080 × 1920 PNG/);
+  elements.get("#celebration-close").listeners.click();
+  assert.equal(celebration.open, false);
 
   const resultRows = elements.get("#results-table").children;
   assert.equal(resultRows.length, 6);
@@ -220,14 +295,28 @@ test("students can look up and view their compiled results in the production app
     ],
   );
 
+  const eco127 = lookup["25/SS/EC/001"].results.find((result) => result.course === "ECO 127");
+  eco127.grade = "A";
+  eco127.total = 75;
+  form.listeners.submit(submittedEvent);
+  assert.equal(elements.get("#card-grade").textContent, "A");
+  assert.equal(elements.get("#card-score").textContent, "75");
+  eco127.grade = "B";
+  eco127.total = 60;
+
   registration.value = "19/SS/EC/1592";
   form.listeners.submit(submittedEvent);
   assert.equal(elements.get("#result-name").textContent, "Okwubunka Godwin");
   assert.equal(elements.get("#results-table").children.length, 1);
+  assert.equal(celebration.open, false);
 
+  registration.value = "001";
+  form.listeners.submit(submittedEvent);
+  assert.equal(celebration.open, true);
   registration.value = "not-a-registration";
   form.listeners.submit(submittedEvent);
   assert.equal(panel.hidden, true);
+  assert.equal(celebration.open, false);
   assert.match(status.textContent, /Enter a valid registration number/);
 
   registration.value = "25/SS/EC/999";
