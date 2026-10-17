@@ -32,6 +32,7 @@ let celebrationRegistration = "";
 let celebrationStudent = null;
 let celebrationResults = [];
 let celebrationIndex = 0;
+let celebrationAudioContext = null;
 
 function normalizeRegistration(value) {
   const registration = value.trim().toUpperCase().replace(/\s+/g, "");
@@ -74,6 +75,38 @@ function renderCelebrationCard() {
   celebrationExportStatus.textContent = "";
 }
 
+function playCelebrationFanfare() {
+  const AudioContextConstructor = globalThis.AudioContext || globalThis.webkitAudioContext;
+  if (!AudioContextConstructor) return;
+
+  try {
+    celebrationAudioContext ??= new AudioContextConstructor();
+    const audioContext = celebrationAudioContext;
+    const startTime = audioContext.currentTime;
+    const resume = audioContext.resume();
+    if (resume && typeof resume.catch === "function") resume.catch(() => {});
+
+    [523.25, 659.25, 783.99, 1046.5].forEach((frequency, index) => {
+      const start = startTime + index * 0.11;
+      const oscillator = audioContext.createOscillator();
+      const filter = audioContext.createBiquadFilter();
+      const volume = audioContext.createGain();
+      filter.type = "lowpass";
+      filter.frequency.setValueAtTime(1800, start);
+      oscillator.type = "sawtooth";
+      oscillator.frequency.setValueAtTime(frequency, start);
+      volume.gain.setValueAtTime(0, start);
+      volume.gain.linearRampToValueAtTime(0.065, start + 0.025);
+      volume.gain.exponentialRampToValueAtTime(0.001, start + 0.29);
+      oscillator.connect(filter);
+      filter.connect(volume);
+      volume.connect(audioContext.destination);
+      oscillator.start(start);
+      oscillator.stop(start + 0.3);
+    });
+  } catch {}
+}
+
 function showCelebration(registration, student) {
   celebrationRegistration = registration;
   celebrationStudent = student;
@@ -85,7 +118,10 @@ function showCelebration(registration, student) {
     : "";
   celebrationCourseNav.hidden = celebrationResults.length < 2;
   renderCelebrationCard();
-  if (!celebrationModal.open) celebrationModal.showModal();
+  if (!celebrationModal.open) {
+    celebrationModal.showModal();
+    playCelebrationFanfare();
+  }
 }
 
 function closeCelebration() {
@@ -156,20 +192,29 @@ function drawCelebrationCanvas(context, result) {
   context.stroke();
 
   context.strokeStyle = "#111111";
-  context.lineWidth = 3;
-  context.lineCap = "round";
-  context.lineJoin = "round";
+  context.lineWidth = 2.24;
+  context.lineCap = "square";
+  context.lineJoin = "miter";
   context.beginPath();
-  context.moveTo(26, 39);
-  context.lineTo(56, 39);
-  context.lineTo(41, 68);
-  context.lineTo(34, 54);
-  context.lineTo(49, 54);
-  context.lineTo(41, 68);
+  context.moveTo(28.8, 42);
+  context.lineTo(51.2, 42);
+  context.lineTo(40, 64.4);
+  context.closePath();
   context.stroke();
   context.beginPath();
-  context.arc(41, 41, 1.2, 0, Math.PI * 2);
+  context.moveTo(34.24, 45.84);
+  context.lineTo(45.76, 45.84);
+  context.lineTo(40, 57.04);
+  context.lineTo(36.16, 50);
+  context.lineTo(43.84, 50);
+  context.lineWidth = 1.92;
+  context.stroke();
+  context.beginPath();
+  context.arc(40, 37.84, 1.44, 0, Math.PI * 2);
   context.fillStyle = "#111111";
+  context.fill();
+  context.beginPath();
+  context.arc(40, 68.56, 1.44, 0, Math.PI * 2);
   context.fill();
   context.font = "900 12px Arial, sans-serif";
   context.fillText("SEVENFOLD", 64, 43);
@@ -238,7 +283,7 @@ function drawCelebrationCanvas(context, result) {
   context.fillText("POWERED BY SEVENFOLD CREATIVE TECH AGENCY", 24, 586);
   context.font = "800 11px Arial, sans-serif";
   context.fillStyle = "#6A0DAD";
-  context.fillText("www.sevenfold.agency", 24, 605);
+  context.fillText("bignssien.wixstudio.com/sev7nfold", 24, 605);
 }
 
 function safeFilenamePart(value) {

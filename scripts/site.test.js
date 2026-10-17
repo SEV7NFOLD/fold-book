@@ -81,10 +81,19 @@ test("production output keeps the dark branding and compiles student results int
   assert.match(html, /class="sf-poster-card" id="exportCard"/);
   assert.match(html, /class="sf-result-box"/);
   assert.match(html, /id="cardStudentName"/);
+  assert.match(html, /viewBox="0 0 100 120"/);
+  assert.match(html, /<circle cx="50" cy="12" r="4\.5"/);
+  assert.match(html, /<path d="M15 25 H85 L50 95 L15 25 Z"/);
+  assert.match(html, /<path d="M32 37 H68 L50 72 L38 50 H62"/);
+  assert.match(html, /<circle cx="50" cy="108" r="4\.5"/);
+  assert.match(html, /href="https:\/\/bignssien\.wixstudio\.com\/sev7nfold"/);
+  assert.doesNotMatch(html, /www\.sevenfold\.agency/);
   assert.match(html, /Built to move student careers &amp; brands forward\./);
   assert.match(styles, /\.sf-poster-card::before/);
   assert.match(app, /function normalizeRegistration/);
   assert.match(app, /context\.fillStyle = "#F7F5F0"/);
+  assert.match(app, /bignssien\.wixstudio\.com\/sev7nfold/);
+  assert.doesNotMatch(app, /www\.sevenfold\.agency/);
   assert.match(app, /function gradeForScore/);
   assert.ok(lookupMatch, "The production app contains its compiled results lookup.");
 
@@ -238,8 +247,43 @@ test("students can look up and view their compiled results in the production app
   };
 
   const app = fs.readFileSync(path.join(output, "assets/js/app.js"), "utf8");
+  const audioFrequencies = [];
+  class TestAudioContext {
+    currentTime = 0;
+    destination = {};
+
+    createOscillator() {
+      return {
+        frequency: { setValueAtTime: (value) => audioFrequencies.push(value) },
+        connect() {},
+        start() {},
+        stop() {},
+      };
+    }
+
+    createBiquadFilter() {
+      return { frequency: { setValueAtTime() {} }, connect() {} };
+    }
+
+    createGain() {
+      return {
+        gain: {
+          setValueAtTime() {},
+          linearRampToValueAtTime() {},
+          exponentialRampToValueAtTime() {},
+        },
+        connect() {},
+      };
+    }
+
+    resume() {
+      return Promise.resolve();
+    }
+  }
+
   const runtime = {
     document,
+    AudioContext: TestAudioContext,
     fetch: async () => ({ ok: true, text: async () => "" }),
     URL: {
       createObjectURL: (blob) => {
@@ -266,6 +310,7 @@ test("students can look up and view their compiled results in the production app
   assert.equal(elements.get("#result-registration").textContent, "25/SS/EC/001");
   const celebration = elements.get("#celebration-modal");
   assert.equal(celebration.open, true);
+  assert.deepEqual(audioFrequencies, [523.25, 659.25, 783.99, 1046.5]);
   assert.equal(elements.get("#cardGrade").textContent, "B");
   assert.equal(elements.get("#cardCourse").textContent, "ECO 127");
   assert.match(elements.get("#celebration-course-count").textContent, /2 courses earned an A or B/);
