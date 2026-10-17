@@ -73,6 +73,24 @@ function normalizeRegistration(registration) {
   return normalized;
 }
 
+function gradeForScore(score) {
+  if (score >= 70) return "A";
+  if (score >= 60) return "B";
+  if (score >= 50) return "C";
+  if (score >= 45) return "D";
+  if (score >= 40) return "E";
+  return "F";
+}
+
+function parseAssessmentScore(value, registration, course, assessment) {
+  if (value.trim() === "") return null;
+  const score = Number(value);
+  if (!Number.isInteger(score) || score < 0 || score > 100) {
+    throw new Error(`A result has an invalid ${assessment} score for ${registration} (${course}).`);
+  }
+  return score;
+}
+
 function createResultsLookup() {
   const studentsPath = path.join(root, "data", "students.csv");
   const resultsPath = path.join(root, "data", "results.csv");
@@ -85,7 +103,7 @@ function createResultsLookup() {
   const students = parseCsv(fs.readFileSync(studentsPath, "utf8"), "data/students.csv");
   const results = parseCsv(fs.readFileSync(resultsPath, "utf8"), "data/results.csv");
   const requiredStudentColumns = ["reg", "name"];
-  const requiredResultColumns = ["reg", "name", "course", "course_title", "score"];
+  const requiredResultColumns = ["reg", "name", "course", "course_title", "ca", "exam", "total"];
   if (students.length === 0 || requiredStudentColumns.some((column) => !(column in students[0]))) {
     throw new Error("data/students.csv is missing required columns or student records.");
   }
@@ -114,9 +132,11 @@ function createResultsLookup() {
     if (!result.course.trim() || !result.course_title.trim()) {
       throw new Error(`A result is missing its course details for ${registration}.`);
     }
-    const score = Number(result.score);
-    if (!Number.isInteger(score) || score < 0 || score > 100) {
-      throw new Error(`A result has an invalid score for ${registration} (${result.course}).`);
+    const ca = parseAssessmentScore(result.ca, registration, result.course, "CA");
+    const exam = parseAssessmentScore(result.exam, registration, result.course, "Exam");
+    const total = Number(result.total);
+    if (!Number.isInteger(total) || total < 0 || total > 100) {
+      throw new Error(`A result has an invalid total score for ${registration} (${result.course}).`);
     }
 
     const resultKey = `${registration}\u0000${result.course}`;
@@ -124,7 +144,15 @@ function createResultsLookup() {
       throw new Error(`A duplicate course result was found for ${registration} (${result.course}).`);
     }
     seenResults.add(resultKey);
-    student.results.push({ course: result.course, course_title: result.course_title, score });
+    student.results.push({
+      course: result.course,
+      course_title: result.course_title,
+      ca,
+      exam,
+      total,
+      grade: gradeForScore(total),
+      remark: total >= 40 ? "PASS" : "FAIL",
+    });
   }
 
   for (const student of Object.values(lookup)) {

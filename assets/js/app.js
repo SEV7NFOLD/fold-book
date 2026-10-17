@@ -26,15 +26,6 @@ function normalizeRegistration(value) {
   return /^\d{2}\/SS\/EC\/\d{1,4}$/.test(registration) ? registration : "";
 }
 
-function gradeForScore(score) {
-  if (score >= 70) return "A";
-  if (score >= 60) return "B";
-  if (score >= 50) return "C";
-  if (score >= 45) return "D";
-  if (score >= 40) return "E";
-  return "F";
-}
-
 function setResultsMessage(message) {
   resultsPanel.hidden = true;
   resultsStatus.textContent = message;
@@ -45,11 +36,10 @@ function renderResults(registration, student) {
   resultRegistration.textContent = registration;
   resultsTable.replaceChildren();
 
-  const passedCourses = student.results.filter((result) => result.score >= 40).length;
+  const passedCourses = student.results.filter((result) => result.total >= 40).length;
   resultSummary.textContent = `${student.results.length} course${student.results.length === 1 ? "" : "s"} · ${passedCourses} passed`;
 
   for (const result of student.results) {
-    const grade = gradeForScore(result.score);
     const row = document.createElement("tr");
     const courseCell = document.createElement("td");
     const courseCode = document.createElement("strong");
@@ -62,13 +52,13 @@ function renderResults(registration, student) {
 
     courseCode.textContent = result.course;
     courseTitle.textContent = result.course_title;
-    caScoreCell.textContent = "—";
-    examScoreCell.textContent = "—";
-    scoreCell.textContent = String(result.score);
-    gradeCell.textContent = grade;
-    gradeCell.className = `grade grade-${grade.toLowerCase()}`;
-    remarkCell.textContent = result.score >= 40 ? "PASS" : "FAIL";
-    remarkCell.className = result.score >= 40 ? "grade-pass" : "grade-fail";
+    caScoreCell.textContent = result.ca === null ? "—" : String(result.ca);
+    examScoreCell.textContent = result.exam === null ? "—" : String(result.exam);
+    scoreCell.textContent = String(result.total);
+    gradeCell.textContent = result.grade;
+    gradeCell.className = `grade grade-${result.grade.toLowerCase()}`;
+    remarkCell.textContent = result.remark;
+    remarkCell.className = result.remark === "PASS" ? "grade-pass" : "grade-fail";
     courseCell.append(courseCode, courseTitle);
     row.append(courseCell, caScoreCell, examScoreCell, scoreCell, gradeCell, remarkCell);
     resultsTable.append(row);

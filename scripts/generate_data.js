@@ -54,7 +54,7 @@ for (const course in D) {
     const val = arr[i].trim();
     if (val === '') continue;
     const reg = `25/SS/EC/${String(i+1).padStart(3, '0')}`;
-    results.push({ reg, name: N[i] || '', course, course_title: (T[course] || ''), score: Number(val) });
+    results.push({ reg, name: N[i] || '', course, course_title: (T[course] || ''), ca: '', exam: '', total: Number(val) });
   }
 }
 // add X entries
@@ -62,10 +62,10 @@ for (const r in X) {
   const name = X[r][0];
   const data = X[r][1];
   for (const course in data) {
-    results.push({ reg: r, name, course, course_title: (T[course] || ''), score: Number(data[course]) });
+    results.push({ reg: r, name, course, course_title: (T[course] || ''), ca: '', exam: '', total: Number(data[course]) });
   }
 }
-fs.writeFileSync(path.join(outDir, 'results.csv'), toCSV(results, ['reg', 'name', 'course', 'course_title', 'score']));
+fs.writeFileSync(path.join(outDir, 'results.csv'), toCSV(results, ['reg', 'name', 'course', 'course_title', 'ca', 'exam', 'total']));
 console.log('wrote results.csv');
 
 // announcements.csv

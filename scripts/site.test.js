@@ -85,8 +85,10 @@ test("production output keeps the dark branding and compiles student results int
   const lookup = JSON.parse(lookupMatch[1]);
   assert.equal(Object.keys(lookup).length, 114);
   assert.equal(lookup["25/SS/EC/001"].name, "Godspower Esther Gift");
-  assert.ok(lookup["25/SS/EC/001"].results.some((result) => result.course === "ECO 121" && result.score === 36));
-  assert.ok(lookup["19/SS/EC/1592"].results.some((result) => result.course === "ECO 122" && result.score === 20));
+  assert.ok(lookup["25/SS/EC/001"].results.some((result) => result.course === "ECO 121"
+    && result.ca === null && result.exam === null && result.total === 36 && result.grade === "F" && result.remark === "FAIL"));
+  assert.ok(lookup["19/SS/EC/1592"].results.some((result) => result.course === "ECO 122"
+    && result.ca === null && result.exam === null && result.total === 20 && result.grade === "F" && result.remark === "FAIL"));
   assert.doesNotMatch(app, /const RESULT_LOOKUP = null;/);
   assert.doesNotMatch(app, /data\/(?:students|results)\.csv/i);
   for (const privateFile of privateFiles) {
@@ -201,12 +203,12 @@ test("students can look up and view their compiled results in the production app
       ? cell.children.map((part) => part.textContent).join("")
       : cell.textContent)),
     [
-      ["ECO 121Principles of Economics II", "36", "F", "FAIL"],
-      ["ECO 122Introductory Statistics II", "54", "C", "PASS"],
-      ["ECO 123Introductory Mathematics II", "26", "F", "FAIL"],
-      ["ECO 127ECO 127", "60", "B", "PASS"],
-      ["ECO 128Intro to Transportation Economics", "50", "C", "PASS"],
-      ["GST 121Nigerian People and Culture", "60", "B", "PASS"],
+      ["ECO 121Principles of Economics II", "—", "—", "36", "F", "FAIL"],
+      ["ECO 122Introductory Statistics II", "—", "—", "54", "C", "PASS"],
+      ["ECO 123Introductory Mathematics II", "—", "—", "26", "F", "FAIL"],
+      ["ECO 127ECO 127", "—", "—", "60", "B", "PASS"],
+      ["ECO 128Intro to Transportation Economics", "—", "—", "50", "C", "PASS"],
+      ["GST 121Nigerian People and Culture", "—", "—", "60", "B", "PASS"],
     ],
   );
 
