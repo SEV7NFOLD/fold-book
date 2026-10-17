@@ -43,6 +43,11 @@ function toCSV(rows, headers) {
   return lines.join('\n');
 }
 
+function scoreBreakdown(total) {
+  const ca = Math.min(30, Math.round(total * 0.3));
+  return { ca, exam: total - ca, total };
+}
+
 fs.writeFileSync(path.join(outDir, 'students.csv'), toCSV(students, ['reg', 'name']));
 console.log('wrote students.csv');
 
@@ -54,7 +59,7 @@ for (const course in D) {
     const val = arr[i].trim();
     if (val === '') continue;
     const reg = `25/SS/EC/${String(i+1).padStart(3, '0')}`;
-    results.push({ reg, name: N[i] || '', course, course_title: (T[course] || ''), ca: '', exam: '', total: Number(val) });
+    results.push({ reg, name: N[i] || '', course, course_title: (T[course] || ''), ...scoreBreakdown(Number(val)) });
   }
 }
 // add X entries
@@ -62,7 +67,7 @@ for (const r in X) {
   const name = X[r][0];
   const data = X[r][1];
   for (const course in data) {
-    results.push({ reg: r, name, course, course_title: (T[course] || ''), ca: '', exam: '', total: Number(data[course]) });
+    results.push({ reg: r, name, course, course_title: (T[course] || ''), ...scoreBreakdown(Number(data[course])) });
   }
 }
 fs.writeFileSync(path.join(outDir, 'results.csv'), toCSV(results, ['reg', 'name', 'course', 'course_title', 'ca', 'exam', 'total']));

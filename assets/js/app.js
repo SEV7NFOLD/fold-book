@@ -39,8 +39,8 @@ function renderResults(registration, student) {
   const passedCourses = student.results.filter((result) => result.total >= 40).length;
   resultSummary.textContent = `${student.results.length} course${student.results.length === 1 ? "" : "s"} · ${passedCourses} passed`;
 
-  for (const result of student.results) {
-    const row = document.createElement("tr");
+  for (const row of student.results) {
+    const tableRow = document.createElement("tr");
     const courseCell = document.createElement("td");
     const courseCode = document.createElement("strong");
     const courseTitle = document.createElement("span");
@@ -50,18 +50,18 @@ function renderResults(registration, student) {
     const gradeCell = document.createElement("td");
     const remarkCell = document.createElement("td");
 
-    courseCode.textContent = result.course;
-    courseTitle.textContent = result.course_title;
-    caScoreCell.textContent = result.ca === null ? "—" : String(result.ca);
-    examScoreCell.textContent = result.exam === null ? "—" : String(result.exam);
-    scoreCell.textContent = String(result.total);
-    gradeCell.textContent = result.grade;
-    gradeCell.className = `grade grade-${result.grade.toLowerCase()}`;
-    remarkCell.textContent = result.remark;
-    remarkCell.className = result.remark === "PASS" ? "grade-pass" : "grade-fail";
+    courseCode.textContent = row.course;
+    courseTitle.textContent = row.course_title;
+    caScoreCell.textContent = row.ca === null ? "—" : String(row.ca);
+    examScoreCell.textContent = row.exam === null ? "—" : String(row.exam);
+    scoreCell.textContent = String(row.total);
+    gradeCell.textContent = row.grade;
+    gradeCell.className = `grade grade-${row.grade.toLowerCase()}`;
+    remarkCell.textContent = row.remark;
+    remarkCell.className = row.remark === "PASS" ? "grade-pass" : "grade-fail";
     courseCell.append(courseCode, courseTitle);
-    row.append(courseCell, caScoreCell, examScoreCell, scoreCell, gradeCell, remarkCell);
-    resultsTable.append(row);
+    tableRow.append(courseCell, caScoreCell, examScoreCell, scoreCell, gradeCell, remarkCell);
+    resultsTable.append(tableRow);
   }
 
   resultsEmpty.hidden = student.results.length > 0;

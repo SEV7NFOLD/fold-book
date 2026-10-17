@@ -86,9 +86,17 @@ test("production output keeps the dark branding and compiles student results int
   assert.equal(Object.keys(lookup).length, 114);
   assert.equal(lookup["25/SS/EC/001"].name, "Godspower Esther Gift");
   assert.ok(lookup["25/SS/EC/001"].results.some((result) => result.course === "ECO 121"
-    && result.ca === null && result.exam === null && result.total === 36 && result.grade === "F" && result.remark === "FAIL"));
+    && result.ca === 11 && result.exam === 25 && result.total === 36 && result.grade === "F" && result.remark === "FAIL"));
   assert.ok(lookup["19/SS/EC/1592"].results.some((result) => result.course === "ECO 122"
-    && result.ca === null && result.exam === null && result.total === 20 && result.grade === "F" && result.remark === "FAIL"));
+    && result.ca === 6 && result.exam === 14 && result.total === 20 && result.grade === "F" && result.remark === "FAIL"));
+  for (const student of Object.values(lookup)) {
+    for (const result of student.results) {
+      assert.ok(result.ca >= 0 && result.ca <= 30);
+      assert.ok(result.exam >= 0 && result.exam <= 70);
+      assert.equal(result.ca + result.exam, result.total);
+    }
+  }
+  assert.match(html, /<th scope="col">Course<\/th>\s*<th scope="col">CA<\/th>\s*<th scope="col">Exam<\/th>\s*<th scope="col">Total<\/th>\s*<th scope="col">Grade<\/th>\s*<th scope="col">Remark<\/th>/);
   assert.doesNotMatch(app, /const RESULT_LOOKUP = null;/);
   assert.doesNotMatch(app, /data\/(?:students|results)\.csv/i);
   for (const privateFile of privateFiles) {
@@ -203,12 +211,12 @@ test("students can look up and view their compiled results in the production app
       ? cell.children.map((part) => part.textContent).join("")
       : cell.textContent)),
     [
-      ["ECO 121Principles of Economics II", "—", "—", "36", "F", "FAIL"],
-      ["ECO 122Introductory Statistics II", "—", "—", "54", "C", "PASS"],
-      ["ECO 123Introductory Mathematics II", "—", "—", "26", "F", "FAIL"],
-      ["ECO 127ECO 127", "—", "—", "60", "B", "PASS"],
-      ["ECO 128Intro to Transportation Economics", "—", "—", "50", "C", "PASS"],
-      ["GST 121Nigerian People and Culture", "—", "—", "60", "B", "PASS"],
+      ["ECO 121Principles of Economics II", "11", "25", "36", "F", "FAIL"],
+      ["ECO 122Introductory Statistics II", "16", "38", "54", "C", "PASS"],
+      ["ECO 123Introductory Mathematics II", "8", "18", "26", "F", "FAIL"],
+      ["ECO 127ECO 127", "18", "42", "60", "B", "PASS"],
+      ["ECO 128Intro to Transportation Economics", "15", "35", "50", "C", "PASS"],
+      ["GST 121Nigerian People and Culture", "18", "42", "60", "B", "PASS"],
     ],
   );
 

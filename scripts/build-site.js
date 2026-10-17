@@ -82,10 +82,10 @@ function gradeForScore(score) {
   return "F";
 }
 
-function parseAssessmentScore(value, registration, course, assessment) {
+function parseAssessmentScore(value, registration, course, assessment, maximum) {
   if (value.trim() === "") return null;
   const score = Number(value);
-  if (!Number.isInteger(score) || score < 0 || score > 100) {
+  if (!Number.isInteger(score) || score < 0 || score > maximum) {
     throw new Error(`A result has an invalid ${assessment} score for ${registration} (${course}).`);
   }
   return score;
@@ -132,8 +132,8 @@ function createResultsLookup() {
     if (!result.course.trim() || !result.course_title.trim()) {
       throw new Error(`A result is missing its course details for ${registration}.`);
     }
-    const ca = parseAssessmentScore(result.ca, registration, result.course, "CA");
-    const exam = parseAssessmentScore(result.exam, registration, result.course, "Exam");
+    const ca = parseAssessmentScore(result.ca, registration, result.course, "CA", 30);
+    const exam = parseAssessmentScore(result.exam, registration, result.course, "Exam", 70);
     const total = Number(result.total);
     if (!Number.isInteger(total) || total < 0 || total > 100) {
       throw new Error(`A result has an invalid total score for ${registration} (${result.course}).`);
