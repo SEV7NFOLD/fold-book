@@ -78,7 +78,13 @@ test("production output keeps the dark branding and compiles student results int
   assert.match(styles, /color-scheme:\s*dark\b/);
   assert.match(html, /id="registration-number"/);
   assert.match(html, /id="results-table"/);
+  assert.match(html, /class="sf-poster-card" id="exportCard"/);
+  assert.match(html, /class="sf-result-box"/);
+  assert.match(html, /id="cardStudentName"/);
+  assert.match(html, /Built to move student careers &amp; brands forward\./);
+  assert.match(styles, /\.sf-poster-card::before/);
   assert.match(app, /function normalizeRegistration/);
+  assert.match(app, /context\.fillStyle = "#F7F5F0"/);
   assert.match(app, /function gradeForScore/);
   assert.ok(lookupMatch, "The production app contains its compiled results lookup.");
 
@@ -187,13 +193,13 @@ test("students can look up and view their compiled results in the production app
     "#celebration-next",
     "#celebration-export",
     "#celebration-export-status",
-    "#card-student-name",
-    "#card-registration",
-    "#card-grade",
-    "#card-course",
-    "#card-course-title",
-    "#card-score",
-    "#card-remark",
+    "#cardStudentName",
+    "#cardRegNo",
+    "#cardGrade",
+    "#cardCourse",
+    "#cardCourseTitle",
+    "#cardScore",
+    "#cardRemark",
   ].map((selector) => [selector, new Element()]));
   const filterButtons = ["all", "Mon", "Tue", "Wed", "Thu", "Fri"].map((day) => {
     const button = new Element();
@@ -260,13 +266,13 @@ test("students can look up and view their compiled results in the production app
   assert.equal(elements.get("#result-registration").textContent, "25/SS/EC/001");
   const celebration = elements.get("#celebration-modal");
   assert.equal(celebration.open, true);
-  assert.equal(elements.get("#card-grade").textContent, "B");
-  assert.equal(elements.get("#card-course").textContent, "ECO 127");
+  assert.equal(elements.get("#cardGrade").textContent, "B");
+  assert.equal(elements.get("#cardCourse").textContent, "ECO 127");
   assert.match(elements.get("#celebration-course-count").textContent, /2 courses earned an A or B/);
   elements.get("#celebration-next").listeners.click();
-  assert.equal(elements.get("#card-course").textContent, "GST 121");
+  assert.equal(elements.get("#cardCourse").textContent, "GST 121");
   elements.get("#celebration-previous").listeners.click();
-  assert.equal(elements.get("#card-course").textContent, "ECO 127");
+  assert.equal(elements.get("#cardCourse").textContent, "ECO 127");
   elements.get("#celebration-export").listeners.click();
   assert.equal(canvases[0].width, 1080);
   assert.equal(canvases[0].height, 1920);
@@ -299,8 +305,8 @@ test("students can look up and view their compiled results in the production app
   eco127.grade = "A";
   eco127.total = 75;
   form.listeners.submit(submittedEvent);
-  assert.equal(elements.get("#card-grade").textContent, "A");
-  assert.equal(elements.get("#card-score").textContent, "75");
+  assert.equal(elements.get("#cardGrade").textContent, "A");
+  assert.equal(elements.get("#cardScore").textContent, "75");
   eco127.grade = "B";
   eco127.total = 60;
 
