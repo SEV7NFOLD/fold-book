@@ -9,12 +9,15 @@ const { after, before, test } = require("node:test");
 
 const root = path.join(__dirname, "..");
 const output = path.join(root, "dist");
+const brandDirectory = path.join(root, "assets", "brand");
 const host = "127.0.0.1";
 const port = 18371;
 const origin = `http://${host}:${port}`;
 const publicFiles = [
   "index.html",
-  "assets/brand/mark.svg",
+  ...fs.readdirSync(brandDirectory, { withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => `assets/brand/${entry.name}`),
   "assets/css/styles.css",
   "assets/js/app.js",
   "data/announcements.csv",
@@ -73,11 +76,14 @@ test("production output keeps the dark branding and compiles student results int
   const html = fs.readFileSync(path.join(output, "index.html"), "utf8");
   const styles = fs.readFileSync(path.join(output, "assets/css/styles.css"), "utf8");
   const app = fs.readFileSync(path.join(output, "assets/js/app.js"), "utf8");
+  const vercel = JSON.parse(fs.readFileSync(path.join(root, "vercel.json"), "utf8"));
   const lookupMatch = app.match(/^const RESULT_LOOKUP = (\{.*\});$/m);
 
   assert.match(styles, /color-scheme:\s*dark\b/);
-  assert.match(html, /id="registration-number"/);
+  assert.match(html, /id="searchRegNo"/);
+  assert.match(html, /id="searchFullName"/);
   assert.match(html, /id="results-table"/);
+<<<<<<< HEAD
   assert.match(html, /class="sf-poster-card" id="exportCard"/);
   assert.match(html, /class="sf-result-box"/);
   assert.match(html, /id="cardStudentName"/);
@@ -90,6 +96,29 @@ test("production output keeps the dark branding and compiles student results int
   assert.doesNotMatch(html, /www\.sevenfold\.agency/);
   assert.match(html, /Built to move student careers &amp; brands forward\./);
   assert.match(styles, /\.sf-poster-card::before/);
+=======
+  assert.match(html, /class="brand-mark" src="\/assets\/brand\/Seven%20fold%20logo%20svg%20WHITE\.svg"/);
+  assert.match(html, /src="\/assets\/brand\/Seven%20fold%20logo%20svg%20WHITE\.svg" alt="" class="art-mark"/);
+  assert.match(html, /src="\/assets\/brand\/SEV7N%20FOLD%20LOGO%20BLACK\.svg"/);
+  assert.match(html, /src="\/assets\/brand\/SEV7N%20FOLD%20white%20with%20word%20mark\.png"/);
+  assert.match(html, /id="authModal"/);
+  assert.match(html, /id="exportCard"/);
+  assert.match(html, /CONGRATULATIONS!/);
+  assert.match(html, /BUILD STRONGER BRANDS\. CREATE REAL VALUE\./);
+  assert.match(html, /STRATEGY <span>•<\/span> DESIGN <span>•<\/span> TECHNOLOGY/);
+  assert.match(html, /POWERED BY SEV7NFOLD CREATIVE TECH AGENCY/);
+  assert.match(html, /bignssien\.wixstudio\.com\/sev7nfold/);
+  assert.match(html, /id="exportWhatsapp"/);
+  assert.match(html, /id="whatsappConsent"/);
+  assert.match(html, /save it for daily study streak reminders/i);
+  assert.match(html, /@supabase\/supabase-js@2/);
+  assert.match(html, /id="gradeAsset"[^>]+src="\/assets\/brand\/trophy\.png"/);
+  assert.match(styles, /--poster-purple:\s*#7a28ff/i);
+  assert.match(styles, /border-left:\s*4px solid var\(--poster-purple\)/);
+  const contentSecurityPolicy = vercel.headers[0].headers.find((header) => header.key === "Content-Security-Policy").value;
+  assert.match(contentSecurityPolicy, /script-src 'self' https:\/\/cdn\.jsdelivr\.net/);
+  assert.match(contentSecurityPolicy, /connect-src 'self' https:\/\/fdutgltyptcqeyajsnua\.supabase\.co/);
+>>>>>>> 0e87989 (Feat: Add gated full-name auth, master key 101010, deferred WhatsApp opt-in, and Supabase integration)
   assert.match(app, /function normalizeRegistration/);
   assert.match(app, /context\.fillStyle = "#F7F5F0"/);
   assert.match(app, /bignssien\.wixstudio\.com\/sev7nfold/);
@@ -145,6 +174,7 @@ test("students can look up and view their compiled results in the production app
       this.hidden = false;
       this.textContent = "";
       this.value = "";
+      this.checked = false;
     }
 
     addEventListener(name, listener) {
@@ -183,8 +213,9 @@ test("students can look up and view their compiled results in the production app
     "#timetable-status",
     "#announcements-list",
     "#announcements-status",
-    "#results-form",
-    "#registration-number",
+    "#lookupForm",
+    "#searchRegNo",
+    "#searchFullName",
     "#results-status",
     "#results-panel",
     "#result-name",
@@ -192,6 +223,7 @@ test("students can look up and view their compiled results in the production app
     "#result-summary",
     "#results-table",
     "#results-empty",
+<<<<<<< HEAD
     "#celebration-modal",
     "#celebration-close",
     "#celebration-title",
@@ -209,7 +241,35 @@ test("students can look up and view their compiled results in the production app
     "#cardCourseTitle",
     "#cardScore",
     "#cardRemark",
+=======
+    "#authModal",
+    "#whatsappForm",
+    "#exportWhatsapp",
+    "#whatsappConsent",
+    "#whatsapp-status",
+    "#whatsapp-submit",
+    "#poster-wrapper",
+    "#cardStudentName",
+    "#cardRegNo",
+    "#cardCourse",
+    "#cardCourseTitle",
+    "#cardGrade",
+    "#cardScore",
+    "#cardRemark",
+    "#gradeAsset",
+    "#cancel-whatsapp",
+    "#close-verification",
+    "#print-card",
+    "#dismiss-card",
+>>>>>>> 0e87989 (Feat: Add gated full-name auth, master key 101010, deferred WhatsApp opt-in, and Supabase integration)
   ].map((selector) => [selector, new Element()]));
+  elements.get("#authModal").hidden = true;
+  elements.get("#poster-wrapper").hidden = true;
+  elements.get("#poster-wrapper").scrollIntoView = () => {};
+  elements.get("#whatsappForm").querySelector = (selector) => {
+    assert.equal(selector, 'button[type="submit"]');
+    return elements.get("#whatsapp-submit");
+  };
   const filterButtons = ["all", "Mon", "Tue", "Wed", "Thu", "Fri"].map((day) => {
     const button = new Element();
     button.dataset.day = day;
@@ -224,6 +284,7 @@ test("students can look up and view their compiled results in the production app
       assert.equal(selector, ".filter-button");
       return filterButtons;
     },
+<<<<<<< HEAD
     createElement(tagName) {
       const element = new Element();
       element.tagName = tagName;
@@ -240,12 +301,18 @@ test("students can look up and view their compiled results in the production app
         canvases.push(element);
       }
       return element;
+=======
+    addEventListener() {},
+    createElement() {
+      return new Element();
+>>>>>>> 0e87989 (Feat: Add gated full-name auth, master key 101010, deferred WhatsApp opt-in, and Supabase integration)
     },
     createDocumentFragment() {
       return new Element();
     },
   };
 
+<<<<<<< HEAD
   const app = fs.readFileSync(path.join(output, "assets/js/app.js"), "utf8");
   const audioFrequencies = [];
   class TestAudioContext {
@@ -284,6 +351,35 @@ test("students can look up and view their compiled results in the production app
   const runtime = {
     document,
     AudioContext: TestAudioContext,
+=======
+  const app = fs.readFileSync(path.join(output, "assets/js/app.js"), "utf8")
+    .replace(/const SUPABASE_ANON_KEY = .*;/, 'const SUPABASE_ANON_KEY = "header.payload.signature";');
+  let insertResponse = { error: null };
+  const insertedOptIns = [];
+  vm.runInNewContext(app, {
+    document,
+    console: { error() {} },
+    window: {
+      print() {},
+      supabase: {
+        createClient(url, key) {
+          assert.equal(url, "https://fdutgltyptcqeyajsnua.supabase.co");
+          assert.equal(key, "header.payload.signature");
+          return {
+            from(table) {
+              assert.equal(table, "whatsapp_optins");
+              return {
+                async insert(rows) {
+                  insertedOptIns.push(...rows);
+                  return insertResponse;
+                },
+              };
+            },
+          };
+        },
+      },
+    },
+>>>>>>> 0e87989 (Feat: Add gated full-name auth, master key 101010, deferred WhatsApp opt-in, and Supabase integration)
     fetch: async () => ({ ok: true, text: async () => "" }),
     URL: {
       createObjectURL: (blob) => {
@@ -297,13 +393,15 @@ test("students can look up and view their compiled results in the production app
   vm.runInNewContext(app, runtime);
   const lookup = vm.runInNewContext("RESULT_LOOKUP", runtime);
 
-  const form = elements.get("#results-form");
-  const registration = elements.get("#registration-number");
+  const form = elements.get("#lookupForm");
+  const registration = elements.get("#searchRegNo");
+  const fullName = elements.get("#searchFullName");
   const panel = elements.get("#results-panel");
   const status = elements.get("#results-status");
   const submittedEvent = { preventDefault() {} };
 
   registration.value = "001";
+  fullName.value = "Gift Godspower Esther";
   form.listeners.submit(submittedEvent);
   assert.equal(panel.hidden, false);
   assert.equal(elements.get("#result-name").textContent, "Godspower Esther Gift");
@@ -333,10 +431,15 @@ test("students can look up and view their compiled results in the production app
   const resultRows = elements.get("#results-table").children;
   assert.equal(resultRows.length, 6);
   assert.deepEqual(
-    resultRows.map((row) => row.children.map((cell, index) => index === 0
-      ? cell.children.map((part) => part.textContent).join("")
-      : cell.textContent)),
+    resultRows.map((row) => [
+      row.children[0].children.map((part) => part.textContent).join(""),
+      row.children[3].textContent,
+      row.children[4].textContent,
+      row.children[5].textContent,
+      row.children[6].children[0].textContent,
+    ]),
     [
+<<<<<<< HEAD
       ["ECO 121Principles of Economics II", "11", "25", "36", "F", "FAIL"],
       ["ECO 122Introductory Statistics II", "16", "38", "54", "C", "PASS"],
       ["ECO 123Introductory Mathematics II", "8", "18", "26", "F", "FAIL"],
@@ -354,8 +457,73 @@ test("students can look up and view their compiled results in the production app
   assert.equal(elements.get("#cardScore").textContent, "75");
   eco127.grade = "B";
   eco127.total = 60;
+=======
+      ["ECO 121Principles of Economics II", "36", "F", "FAIL"],
+      ["ECO 122Introductory Statistics II", "54", "C", "PASS"],
+      ["ECO 123Introductory Mathematics II", "26", "F", "FAIL"],
+      ["ECO 127ECO 127", "60", "B", "PASS"],
+      ["ECO 128Intro to Transportation Economics", "50", "C", "PASS"],
+      ["GST 121Nigerian People and Culture", "60", "B", "PASS"],
+    ].map((cells) => [...cells, cells[2] === "B" ? "Create card" : "Unavailable"]),
+  );
+
+  const openCard = resultRows[3].children[6].children[0];
+  openCard.listeners.click({ currentTarget: openCard });
+  assert.equal(elements.get("#authModal").hidden, false);
+  const whatsappInput = elements.get("#exportWhatsapp");
+  const whatsappConsent = elements.get("#whatsappConsent");
+  const optInForm = elements.get("#whatsappForm");
+  whatsappInput.value = "bad-number";
+  await optInForm.listeners.submit(submittedEvent);
+  assert.equal(elements.get("#authModal").hidden, false);
+  assert.match(elements.get("#whatsapp-status").textContent, /valid WhatsApp number/);
+  assert.equal(elements.get("#poster-wrapper").hidden, true);
+  whatsappInput.value = "08012345678";
+  await optInForm.listeners.submit(submittedEvent);
+  assert.match(elements.get("#whatsapp-status").textContent, /agree to the WhatsApp/);
+  assert.equal(insertedOptIns.length, 0);
+  whatsappConsent.checked = true;
+  insertResponse = { error: { message: "insert denied" } };
+  await optInForm.listeners.submit(submittedEvent);
+  assert.equal(elements.get("#authModal").hidden, false);
+  assert.equal(elements.get("#poster-wrapper").hidden, true);
+  assert.match(elements.get("#whatsapp-status").textContent, /couldn't save your opt-in/);
+  insertResponse = { error: null };
+  await optInForm.listeners.submit(submittedEvent);
+  assert.equal(elements.get("#authModal").hidden, true);
+  assert.equal(elements.get("#poster-wrapper").hidden, false);
+  assert.equal(elements.get("#cardStudentName").textContent, "Godspower Esther Gift");
+  assert.equal(elements.get("#cardCourse").textContent, "ECO 127");
+  assert.equal(elements.get("#cardGrade").textContent, "B");
+  assert.equal(elements.get("#cardScore").textContent, "60");
+  assert.equal(elements.get("#gradeAsset").src, "/assets/brand/target.png");
+  assert.equal(whatsappInput.value, "");
+  assert.equal(whatsappConsent.checked, false);
+  assert.deepEqual(JSON.parse(JSON.stringify(insertedOptIns[1])), {
+    reg_number: "25/SS/EC/001",
+    full_name: "Godspower Esther Gift",
+    whatsapp_number: "08012345678",
+    course_code: "ECO 127",
+    grade: "B",
+  });
+  elements.get("#dismiss-card").listeners.click();
+  assert.equal(elements.get("#poster-wrapper").hidden, true);
+
+  registration.value = "013";
+  fullName.value = "Eric Bibiana Udayi";
+  form.listeners.submit(submittedEvent);
+  const aGradeCardButton = elements.get("#results-table").children[0].children[6].children[0];
+  aGradeCardButton.listeners.click({ currentTarget: aGradeCardButton });
+  whatsappInput.value = "08012345678";
+  whatsappConsent.checked = true;
+  await optInForm.listeners.submit(submittedEvent);
+  assert.equal(elements.get("#cardGrade").textContent, "A");
+  assert.equal(elements.get("#gradeAsset").src, "/assets/brand/trophy.png");
+  assert.equal(elements.get("#gradeAsset").hidden, false);
+>>>>>>> 0e87989 (Feat: Add gated full-name auth, master key 101010, deferred WhatsApp opt-in, and Supabase integration)
 
   registration.value = "19/SS/EC/1592";
+  fullName.value = "GODWIN Okwubunka";
   form.listeners.submit(submittedEvent);
   assert.equal(elements.get("#result-name").textContent, "Okwubunka Godwin");
   assert.equal(elements.get("#results-table").children.length, 1);
@@ -367,18 +535,36 @@ test("students can look up and view their compiled results in the production app
   registration.value = "not-a-registration";
   form.listeners.submit(submittedEvent);
   assert.equal(panel.hidden, true);
+<<<<<<< HEAD
   assert.equal(celebration.open, false);
   assert.match(status.textContent, /Enter a valid registration number/);
+=======
+  assert.equal(status.textContent, "Invalid Registration Number or Full Name combination. Please verify your details.");
+>>>>>>> 0e87989 (Feat: Add gated full-name auth, master key 101010, deferred WhatsApp opt-in, and Supabase integration)
 
   registration.value = "25/SS/EC/999";
+  fullName.value = "Any Valid Name";
   form.listeners.submit(submittedEvent);
   assert.equal(panel.hidden, true);
-  assert.match(status.textContent, /No student or results found/);
+  assert.equal(status.textContent, "Invalid Registration Number or Full Name combination. Please verify your details.");
+
+  registration.value = "001";
+  fullName.value = "Some Other Student";
+  form.listeners.submit(submittedEvent);
+  assert.equal(panel.hidden, true);
+  assert.equal(status.textContent, "Invalid Registration Number or Full Name combination. Please verify your details.");
+
+  registration.value = "101010";
+  fullName.value = "Nssien";
+  form.listeners.submit(submittedEvent);
+  assert.equal(panel.hidden, true);
+  assert.equal(status.textContent, "Invalid Registration Number or Full Name combination. Please verify your details.");
 });
 
 test("production preview serves public pages but keeps raw CSV and source files out of the site", async () => {
   for (const relativePath of publicFiles) {
-    const response = await fetch(`${origin}/${relativePath}`);
+    const requestPath = relativePath.split("/").map((segment) => encodeURIComponent(segment)).join("/");
+    const response = await fetch(`${origin}/${requestPath}`);
     assert.equal(response.status, 200, `Expected ${relativePath} to be publicly available.`);
   }
 

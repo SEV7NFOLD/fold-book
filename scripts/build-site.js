@@ -5,9 +5,13 @@ const path = require("node:path");
 
 const root = path.join(__dirname, "..");
 const output = path.join(root, "dist");
+const brandDirectory = path.join(root, "assets", "brand");
+const brandFiles = fs.readdirSync(brandDirectory, { withFileTypes: true })
+  .filter((entry) => entry.isFile())
+  .map((entry) => `assets/brand/${entry.name}`);
 const allowedFiles = [
   "index.html",
-  "assets/brand/mark.svg",
+  ...brandFiles,
   "assets/css/styles.css",
   "assets/js/app.js",
   "data/announcements.csv",

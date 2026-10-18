@@ -12,17 +12,25 @@ const port = Number(process.env.PORT || 4173);
 const files = new Map([
   ["/", "index.html"],
   ["/index.html", "index.html"],
-  ["/assets/brand/mark.svg", "assets/brand/mark.svg"],
   ["/assets/css/styles.css", "assets/css/styles.css"],
   ["/assets/js/app.js", "assets/js/app.js"],
   ["/data/announcements.csv", "data/announcements.csv"],
   ["/data/timetable.csv", "data/timetable.csv"],
 ]);
+const brandDirectory = path.join(projectRoot, "assets", "brand");
+for (const entry of fs.readdirSync(brandDirectory, { withFileTypes: true })) {
+  if (entry.isFile()) {
+    files.set(`/assets/brand/${encodeURIComponent(entry.name)}`, path.join("assets", "brand", entry.name));
+  }
+}
 const contentTypes = new Map([
   [".css", "text/css; charset=utf-8"],
   [".csv", "text/csv; charset=utf-8"],
   [".html", "text/html; charset=utf-8"],
+  [".jpeg", "image/jpeg"],
   [".js", "text/javascript; charset=utf-8"],
+  [".jpg", "image/jpeg"],
+  [".png", "image/png"],
   [".svg", "image/svg+xml"],
 ]);
 

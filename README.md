@@ -2,9 +2,11 @@
 
 The **SEV7N FOLD** student hub: a responsive, dark-mode site for Economics 100L at the University of Uyo.
 
-The site includes a searchable Economics 100L results lookup, weekly timetable, and department announcements. The result search accepts a full registration number or the student's three-digit class number.
+The site includes a searchable Economics 100L results lookup, printable course result cards, weekly timetable, and department announcements. The result search accepts a full registration number or the student's three-digit class number.
 
-**The results lookup is public.** At build time, `data/students.csv` and `data/results.csv` are compiled into the generated `dist/assets/js/app.js`; they aren't copied into `dist/` as raw CSVs. Anyone can download that JavaScript and read the published names, registration numbers, and scores. Deploy this build only for an authorized public release of the results. Client-side lookup does not authenticate a student or make individual results confidential.
+**The results lookup is public.** At build time, `data/students.csv` and `data/results.csv` are compiled into the generated `dist/assets/js/app.js`; they aren't copied into `dist/` as raw CSVs. Anyone can download that JavaScript and read the published names, registration numbers, and scores. The registration/name check only filters the on-screen result; it is not authentication and does not make other records private. Do not deploy this client-side build if student results must be confidential; that requires a protected backend. No hardcoded admin bypass is included because credentials shipped in client code cannot protect access.
+
+The WhatsApp prompt requires an explicit consent checkbox and inserts registration, name, phone number, course code, and grade into the Supabase `whatsapp_optins` table before generating the card. The browser uses only the Supabase anon key; keep the table protected with an INSERT-only RLS policy and do not grant public reads or updates. The opt-in stores the number but does not itself send reminders; a separate reminder service is required.
 
 ## Run locally
 
@@ -26,7 +28,7 @@ npm test
 npm run preview
 ```
 
-The build writes a static site to `dist/`. It copies only `index.html`, the branded logo and styles and scripts, `data/announcements.csv`, and `data/timetable.csv`. It compiles and validates the student and result records into the generated JavaScript bundle without copying `data/students.csv` or `data/results.csv` into `dist/`. Tests verify the searchable result output, timetable, announcements, and absence of raw CSV files from the production preview.
+The build writes a static site to `dist/`. It copies `index.html`, every regular file in `assets/brand/`, the styles and scripts, `data/announcements.csv`, and `data/timetable.csv`. It compiles and validates the student and result records into the generated JavaScript bundle without copying `data/students.csv` or `data/results.csv` into `dist/`. The lookup form asks for a registration number and name and renders the matching student's statement. A WhatsApp number may be entered before creating an A/B-grade card, but it is discarded in the browser because no opt-in service is configured. Result cards use the local black poster logo, white navigation and modal logo, and grade-specific trophy or target image; use the browser's print dialog to print or save a card. Tests verify the searchable result output, all brand assets, timetable, announcements, and absence of raw CSV files from the production preview.
 
 ## Deploy to Vercel
 

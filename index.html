@@ -11,6 +11,7 @@
     <title>Fold Book — Results Checker</title>
     <link rel="icon" type="image/svg+xml" href="/assets/brand/mark.svg">
     <link rel="stylesheet" href="/assets/css/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
     <script src="/assets/js/app.js" defer></script>
   </head>
   <body>
@@ -18,7 +19,7 @@
 
     <header class="site-header">
       <a class="brand" href="#top" aria-label="Fold Book by SEV7N FOLD, home">
-        <img class="brand-mark" src="/assets/brand/mark.svg" alt="" width="32" height="38">
+        <img class="brand-mark" src="/assets/brand/Seven%20fold%20logo%20svg%20WHITE.svg" alt="" width="32" height="38">
         <span class="brand-name">SEV7N <span>FOLD</span></span>
       </a>
       <span class="header-edition">ECONOMICS 100L <span>·</span> 2025/2026</span>
@@ -34,7 +35,7 @@
         </div>
         <div class="hero-art" aria-hidden="true">
           <div class="art-halo"></div>
-          <img src="/assets/brand/mark.svg" alt="" class="art-mark">
+          <img src="/assets/brand/Seven%20fold%20logo%20svg%20WHITE.svg" alt="" class="art-mark">
           <span class="art-caption">SEV7N FOLD<br>MAKE MORE.</span>
         </div>
         <span class="hero-index" aria-hidden="true">01 — RESULTS</span>
@@ -51,16 +52,22 @@
               <h2 id="results-title">Find your <span>results.</span></h2>
               <p class="section-description">Enter your matriculation number to see your published scores and grades.</p>
             </div>
-            <form class="results-form" id="results-form" novalidate>
-              <label for="registration-number">Matriculation number</label>
-              <div class="results-search">
-                <input id="registration-number" name="registration" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="18" placeholder="25/SS/EC/001" aria-describedby="results-help results-status">
-                <button class="results-submit" type="submit">
-                  <span>Check results</span>
-                  <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M4 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                </button>
+            <form class="results-form" id="lookupForm" novalidate>
+              <div class="lookup-grid">
+                <div class="lookup-field">
+                  <label for="searchRegNo">Registration Number / Matric No.</label>
+                  <input id="searchRegNo" name="registration" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="18" placeholder="25/SS/EC/071 or 071" aria-describedby="results-help results-status" required>
+                </div>
+                <div class="lookup-field">
+                  <label for="searchFullName">Full Name</label>
+                  <input id="searchFullName" name="fullName" type="text" autocomplete="name" placeholder="UMANAH NDIPMOUWEM SUNDAY" aria-describedby="results-help results-status" required>
+                </div>
               </div>
-              <span class="results-help" id="results-help">Enter your full number or just your three-digit class number.</span>
+              <button class="results-submit" type="submit">
+                <span>Access My Results</span>
+                <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M4 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <span class="results-help" id="results-help">Enter your registration number and full name as shown on your result record.</span>
             </form>
           </div>
           <p class="results-status" id="results-status" role="status" aria-live="polite"></p>
@@ -83,6 +90,7 @@
                     <th scope="col">Total</th>
                     <th scope="col">Grade</th>
                     <th scope="col">Remark</th>
+                    <th scope="col">Result card</th>
                   </tr>
                 </thead>
                 <tbody id="results-table"></tbody>
@@ -90,13 +98,60 @@
             </div>
             <p class="results-empty" id="results-empty" hidden>No course results have been published for this registration number yet.</p>
           </section>
+<<<<<<< HEAD
           <p class="score-note"><span class="score-note-marker" aria-hidden="true">i</span> CA is scored out of 30; the exam is scored out of 70.</p>
+=======
+          <section class="poster-wrapper" id="poster-wrapper" aria-label="Exportable course result card" hidden>
+            <div class="poster-actions">
+              <button class="results-submit" id="print-card" type="button">Print / Save card</button>
+              <button class="card-secondary-button" id="dismiss-card" type="button">Close card</button>
+            </div>
+            <article class="poster" id="exportCard">
+              <div class="poster-hex" aria-hidden="true"></div>
+              <header class="poster-header">
+                <div class="poster-brand-lockup">
+                  <img src="/assets/brand/SEV7N%20FOLD%20LOGO%20BLACK.svg" alt="" class="poster-logo">
+                  <div class="poster-brand">SEV7NFOLD<small>Make More</small></div>
+                </div>
+                <p class="poster-department">DEPARTMENT OF ECONOMICS <span>|</span> UNIUYO</p>
+              </header>
+              <section class="poster-body" aria-label="Student result">
+                <p class="poster-kicker">ACADEMIC EXCELLENCE</p>
+                <p class="poster-congratulations">CONGRATULATIONS!</p>
+                <h2 class="poster-student-name" id="cardStudentName"></h2>
+                <p class="poster-reg-no" id="cardRegNo"></p>
+                <div class="poster-rule"></div>
+                <div class="poster-result">
+                  <img id="gradeAsset" class="asset-3d" src="/assets/brand/trophy.png" alt="A grade trophy" hidden>
+                  <div class="poster-result-details">
+                    <span class="poster-grade" id="cardGrade"></span>
+                    <div class="poster-course">
+                      <p class="poster-course-code" id="cardCourse"></p>
+                      <p class="poster-course-title" id="cardCourseTitle"></p>
+                    </div>
+                  </div>
+                  <div class="poster-score-row">
+                    <span>Total Score <strong id="cardScore"></strong> / 100</span>
+                    <span>Remark <strong id="cardRemark"></strong></span>
+                  </div>
+                </div>
+              </section>
+              <div class="poster-footer">
+                <p class="poster-slogan">BUILD STRONGER BRANDS. CREATE REAL VALUE.</p>
+                <p class="poster-services">STRATEGY <span>•</span> DESIGN <span>•</span> TECHNOLOGY</p>
+                <p class="poster-powered">POWERED BY SEV7NFOLD CREATIVE TECH AGENCY</p>
+                <a class="poster-url" href="https://bignssien.wixstudio.com/sev7nfold">bignssien.wixstudio.com/sev7nfold</a>
+              </div>
+            </article>
+          </section>
+          <p class="score-note"><span class="score-note-marker" aria-hidden="true">i</span> The published data provides total scores only. CA and exam breakdowns were not supplied.</p>
+>>>>>>> 0e87989 (Feat: Add gated full-name auth, master key 101010, deferred WhatsApp opt-in, and Supabase integration)
           <div class="results-foot"><span>PUBLISHED COURSE RESULTS.</span><span>MADE WITH INTENTION BY SEV7N FOLD.</span></div>
         </div>
       </section>
 
       <section class="closing-section" aria-label="SEV7N FOLD brand">
-        <img src="/assets/brand/mark.svg" alt="" width="48" height="58">
+        <img src="/assets/brand/Seven%20fold%20logo%20svg%20WHITE.svg" alt="" width="48" height="58">
         <span class="closing-name">SEV7N FOLD</span>
         <p>Make more.</p>
         <span class="closing-caption">A LITTLE MORE, EVERY DAY.</span>
@@ -109,6 +164,7 @@
       <a class="footer-top" href="#top">BACK TO TOP <span aria-hidden="true">↑</span></a>
     </footer>
 
+<<<<<<< HEAD
     <dialog class="celebration-modal" id="celebration-modal" aria-labelledby="celebration-title">
       <div class="celebration-shell">
         <div class="celebration-confetti" aria-hidden="true">
@@ -165,5 +221,27 @@
         <p class="celebration-export-status" id="celebration-export-status" role="status" aria-live="polite"></p>
       </div>
     </dialog>
+=======
+    <div class="auth-modal-overlay" id="authModal" hidden>
+      <section class="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title" aria-describedby="auth-description">
+        <button type="button" class="modal-close" id="close-verification" aria-label="Close verification dialog">×</button>
+        <img src="/assets/brand/SEV7N%20FOLD%20white%20with%20word%20mark.png" alt="SEV7N FOLD" class="auth-logo-img">
+        <h2 id="auth-title">GET STUDY REMINDERS</h2>
+        <p id="auth-description">Enter your WhatsApp number and consent to save it for daily study streak reminders. Your result card will be created after the opt-in is saved.</p>
+        <form id="whatsappForm" novalidate>
+          <div class="form-group">
+            <label for="exportWhatsapp">WhatsApp Number</label>
+            <input type="tel" id="exportWhatsapp" name="whatsapp" autocomplete="tel" inputmode="tel" placeholder="08012345678" aria-describedby="whatsapp-status" required>
+          </div>
+          <label class="whatsapp-consent"><input type="checkbox" id="whatsappConsent" required> I agree to have this number saved and used for daily study reminders.</label>
+          <p class="verification-status" id="whatsapp-status" role="status" aria-live="polite"></p>
+          <div class="auth-actions">
+            <button type="button" class="card-secondary-button" id="cancel-whatsapp">Cancel</button>
+            <button type="submit" class="results-submit">Continue to Card</button>
+          </div>
+        </form>
+      </section>
+    </div>
+>>>>>>> 0e87989 (Feat: Add gated full-name auth, master key 101010, deferred WhatsApp opt-in, and Supabase integration)
   </body>
 </html>
