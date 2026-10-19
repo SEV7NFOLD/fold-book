@@ -32,7 +32,14 @@ for (const entry of fs.readdirSync(lottieDirectory, { withFileTypes: true })) {
     files.set(`/assets/lottie/${encodeURIComponent(entry.name)}`, path.join("assets", "lottie", entry.name));
   }
 }
+const sfxDirectory = path.join(projectRoot, "assets", "sfx");
+for (const entry of fs.readdirSync(sfxDirectory, { withFileTypes: true })) {
+  if (entry.isFile() && entry.name.toLowerCase().endsWith(".mp3")) {
+    files.set(`/assets/sfx/${encodeURIComponent(entry.name)}`, path.join("assets", "sfx", entry.name));
+  }
+}
 const contentTypes = new Map([
+  [".mp3", "audio/mpeg"],
   [".css", "text/css; charset=utf-8"],
   [".csv", "text/csv; charset=utf-8"],
   [".html", "text/html; charset=utf-8"],

@@ -12,6 +12,7 @@ const root = path.join(__dirname, "..");
 const output = path.join(root, "dist");
 const brandDirectory = path.join(root, "assets", "brand");
 const lottieDirectory = path.join(root, "assets", "lottie");
+const sfxDirectory = path.join(root, "assets", "sfx");
 const host = "127.0.0.1";
 const port = 18371;
 const origin = `http://${host}:${port}`;
@@ -23,6 +24,9 @@ const publicFiles = [
   ...fs.readdirSync(lottieDirectory, { withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".json"))
     .map((entry) => `assets/lottie/${entry.name}`),
+  ...fs.readdirSync(sfxDirectory, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".mp3"))
+    .map((entry) => `assets/sfx/${entry.name}`),
   "assets/lottie/manifest.json",
   "assets/css/design-tokens.css",
   "assets/css/styles.css",
@@ -95,6 +99,12 @@ test("production output keeps the dark branding and compiles student results int
   assert.match(html, /id="navBoard"[^>]+data-tab="board"/);
   assert.match(html, /id="navChat"[^>]+data-tab="chat"/);
   assert.match(html, /id="navInvite"[^>]+data-tab="invite"/);
+  assert.match(html, /id="profileButton"/);
+  assert.match(html, /id="profileModal"/);
+  assert.match(html, /id="profilePhotoInput"/);
+  assert.match(html, /data-avatar-lottie="cat-idle\.json"/);
+  assert.match(html, /id="studentSignOut"/);
+  assert.match(html, /id="profileSignOut"/);
   assert.match(html, /id="mobileLearn"[^>]+data-tab="home"/);
   assert.doesNotMatch(html, /data-tab="results"|data-tab="admin"/);
   assert.match(html, /<section id="landingView" class="landing-view">/);
@@ -132,6 +142,15 @@ test("production output keeps the dark branding and compiles student results int
   assert.match(app, /function saveStudyProgress/);
   assert.match(app, /function renderMascot/);
   assert.match(app, /function tone/);
+  assert.match(app, /function playCustomSfx/);
+  assert.match(app, /consecutiveWrongCount === 3/);
+  assert.match(app, /consecutiveWrongCount === 5/);
+  assert.match(app, /playCustomSfx\("complete"\)/);
+  assert.match(app, /playCustomSfx\("deadClick"\)/);
+  assert.match(app, /startLoadingSfx\(\)/);
+  for (const soundFile of fs.readdirSync(sfxDirectory).filter((file) => file.toLowerCase().endsWith(".mp3"))) {
+    assert.ok(fs.existsSync(path.join(output, "assets", "sfx", soundFile)), `${soundFile} is copied into dist/.`);
+  }
   assert.match(app, /101010/);
   assert.match(app, /Nssien/);
   assert.match(app, /function setCourse/);
@@ -361,7 +380,6 @@ test("students can look up and view their compiled results in the production app
     "#inviteCount",
     "#inviteBar",
     "#inviteFriends",
-    "#simulateInvite",
     "#leaderboardPodium",
     "#yourRank",
     "#yourXp",
@@ -480,6 +498,13 @@ test("students can look up and view their compiled results in the production app
     panel.id = `adminView-${view}`;
     return panel;
   });
+  const avatarOptions = ["cat-idle.json"].map((fileName) => {
+    const button = new Element();
+    const preview = new Element();
+    button.dataset.avatarLottie = fileName;
+    button.querySelector = (selector) => selector === ".profile-avatar-option-preview" ? preview : undefined;
+    return button;
+  });
   elements.get("#home").hidden = true;
   elements.get("#chat").hidden = true;
   elements.get("#board").hidden = true;
@@ -509,6 +534,7 @@ test("students can look up and view their compiled results in the production app
       if (selector === ".course-choice") return courseChoices;
       if (selector === "[data-admin-view]") return adminTabs;
       if (selector === ".admin-view-panel") return adminPanels;
+      if (selector === "[data-avatar-lottie]") return avatarOptions;
       return [];
     },
     addEventListener() {},
@@ -536,8 +562,25 @@ test("students can look up and view their compiled results in the production app
   const geminiRequests = [];
   const leaderboardRows = [];
   const studyStorage = new Map();
+  const audioPlays = [];
+  class MockAudio {
+    constructor(src) {
+      this.src = src;
+      this.currentTime = 0;
+      this.preload = "";
+      this.loop = false;
+    }
+
+    play() {
+      audioPlays.push(this.src);
+      return Promise.resolve();
+    }
+
+    pause() {}
+  }
   const runtime = {
     document,
+    Audio: MockAudio,
     console: { error() {}, info() {}, warn() {} },
     window: {
       print() {},
@@ -545,7 +588,10 @@ test("students can look up and view their compiled results in the production app
       crypto: { randomUUID: () => "12345678-1234-4234-8234-123456789abc" },
       setTimeout() { return 1; },
       scrollTo() {},
-      navigator: { vibrate() { return true; } },
+      navigator: {
+        vibrate() { return true; },
+        clipboard: { async writeText() {} },
+      },
       addEventListener() {},
       localStorage: {
         getItem(key) {
@@ -679,11 +725,26 @@ test("students can look up and view their compiled results in the production app
   assert.equal(elements.get("#home").hidden, false);
   assert.equal(elements.get("#studentMobileNav").hidden, false);
   assert.equal(elements.get("#studentHeaderWidgets").hidden, false);
+  elements.get("#profileButton").listeners.click();
+  assert.equal(elements.get("#profileModal").hidden, false);
+  assert.equal(elements.get("#profileDisplayName").textContent, "Godspower Esther Gift");
+  avatarOptions[0].listeners.click();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(JSON.parse(studyStorage.get("foldBook.authSession")).avatarLottie, "cat-idle.json");
+  assert.equal(savedOptIns.at(-1).row.avatar_lottie, "cat-idle.json");
+  elements.get("#closeProfile").listeners.click();
+  assert.equal(elements.get("#profileModal").hidden, true);
+  elements.get("#profileButton").listeners.click();
+  assert.equal(elements.get("#profileModal").hidden, false);
+  assert.equal(elements.get("#profileDisplayName").textContent, "Godspower Esther Gift");
+  elements.get("#closeProfile").listeners.click();
+  assert.equal(elements.get("#profileModal").hidden, true);
   assert.equal(elements.get("#leaderboardList").children.length, 1);
   assert.match(elements.get("#leaderboardList").children[0].children[1].textContent, /^Learner-/);
-  assert.equal(savedOptIns.length, 1);
+  assert.equal(savedOptIns.length, 2);
   assert.equal(savedOptIns[0].row.phone_number, "2348012345678");
   assert.equal(savedOptIns[0].row.reg_number, "25/SS/EC/001");
+  assert.equal(savedOptIns[1].row.avatar_lottie, "cat-idle.json");
   savedOptIns.length = 0;
   await elements.get("#examPredictorButton").listeners.click();
   assert.equal(elements.get("#fuel").hidden, false);
@@ -723,23 +784,48 @@ test("students can look up and view their compiled results in the production app
   assert.equal(elements.get("#tdr").hidden, false);
   assert.equal(elements.get("#testProgress").textContent, "1 / 10");
   assert.match(elements.get("#testQuestion").textContent, /Generated question/);
+  assert.ok(audioPlays.includes("assets/sfx/a-few-moments-later-sponge-bob-sfx-fun.mp3"));
   elements.get("#testOptions").children[0].listeners.click();
+  assert.equal(audioPlays.at(-1), "assets/sfx/duolingo-correct-answer-10-streak.mp3");
   elements.get("#nextTestQuestion").listeners.click();
   assert.equal(elements.get("#testProgress").textContent, "2 / 10");
   elements.get("#closeTest").listeners.click();
   assert.equal(elements.get("#tdr").hidden, true);
-  for (let index = 0; index < 5; index += 1) elements.get("#simulateInvite").listeners.click();
+  for (let index = 0; index < 5; index += 1) {
+    await elements.get("#copyInvite").listeners.click();
+  }
   assert.equal(elements.get("#inviteCount").textContent, "5 / 5");
-  assert.match(elements.get("#inviteStatus").textContent, /48-hour unlimited study fuel/);
-  assert.equal(elements.get("#vFuel").textContent, "∞ PASS");
+  assert.match(elements.get("#inviteStatus").textContent, /48-hour all-access demo pass/);
+  assert.equal(elements.get("#vFuel").textContent, "100/100");
+  assert.equal(JSON.parse(studyStorage.get("foldBook.studyProgress")).referralCount, 5);
+  assert.equal(savedOptIns.length, 5);
+  savedOptIns.length = 0;
+  elements.get("#shareInvite").listeners.click();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(savedOptIns.length, 1);
+  assert.equal(savedOptIns[0].row.referral_count, 6);
+  assert.match(elements.get("#inviteStatus").textContent, /share recorded \(6 total\)/);
+  savedOptIns.length = 0;
   elements.get("#navLearn").listeners.click();
 
   tree.children[0].children[0].listeners.click();
   assert.equal(elements.get("#lessonPanel").hidden, false);
   assert.equal(elements.get("#answerOptions").children.length, 3);
-  elements.get("#answerOptions").children[1].listeners.click();
+  const firstWrongSoundIndex = audioPlays.length;
+  for (let index = 0; index < 5; index += 1) {
+    elements.get("#answerOptions").children[1].listeners.click();
+  }
+  assert.deepEqual(audioPlays.slice(firstWrongSoundIndex), [
+    "assets/sfx/duolingo-wrong.mp3",
+    "assets/sfx/duolingo-wrong.mp3",
+    "assets/sfx/faaah.mp3",
+    "assets/sfx/duolingo-wrong.mp3",
+    "assets/sfx/oh-my-god-bro-oh-hell-nah-man.mp3",
+  ]);
+  assert.equal(audioPlays.at(-1), "assets/sfx/oh-my-god-bro-oh-hell-nah-man.mp3");
   assert.match(elements.get("#lessonFeedback").textContent, /try another answer/i);
   elements.get("#answerOptions").children[0].listeners.click();
+  assert.equal(audioPlays.at(-1), "assets/sfx/duolingo-correct-answer-10-streak.mp3");
   await new Promise((resolve) => setImmediate(resolve));
   assert.match(elements.get("#lessonFeedback").textContent, /\+20 XP/);
   assert.equal(elements.get("#cpct").textContent, "20%");
@@ -749,6 +835,8 @@ test("students can look up and view their compiled results in the production app
   assert.equal(JSON.parse(studyStorage.get("foldBook.studyProgress")).xp, 20);
   elements.get("#sndToggle").listeners.click();
   assert.equal(elements.get("#sndToggle").getAttribute("aria-pressed"), "false");
+  elements.get("#sndToggle").listeners.click();
+  assert.equal(elements.get("#sndToggle").getAttribute("aria-pressed"), "true");
 
   for (let index = 1; index < 5; index += 1) {
     tree.children[index].children[0].listeners.click();
@@ -760,10 +848,12 @@ test("students can look up and view their compiled results in the production app
   await elements.get("#examPredictorButton").listeners.click();
   assert.equal(elements.get("#examPredictorPanel").hidden, false);
   for (let index = 0; index < 5; index += 1) {
-    elements.get("#mockExamOptions").children[0].listeners.click();
+    elements.get("#mockExamOptions").children[index < 3 ? 1 : 0].listeners.click();
     elements.get("#mockExamNext").listeners.click();
   }
-  assert.match(elements.get("#mockExamProgress").textContent, /5 \/ 5/);
+  assert.match(elements.get("#mockExamProgress").textContent, /2 \/ 5/);
+  assert.ok(audioPlays.includes("assets/sfx/Complete%20test.mp3"));
+  assert.equal(audioPlays.at(-1), "assets/sfx/oh-my-god-bro-oh-hell-nah-man.mp3");
   assert.equal(elements.get("#vGems").textContent, "35");
   assert.equal(JSON.parse(studyStorage.get("foldBook.studyProgress")).xp, 125);
   const form = elements.get("#lookupForm");
@@ -848,6 +938,9 @@ test("students can look up and view their compiled results in the production app
       full_name: "Godspower Esther Gift",
       streak_count: 6,
       activity_count: 1,
+      referral_count: 6,
+      avatar_url: null,
+      avatar_lottie: "cat-idle.json",
       last_activity_at: savedOptIns[1].row.last_activity_at,
       opted_in: true,
     },
@@ -919,6 +1012,7 @@ test("students can look up and view their compiled results in the production app
   elements.get("#adminLogout").listeners.click();
   assert.equal(elements.get("#adminDashboard").hidden, true);
   assert.equal(elements.get("#studentApp").hidden, true);
+  assert.equal(elements.get("#authView").hidden, false);
 
   elements.get("#launchApp").listeners.click();
   elements.get("#authFullName").value = "Godspower Esther Gift";
@@ -931,6 +1025,16 @@ test("students can look up and view their compiled results in the production app
   assert.equal(elements.get("#home").hidden, false);
   assert.match(elements.get("#accessToast").textContent, /signed in, but the WhatsApp reminder opt-in could not be saved/i);
   assert.equal(JSON.parse(studyStorage.get("foldBook.authSession")).role, "student");
+  elements.get("#studentSignOut").listeners.click();
+  assert.equal(elements.get("#authView").hidden, false);
+  assert.equal(elements.get("#studentApp").hidden, true);
+  assert.equal(studyStorage.has("foldBook.authSession"), false);
+  assert.equal(runtime.window.location.hash, "#authView");
+  elements.get("#studentSignOut").listeners.click();
+  assert.equal(elements.get("#authView").hidden, false);
+  assert.equal(elements.get("#studentApp").hidden, true);
+  assert.equal(studyStorage.has("foldBook.authSession"), false);
+  assert.equal(runtime.window.location.hash, "#authView");
 });
 
 test("Gemini proxy keeps its key server-side and rejects invalid requests", async () => {
@@ -1009,6 +1113,7 @@ test("Gemini proxy keeps its key server-side and rejects invalid requests", asyn
 test("WhatsApp worker disables history sync and resets logged-out auth state", () => {
   const worker = fs.readFileSync(path.join(root, "worker/worker.js"), "utf8");
   const entrypoint = fs.readFileSync(path.join(root, "worker.js"), "utf8");
+  const schema = fs.readFileSync(path.join(root, "worker/schema.sql"), "utf8");
   assert.match(worker, /fetchLatestBaileysVersion/);
   assert.match(worker, /syncFullHistory:\s*false/);
   assert.match(worker, /browser:\s*\["Ubuntu",\s*"Chrome",\s*"110\.0\.5563\.56"\]/);
@@ -1024,6 +1129,10 @@ test("WhatsApp worker disables history sync and resets logged-out auth state", (
   assert.match(entrypoint, /process\.env\.PORT \|\| 10000/);
   assert.match(entrypoint, /FoldBook WhatsApp Worker Active/);
   assert.match(entrypoint, /listen\(PORT,\s*"0\.0\.0\.0"/);
+  assert.match(schema, /add column if not exists referral_count integer not null default 0/);
+  assert.match(schema, /add column if not exists avatar_url text/);
+  assert.match(schema, /add column if not exists avatar_lottie text/);
+  assert.match(schema, /add column if not exists avatar_lottie text/);
 });
 
 test("production preview serves public pages but keeps raw CSV and source files out of the site", async () => {

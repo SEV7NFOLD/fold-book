@@ -177,7 +177,8 @@ const DEFAULT_STUDY_PROGRESS = {
   gems: 0,
   streak: 6,
   fuel: 85,
-  inviteCount: 0,
+  referralCount: 0,
+  referralRewardClaimed: false,
   demoPassExpiresAt: 0,
   lastStudyDate: "",
   activityDays: [],
@@ -191,7 +192,16 @@ let chatCourseCode = "ECO 128";
 let currentStudent = null;
 let isMasterAdmin = false;
 const AUTH_SESSION_KEY = "foldBook.authSession";
-const S = { isAdmin: false, student: null, user: null, level: "100L", phoneNumber: "" };
+const S = {
+  isAdmin: false,
+  student: null,
+  user: null,
+  level: "100L",
+  phoneNumber: "",
+  streak: 6,
+  fuel: 85,
+  referralCount: 0,
+};
 let leaderboardEntries = [];
 let practiceQuestions = [];
 let mockExamQuestions = [];
@@ -254,7 +264,10 @@ function loadStudyProgress() {
       gems: Number.isFinite(parsed.gems) && parsed.gems >= 0 ? parsed.gems : 0,
       streak: Number.isFinite(parsed.streak) && parsed.streak >= 1 ? parsed.streak : 6,
       fuel: Number.isFinite(parsed.fuel) ? Math.max(0, Math.min(100, parsed.fuel)) : 85,
-      inviteCount: Number.isFinite(parsed.inviteCount) ? Math.max(0, Math.min(5, parsed.inviteCount)) : 0,
+      referralCount: Number.isFinite(parsed.referralCount)
+        ? Math.max(0, Math.floor(parsed.referralCount))
+        : Number.isFinite(parsed.inviteCount) ? Math.max(0, Math.floor(parsed.inviteCount)) : 0,
+      referralRewardClaimed: parsed.referralRewardClaimed === true,
       demoPassExpiresAt: Number.isFinite(parsed.demoPassExpiresAt) ? parsed.demoPassExpiresAt : 0,
       lastStudyDate: typeof parsed.lastStudyDate === "string" ? parsed.lastStudyDate : "",
       soundEnabled: typeof parsed.soundEnabled === "boolean" ? parsed.soundEnabled : true,
@@ -267,6 +280,9 @@ function loadStudyProgress() {
 }
 
 const studyProgress = loadStudyProgress();
+S.streak = studyProgress.streak;
+S.fuel = studyProgress.fuel;
+S.referralCount = studyProgress.referralCount;
 
 function saveStudyProgress() {
   try {
@@ -305,6 +321,53 @@ function playStudyChime() {
 
 let AC = null;
 let soundOn = true;
+let consecutiveWrongCount = 0;
+
+const sfxEngine = {
+  correct: new Audio("assets/sfx/duolingo-correct-answer-10-streak.mp3"),
+  wrong: new Audio("assets/sfx/duolingo-wrong.mp3"),
+  fah: new Audio("assets/sfx/faaah.mp3"),
+  failTest: new Audio("assets/sfx/oh-my-god-bro-oh-hell-nah-man.mp3"),
+  deadClick: new Audio("assets/sfx/vine-boom.mp3"),
+  loading: new Audio("assets/sfx/a-few-moments-later-sponge-bob-sfx-fun.mp3"),
+  complete: new Audio("assets/sfx/Complete%20test.mp3"),
+};
+Object.values(sfxEngine).forEach((audio) => {
+  audio.preload = "auto";
+});
+
+function playCustomSfx(key, { loop = false } = {}) {
+  if (!soundOn) return;
+  const audio = sfxEngine[key];
+  if (!audio) return;
+  audio.currentTime = 0;
+  audio.loop = loop;
+  void audio.play().catch((error) => console.warn(`FoldBook sound "${key}" could not be played:`, error));
+}
+
+function stopCustomSfx(key) {
+  const audio = sfxEngine[key];
+  if (!audio) return;
+  audio.pause();
+  audio.currentTime = 0;
+  audio.loop = false;
+}
+
+function playAnswerFeedback(isCorrect) {
+  if (isCorrect) {
+    consecutiveWrongCount = 0;
+    playCustomSfx("correct");
+    return;
+  }
+  consecutiveWrongCount += 1;
+  if (consecutiveWrongCount === 3) playCustomSfx("fah");
+  else if (consecutiveWrongCount === 5) playCustomSfx("failTest");
+  else playCustomSfx("wrong");
+}
+
+function startLoadingSfx() {
+  playCustomSfx("loading", { loop: true });
+}
 
 function tone(frequency, start, duration, type = "sine", volume = 0.12) {
   if (!soundOn) return;
@@ -350,6 +413,14 @@ function buzz(pattern) {
 }
 
 document.addEventListener("pointerdown", (event) => {
+  const deadTarget = event.target.closest?.(
+    ".disabled, .dead-link, [disabled], [aria-disabled='true'], [data-dead-click], .empty-course-node, .course-node:empty",
+  );
+  if (deadTarget) {
+    playCustomSfx("deadClick");
+    buzz(8);
+    return;
+  }
   if (event.target.closest("button, [role='option']")) {
     sfx.tap();
     buzz(8);
@@ -380,6 +451,15 @@ function renderWeekTracker() {
   }
 }
 
+const PROFILE_AVATAR_LOTTIES = new Set([
+  "cat-idle.json",
+  "cat-stretch.json",
+  "person-02-breathing.json",
+  "hello-wave.json",
+  "heart-eyes.json",
+  "winking-face.json",
+]);
+
 function renderLeaderboard() {
   const entries = [...leaderboardEntries].sort((left, right) => right.xp - left.xp);
   leaderboardList.replaceChildren();
@@ -392,6 +472,13 @@ function renderLeaderboard() {
     rank.className = "leaderboard-rank mono";
     rank.textContent = String(entry.rank || index + 1).padStart(2, "0");
     name.textContent = entry.name;
+    if (entry.isCurrentUser && S.user) {
+      const userAvatar = document.createElement("span");
+      userAvatar.className = "leaderboard-avatar";
+      userAvatar.setAttribute("aria-hidden", "true");
+      renderUserAvatar(userAvatar, S.user, "leaderboard-avatar");
+      name.append(userAvatar);
+    }
     xp.className = "leaderboard-xp mono";
     xp.textContent = `${entry.xp} XP`;
     row.append(rank, name, xp);
@@ -410,6 +497,7 @@ function renderLeaderboard() {
     const name = document.createElement("span");
     const xp = document.createElement("small");
     const block = document.createElement("div");
+    const award = document.createElement("div");
     const initials = entry.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2);
     step.className = `podium-place podium-${rank}`;
     avatar.className = "av";
@@ -420,7 +508,10 @@ function renderLeaderboard() {
     xp.textContent = `${entry.xp} XP`;
     block.className = "podium-block";
     block.textContent = String(rank);
-    step.append(avatar, name, xp, block);
+    if (entry.isCurrentUser && S.user) renderUserAvatar(avatar, S.user, "av");
+    award.className = "podium-award";
+    renderLottieInto(award, "trophy.json", "🏆", `Rank ${rank} award`);
+    step.append(award, avatar, name, xp, block);
     podium.append(step);
   });
   const currentEntry = entries.find((entry) => entry.isCurrentUser);
@@ -436,10 +527,25 @@ function updateFuelDisplay() {
   const hasDemoPass = studyProgress.demoPassExpiresAt > Date.now();
   const chatFuelBar = document.querySelector("#chatFuelBar");
   const chatFuelValue = document.querySelector("#chatFuelValue");
-  fuelValue.textContent = hasDemoPass ? "∞ PASS" : `${studyProgress.fuel}/100`;
-  fuelBar.style.width = hasDemoPass ? "100%" : `${studyProgress.fuel}%`;
-  chatFuelBar.style.width = hasDemoPass ? "100%" : `${studyProgress.fuel}%`;
-  chatFuelValue.textContent = hasDemoPass ? "∞ PASS" : `${studyProgress.fuel}/100`;
+  S.fuel = studyProgress.fuel;
+  fuelValue.textContent = `${S.fuel}/100`;
+  fuelValue.title = hasDemoPass ? "48-hour all-access pass active" : "Dr. Eco fuel";
+  fuelBar.style.width = `${S.fuel}%`;
+  chatFuelBar.style.width = `${S.fuel}%`;
+  chatFuelValue.textContent = `${S.fuel}/100`;
+}
+
+function consumeStudyFuel(amount) {
+  if (studyProgress.demoPassExpiresAt > Date.now()) return true;
+  if (studyProgress.fuel < amount) {
+    document.querySelector("#fuelStatus").textContent = "Your study fuel is empty. Choose a demo refill or earn fuel by sharing FoldBook.";
+    fuelDialog.hidden = false;
+    return false;
+  }
+  studyProgress.fuel = Math.max(0, studyProgress.fuel - amount);
+  saveStudyProgress();
+  updateFuelDisplay();
+  return true;
 }
 
 function updateStudySummary() {
@@ -449,7 +555,9 @@ function updateStudySummary() {
   courseBar.style.width = `${percent}%`;
   courseProgressBar.setAttribute("aria-valuenow", String(percent));
   coursePercent.textContent = `${percent}%`;
-  streakValue.textContent = String(studyProgress.streak);
+  S.streak = studyProgress.streak;
+  S.referralCount = studyProgress.referralCount;
+  streakValue.textContent = String(S.streak);
   if (gemsValue) gemsValue.textContent = String(studyProgress.gems);
   soundToggle.textContent = studyProgress.soundEnabled ? "🔊" : "🔇";
   soundToggle.setAttribute("aria-pressed", String(studyProgress.soundEnabled));
@@ -479,12 +587,14 @@ function showStudyLesson(index) {
     option.textContent = answer;
     option.addEventListener("click", () => {
       if (answerIndex !== module.correctAnswer) {
+        playAnswerFeedback(false);
         lessonFeedback.textContent = "Not quite. Re-read the lesson and try another answer.";
         lessonFeedback.className = "lesson-feedback is-retry";
         if (typeof window.navigator.vibrate === "function") window.navigator.vibrate(35);
         return;
       }
 
+      playAnswerFeedback(true);
       if (!studyProgress.completed.includes(module.id)) {
         studyProgress.completed.push(module.id);
         studyProgress.xp += 20;
@@ -494,7 +604,6 @@ function showStudyLesson(index) {
         updateStudySummary();
         void syncLeaderboardEntry();
         renderStudyPath();
-        if (studyProgress.soundEnabled) playStudyChime();
         if (typeof window.navigator.vibrate === "function") window.navigator.vibrate([25, 35, 25]);
         lessonFeedback.textContent = "Correct! +20 XP · +5 gems. The next node is ready.";
       } else {
@@ -538,6 +647,7 @@ function renderStudyPath() {
       : isUnlocked
         ? '<svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>'
         : '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zm2 0h6V8a3 3 0 0 0-6 0z"/></svg>';
+    if (isComplete) renderLottieInto(node, "badge-unlocked.json", "✓", `Completed ${module.title}`);
     label.className = "lab";
     title.textContent = module.title;
     detail.textContent = isComplete ? "Completed · Review lesson" : `${5} min · +20 XP`;
@@ -632,16 +742,18 @@ function renderMockExamQuestion() {
     option.textContent = answer;
     option.addEventListener("click", () => {
       if (mockExamState.answered) return;
+      if (!consumeStudyFuel(1)) return;
       mockExamState.answered = true;
       const correct = answerIndex === question.correctAnswer;
       if (correct) {
         mockExamState.score += 1;
+        playAnswerFeedback(true);
         option.classList.add("is-correct");
         mockExamFeedback.textContent = "Correct.";
         mockExamFeedback.className = "lesson-feedback is-correct";
-        if (studyProgress.soundEnabled) playStudyChime();
         if (typeof window.navigator.vibrate === "function") window.navigator.vibrate(20);
       } else {
+        playAnswerFeedback(false);
         mockExamFeedback.textContent = `Not quite. The correct answer is: ${question.answers[question.correctAnswer]}.`;
         mockExamFeedback.className = "lesson-feedback is-retry";
         if (typeof window.navigator.vibrate === "function") window.navigator.vibrate(35);
@@ -655,12 +767,15 @@ function renderMockExamQuestion() {
 
 function finishMockExam() {
   const score = mockExamState.score;
+  playCustomSfx("complete");
+  if (score / mockExamQuestions.length < 0.6) playCustomSfx("failTest");
   const estimate = score >= Math.ceil(mockExamQuestions.length * 0.8) ? "Strong grasp" : score >= Math.ceil(mockExamQuestions.length * 0.6) ? "Developing" : "More practice recommended";
   mockExamProgress.textContent = `PRACTICE SCORE · ${score} / ${mockExamQuestions.length}`;
   mockExamTitle.textContent = estimate;
   mockExamQuestion.textContent = "This practice result is for revision guidance only and does not predict or replace an official exam result.";
   mockExamOptions.replaceChildren();
   mockExamFeedback.textContent = "";
+  renderLottieInto(document.querySelector("#mockExamAnimation"), "confetti-cannons.json", "🎉", "Practice mock complete");
   mockExamNext.disabled = true;
   mockExamNext.textContent = "Mock complete";
 
@@ -678,7 +793,7 @@ function finishMockExam() {
 }
 
 examPredictorButton.addEventListener("click", async () => {
-  if (studyProgress.completed.length !== activeModules.length) {
+  if (studyProgress.completed.length !== activeModules.length && studyProgress.demoPassExpiresAt <= Date.now()) {
     document.querySelector("#fuel").hidden = false;
     return;
   }
@@ -691,12 +806,15 @@ examPredictorButton.addEventListener("click", async () => {
   mockExamOptions.replaceChildren();
   mockExamNext.disabled = true;
   try {
+    startLoadingSfx();
     mockExamQuestions = await generateQuestionsFromMaterials(5, chatCourseCode, currentStudentLevel);
     renderMockExamQuestion();
   } catch (error) {
     console.error("Could not generate the practice mock:", error);
     mockExamProgress.textContent = "PRACTICE MOCK UNAVAILABLE";
     mockExamQuestion.textContent = `Could not generate questions: ${error.message}`;
+  } finally {
+    stopCustomSfx("loading");
   }
 });
 
@@ -766,31 +884,38 @@ document.querySelector("#chatCourse").addEventListener("change", (event) => {
 
 const mascotFiles = {
   person: ["person-02-breathing.json"],
-  idle: ["cat-idle.json", "idle.json"],
-  happy: ["confetti-burst.json", "success.json", "happy.json"],
-  success: ["confetti-burst.json", "success.json", "happy.json"],
-  sad: ["wrong.json", "sad.json"],
-  wrong: ["wrong.json", "sad.json"],
-  streak: ["streak-flame.json", "fire.json"],
-  fire: ["streak-flame.json", "fire.json"],
-  winner: ["trophy.json", "winner.json"],
-  trophy: ["trophy.json", "winner.json"],
+  idle: ["cat-idle.json"],
+  happy: ["heart-eyes.json", "confetti-burst.json"],
+  success: ["badge-unlocked.json", "confetti-burst.json"],
+  sad: ["cat-stretch.json"],
+  wrong: ["cat-stretch.json"],
+  streak: ["streak-flame.json"],
+  fire: ["streak-flame.json"],
+  winner: ["trophy.json", "confetti-cannons.json"],
+  trophy: ["trophy.json"],
 };
 let lottieManifestPromise;
 
-function renderMascot(mood, containerId) {
-  const container = document.getElementById(containerId);
+function renderLottieInto(container, fileName, fallbackSymbol, label) {
   if (!container) return;
+  const token = Number(container.dataset.animationToken || 0) + 1;
+  container.dataset.animationToken = String(token);
   const fallback = () => {
+    if (container.dataset.animationToken !== String(token)) return;
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("viewBox", "0 0 120 120");
+    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    svg.setAttribute("viewBox", "0 0 64 64");
     svg.setAttribute("role", "img");
-    svg.setAttribute("aria-label", "Dr. Eco portrait");
-    svg.classList.add("mascot-fallback");
-    svg.innerHTML = '<circle cx="60" cy="60" r="58" fill="#20231b"/><path d="M21 110c4-20 18-30 39-30s35 10 39 30" fill="#f2efe8"/><path d="M48 77h24v19H48z" fill="#b9754e"/><ellipse cx="60" cy="54" rx="25" ry="30" fill="#c98a62"/><path d="M35 52c-4-20 7-37 25-37 21 0 31 16 25 38l-5-12-9-8-15 8-13-4z" fill="#27231f"/><path d="M39 52h17m9 0h17" fill="none" stroke="#f2efe8" stroke-width="3"/><circle cx="48" cy="53" r="8" fill="none" stroke="#252525" stroke-width="2.5"/><circle cx="72" cy="53" r="8" fill="none" stroke="#252525" stroke-width="2.5"/><path d="M56 53h8m-15 15q11 9 22 0" fill="none" stroke="#252525" stroke-linecap="round" stroke-width="2.5"/><path d="m48 82 12 12 12-12 12 28H36z" fill="#fff"/><path d="m56 95 4 5 4-5-4-7z" fill="#9db843"/>';
+    svg.setAttribute("aria-label", label);
+    text.setAttribute("x", "32");
+    text.setAttribute("y", "48");
+    text.setAttribute("text-anchor", "middle");
+    text.setAttribute("font-size", "44");
+    text.textContent = fallbackSymbol;
+    svg.append(text);
     container.replaceChildren(svg);
   };
-  const candidates = mascotFiles[String(mood).toLowerCase()] || mascotFiles.idle;
+  fallback();
   if (!lottieManifestPromise) {
     lottieManifestPromise = fetch("/assets/lottie/manifest.json")
       .then((response) => {
@@ -805,37 +930,82 @@ function renderMascot(mood, containerId) {
       })
       .catch((error) => {
         lottieManifestPromise = null;
-        console.error("Could not load FoldBook mascot manifest:", error);
+        console.error("Could not load FoldBook animation manifest:", error);
         return [];
       });
   }
   void lottieManifestPromise.then(async (files) => {
-    const available = candidates.map((name) => files.find((file) => file.endsWith(`/${name}`))).find(Boolean);
-    if (!available) {
-      fallback();
-      return;
-    }
+    if (container.dataset.animationToken !== String(token)) return;
+    const source = files.find((file) => file.endsWith(`/${fileName}`));
+    if (!source) return;
     try {
-      const response = await fetch(available);
-      if (!response.ok) throw new Error(`Mascot animation request failed (${response.status}).`);
+      const response = await fetch(source);
+      if (!response.ok) throw new Error(`Animation request failed (${response.status}).`);
       const animation = await response.json();
-      if (!animation || typeof animation !== "object") throw new Error("Mascot animation JSON is invalid.");
+      if (!animation || typeof animation !== "object") throw new Error("Animation JSON is invalid.");
+      if (container.dataset.animationToken !== String(token)) return;
       const player = document.createElement("dotlottie-player");
-      player.setAttribute("src", available);
+      player.setAttribute("src", source);
       player.setAttribute("autoplay", "");
       player.setAttribute("loop", "");
       player.setAttribute("background", "transparent");
-      player.setAttribute("aria-label", `Dr. Eco ${mood} mascot`);
+      player.setAttribute("aria-label", label);
       player.addEventListener("error", fallback, { once: true });
       container.replaceChildren(player);
       window.setTimeout(() => {
         if (player.isConnected && player.childElementCount === 0 && !player.shadowRoot) fallback();
       }, 9000);
     } catch (error) {
-      console.error("Could not render FoldBook mascot:", error);
+      console.error(`Could not render ${fileName}:`, error);
       fallback();
     }
   });
+}
+
+function renderUserAvatar(container, user, className = "") {
+  if (!container) return;
+  container.className = [...new Set(`${container.className} ${className}`.trim().split(/\s+/))].join(" ");
+  container.replaceChildren();
+  const fallback = document.createElement("span");
+  fallback.setAttribute("aria-hidden", "true");
+  fallback.textContent = typeof user?.name === "string"
+    ? user.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()
+    : "S";
+  if (user?.avatarUrl && /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(user.avatarUrl)
+    && user.avatarUrl.length <= 140000) {
+    const image = document.createElement("img");
+    image.src = user.avatarUrl;
+    image.alt = "";
+    image.addEventListener("error", () => renderUserAvatar(container, { name: user.name }), { once: true });
+    container.append(image);
+  } else if (user?.avatarLottie && PROFILE_AVATAR_LOTTIES.has(user.avatarLottie)) {
+    container.append(fallback);
+    renderLottieInto(container, user.avatarLottie, fallback.textContent || "S", "Profile character");
+  } else {
+    container.append(fallback);
+  }
+}
+
+function renderProfile() {
+  const user = S.user;
+  const name = user?.name || currentStudent?.name || "Student";
+  document.querySelector("#headerProfileName").textContent = name.split(/\s+/)[0];
+  document.querySelector("#profileDisplayName").textContent = name;
+  document.querySelector("#profileDisplayLevel").textContent = user?.level || S.level;
+  renderUserAvatar(document.querySelector("#headerProfileAvatar"), user, "profile-avatar");
+  renderUserAvatar(document.querySelector("#profilePreviewAvatar"), user, "profile-avatar profile-avatar-large");
+  document.querySelectorAll("[data-avatar-lottie]").forEach((button) => {
+    const fileName = button.dataset.avatarLottie;
+    button.classList.toggle("is-selected", user?.avatarLottie === fileName);
+    renderLottieInto(button.querySelector(".profile-avatar-option-preview"), fileName, "✦", "Avatar animation preview");
+  });
+}
+
+function renderMascot(mood, containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const candidates = mascotFiles[String(mood).toLowerCase()] || mascotFiles.idle;
+  renderLottieInto(container, candidates[0], mood === "streak" ? "🔥" : "✦", `Dr. Eco ${mood} mascot`);
 }
 
 function appendChatMessage(text, kind) {
@@ -851,6 +1021,19 @@ function appendChatMessage(text, kind) {
     listen.textContent = "🔊 Listen";
     article.append(listen);
   }
+  const avatar = document.createElement("span");
+  avatar.className = "message-avatar profile-avatar";
+  avatar.setAttribute("aria-hidden", "true");
+  if (kind === "assistant") {
+    article.classList.add("has-avatar");
+    renderLottieInto(avatar, "cat-idle.json", "✦", "Dr. Eco");
+  } else if (S.user) {
+    article.classList.add("has-avatar");
+    renderUserAvatar(avatar, S.user, "message-avatar profile-avatar");
+  } else {
+    avatar.hidden = true;
+  }
+  article.append(avatar);
   chatMessages.append(article);
   chatMessages.scrollTop = chatMessages.scrollHeight;
   return article;
@@ -953,21 +1136,16 @@ let chatRequestInProgress = false;
 async function submitChatQuestion(question) {
   const cleaned = question.trim();
   if (!cleaned || chatRequestInProgress) return;
-  const hasDemoPass = studyProgress.demoPassExpiresAt > Date.now();
-  if (!hasDemoPass && studyProgress.fuel < 2) {
-    document.querySelector("#fuelStatus").textContent = "Your demo fuel is empty. Open the fuel panel to see the pass simulations.";
-    document.querySelector("#fuel").hidden = false;
-    return;
-  }
+  if (!consumeStudyFuel(2)) return;
   appendChatMessage(cleaned, "user");
   chatRequestInProgress = true;
-  if (!hasDemoPass) studyProgress.fuel = Math.max(0, studyProgress.fuel - 2);
-  saveStudyProgress();
-  updateFuelDisplay();
+  startLoadingSfx();
   const responseMessage = appendChatMessage("Checking the course materials…", "assistant");
+  renderLottieInto(responseMessage.querySelector(".message-avatar"), "typing-indicator.json", "💭", "Dr. Eco is thinking");
   try {
     const answer = await callGeminiRAG(cleaned, chatCourseCode, currentStudentLevel);
     responseMessage.querySelector("p").textContent = answer;
+    renderLottieInto(responseMessage.querySelector(".message-avatar"), "heart-eyes.json", "✨", "Dr. Eco response ready");
     sfx.msg();
     if (/generate|quiz|10.?q/i.test(cleaned)) {
       try {
@@ -985,7 +1163,9 @@ async function submitChatQuestion(question) {
   } catch (error) {
     console.error("Dr. Eco could not answer the question:", error);
     responseMessage.querySelector("p").textContent = `Dr. Eco could not respond: ${error.message}`;
+    renderLottieInto(responseMessage.querySelector(".message-avatar"), "cat-idle.json", "🐾", "Dr. Eco is resting");
   } finally {
+    stopCustomSfx("loading");
     chatRequestInProgress = false;
   }
 }
@@ -1056,7 +1236,7 @@ document.querySelector("#voiceToggle").addEventListener("click", (event) => {
 document.querySelector("#micButton").addEventListener("click", () => document.querySelector("#voiceToggle").click());
 
 const testDrawer = document.querySelector("#tdr");
-const testState = { index: 0, count: 5, hearts: 3, answered: false };
+const testState = { index: 0, count: 5, hearts: 3, answered: false, correctCount: 0, wrongCount: 0 };
 const testAnswerDrawer = document.querySelector("#testAnswerDrawer");
 const testFeedbackHeading = document.querySelector("#testFeedbackHeading");
 function renderTestQuestion() {
@@ -1084,22 +1264,27 @@ function renderTestQuestion() {
     option.textContent = answer;
     option.addEventListener("click", () => {
       if (testState.answered) return;
+      if (!consumeStudyFuel(1)) return;
       testState.answered = true;
       for (const item of document.querySelector("#testOptions").children) item.disabled = true;
       if (index === question.correctAnswer) {
+        testState.correctCount += 1;
+        playAnswerFeedback(true);
         option.classList.add("is-correct");
         document.querySelector("#testFeedback").textContent = "Correct — state the principle, then show how it applies.";
         testFeedbackHeading.textContent = "Correct!";
         testAnswerDrawer.classList.add("is-correct");
         document.querySelector("#lecturerTip").textContent = "A definition plus a short application usually earns clearer marks than a list of keywords.";
-        sfx.ok();
+        renderLottieInto(document.querySelector("#testFeedbackAnimation"), "badge-unlocked.json", "✓", "Correct answer");
       } else {
+        testState.wrongCount += 1;
+        playAnswerFeedback(false);
         testState.hearts -= 1;
         document.querySelector("#testFeedback").textContent = `Not quite. Correct answer: ${question.answers[question.correctAnswer]}.`;
         testFeedbackHeading.textContent = "Not quite";
         testAnswerDrawer.classList.add("is-wrong");
+        renderLottieInto(document.querySelector("#testFeedbackAnimation"), "cat-stretch.json", "↻", "Review this answer");
         document.querySelector("#lecturerTip").textContent = "When correcting an answer, name the concept and explain why the other option does not fit.";
-        sfx.no();
       }
       testAnswerDrawer.classList.add("on");
       document.querySelector("#testHearts").textContent = "❤️".repeat(testState.hearts) + "🖤".repeat(3 - testState.hearts);
@@ -1113,10 +1298,13 @@ document.querySelector("#openTest").addEventListener("click", async () => {
   const requestedCount = Number(document.querySelector("#questionCount").value);
   testState.count = requestedCount;
   testState.hearts = 3;
+  testState.correctCount = 0;
+  testState.wrongCount = 0;
   testDrawer.hidden = false;
   document.querySelector("#testQuestion").textContent = "Loading indexed course materials and generating questions…";
   document.querySelector("#testOptions").replaceChildren();
   try {
+    startLoadingSfx();
     practiceQuestions = await generateQuestionsFromMaterials(requestedCount, chatCourseCode, currentStudentLevel);
     testState.count = practiceQuestions.length;
     renderTestQuestion();
@@ -1124,6 +1312,8 @@ document.querySelector("#openTest").addEventListener("click", async () => {
     console.error("Could not generate practice questions:", error);
     document.querySelector("#testProgress").textContent = "PRACTICE UNAVAILABLE";
     document.querySelector("#testQuestion").textContent = `Could not generate questions: ${error.message}`;
+  } finally {
+    stopCustomSfx("loading");
   }
 });
 document.querySelector("#closeTest").addEventListener("click", () => { testDrawer.hidden = true; });
@@ -1133,12 +1323,16 @@ document.querySelector("#questionCount").addEventListener("change", (event) => {
 document.querySelector("#nextTestQuestion").addEventListener("click", () => {
   if (!testState.answered) return;
   if (testState.hearts === 0 || testState.index + 1 >= testState.count) {
+    const passed = testState.correctCount / testState.count >= 0.6 && testState.wrongCount < 5;
+    playCustomSfx("complete");
+    if (!passed) playCustomSfx("failTest");
     document.querySelector("#testProgress").textContent = `PRACTICE COMPLETE · ${testState.index + 1} / ${testState.count}`;
     document.querySelector("#testBar").style.width = "100%";
     document.querySelector("#testQuestion").textContent = testState.hearts === 0 ? "Out of hearts — review the feedback and try again." : "Practice complete. Keep reviewing indexed course materials.";
     document.querySelector("#testOptions").replaceChildren();
     document.querySelector("#testFeedback").textContent = "Practice only; this is not an official exam score.";
     document.querySelector("#nextTestQuestion").disabled = true;
+    renderLottieInto(document.querySelector("#testFeedbackAnimation"), "confetti-burst.json", "🎉", "Practice complete");
     return;
   }
   testState.index += 1;
@@ -1148,9 +1342,20 @@ document.querySelector("#nextTestQuestion").addEventListener("click", () => {
 const fuelDialog = document.querySelector("#fuel");
 document.querySelector("#pFuel").addEventListener("click", () => { fuelDialog.hidden = false; });
 document.querySelector("#closeFuel").addEventListener("click", () => { fuelDialog.hidden = true; });
+function launchPaystack(plan) {
+  const durationMs = plan.toLowerCase().includes("semester")
+    ? 120 * 24 * 60 * 60 * 1000
+    : 48 * 60 * 60 * 1000;
+  studyProgress.fuel = 100;
+  studyProgress.demoPassExpiresAt = Date.now() + durationMs;
+  studyProgress.referralRewardClaimed = true;
+  saveStudyProgress();
+  updateStudySummary();
+  document.querySelector("#fuelStatus").textContent = `${plan} simulated in mock checkout: fuel refilled to 100/100 and demo access is active. No payment was processed.`;
+}
 for (const button of document.querySelectorAll(".pass-button")) {
   button.addEventListener("click", () => {
-    document.querySelector("#fuelStatus").textContent = `${button.dataset.plan} selected in demo mode. No payment was processed and no pass activated.`;
+    launchPaystack(button.dataset.plan);
   });
 }
 
@@ -1159,7 +1364,7 @@ const inviteLink = `${inviteBase}?invite=foldbook-demo`;
 document.querySelector("#inviteLink").textContent = inviteLink;
 document.querySelector("#shareInvite").href = `https://wa.me/?text=${encodeURIComponent(`Study with me on FoldBook: ${inviteLink}`)}`;
 function renderInviteProgress() {
-  const count = Math.min(5, studyProgress.inviteCount);
+  const count = Math.min(5, studyProgress.referralCount);
   document.querySelector("#inviteCount").textContent = `${count} / 5`;
   document.querySelector("#inviteBar").style.width = `${count * 20}%`;
   const friends = document.querySelector("#inviteFriends");
@@ -1168,31 +1373,57 @@ function renderInviteProgress() {
     const badge = document.createElement("span");
     badge.className = `invite-friend${index < count ? " is-joined" : ""}`;
     badge.textContent = index < count ? "✓" : "＋";
-    badge.setAttribute("aria-label", index < count ? `Demo friend ${index + 1} counted` : `Invite slot ${index + 1}`);
+    badge.setAttribute("aria-label", index < count ? `Invite action ${index + 1} counted` : `Invite slot ${index + 1}`);
     friends.append(badge);
   }
+}
+async function persistStudentProfile() {
+  if (!currentStudent || !S.user || !S.phoneNumber) return false;
+  return saveWhatsAppOptIn(S.phoneNumber, currentStudent.registration, currentStudent.name);
+}
+
+async function incrementReferralCount(action) {
+  studyProgress.referralCount += 1;
+  if (S.user) S.user.referralCount = studyProgress.referralCount;
+  let earnedReward = false;
+  if (studyProgress.referralCount >= 5 && !studyProgress.referralRewardClaimed) {
+    studyProgress.referralRewardClaimed = true;
+    studyProgress.fuel = Math.min(100, studyProgress.fuel + 50);
+    studyProgress.demoPassExpiresAt = Date.now() + 48 * 60 * 60 * 1000;
+    earnedReward = true;
+  }
+  S.referralCount = studyProgress.referralCount;
+  saveStudyProgress();
+  persistAuthSession();
+  renderInviteProgress();
+  updateFuelDisplay();
+  updateStudySummary();
+  const status = document.querySelector("#inviteStatus");
+  status.textContent = earnedReward
+    ? `5 ${action} actions reached! +50 fuel credits and a 48-hour all-access demo pass unlocked. Referrals are not verified sign-ups.`
+    : `${action} recorded (${studyProgress.referralCount} total). This action count does not verify a sign-up.`;
+  const saved = await persistStudentProfile();
+  if (!saved) {
+    console.warn("Referral count could not be synced to Supabase.");
+    document.querySelector("#inviteRewardStatus").textContent = "Saved on this device; referral sync to Supabase failed.";
+  } else {
+    document.querySelector("#inviteRewardStatus").textContent = earnedReward
+      ? "Reward active for 48 hours. +50 fuel credits were added (up to 100/100)."
+      : "Referral action synced to your opted-in profile.";
+  }
+  return earnedReward;
 }
 document.querySelector("#copyInvite").addEventListener("click", async () => {
   try {
     await window.navigator.clipboard.writeText(inviteLink);
-    document.querySelector("#inviteStatus").textContent = "Sample invite link copied.";
+    await incrementReferralCount("copy");
   } catch (error) {
     console.error("Could not copy invite link:", error);
     document.querySelector("#inviteStatus").textContent = "Copy is unavailable. Select and copy the link above.";
   }
 });
-document.querySelector("#simulateInvite").addEventListener("click", () => {
-  studyProgress.inviteCount = Math.min(5, studyProgress.inviteCount + 1);
-  if (studyProgress.inviteCount === 5 && studyProgress.demoPassExpiresAt <= Date.now()) {
-    studyProgress.demoPassExpiresAt = Date.now() + 48 * 60 * 60 * 1000;
-    studyProgress.fuel = 100;
-  }
-  saveStudyProgress();
-  renderInviteProgress();
-  updateFuelDisplay();
-  document.querySelector("#inviteStatus").textContent = studyProgress.inviteCount === 5
-    ? "Demo reward unlocked: 48-hour unlimited study fuel. This is a local simulation, not a real pass."
-    : "Demo friend counted locally; real sign-ups are not verified.";
+document.querySelector("#shareInvite").addEventListener("click", () => {
+  void incrementReferralCount("share");
 });
 
 const soundEnabled = studyProgress.soundEnabled;
@@ -1201,6 +1432,7 @@ syncCourseControls();
 renderStudyPath();
 updateStudySummary();
 renderMascot("person", "chatMascot");
+renderLottieInto(document.querySelector("#streakAnimation"), "streak-flame.json", "🔥", "Daily streak");
 renderInviteProgress();
 chatMessages.replaceChildren();
 appendChatMessage("Hello! I’m Dr. Eco. Ask me about your course, or request practice questions generated from indexed notes.", "assistant");
@@ -1342,6 +1574,7 @@ async function handleIndexMaterialSubmit() {
 
   adminMaterialSubmit.disabled = true;
   adminMaterialStatus.textContent = "Indexing content into the course materials table...";
+  startLoadingSfx();
   try {
     const { error } = await supabaseClient.from("course_materials").insert([{
       level,
@@ -1360,6 +1593,7 @@ async function handleIndexMaterialSubmit() {
     console.error("Course material insert failed:", error);
     adminMaterialStatus.textContent = `Error saving material: ${error.message || "Supabase request failed."}`;
   } finally {
+    stopCustomSfx("loading");
     adminMaterialSubmit.disabled = false;
   }
 }
@@ -1702,6 +1936,7 @@ broadsheetImportButton.addEventListener("click", async () => {
     return;
   }
   broadsheetImportButton.disabled = true;
+  startLoadingSfx();
   try {
     const bytes = await selectedBroadsheetFile.arrayBuffer();
     const workbook = window.XLSX.read(bytes, { type: "array" });
@@ -1719,6 +1954,7 @@ broadsheetImportButton.addEventListener("click", async () => {
     console.error("Broadsheet import failed:", error);
     broadsheetStatus.textContent = `Import failed: ${error.message || "Supabase request failed."}`;
   } finally {
+    stopCustomSfx("loading");
     broadsheetImportButton.disabled = false;
   }
 });
@@ -1896,6 +2132,9 @@ async function saveWhatsAppOptIn(phoneNumber, regNumber, fullName) {
         full_name: fullName,
         streak_count: studyProgress.streak || 1,
         activity_count: studyProgress.activityDays.length,
+        referral_count: studyProgress.referralCount,
+        avatar_url: S.user?.avatarUrl || null,
+        avatar_lottie: S.user?.avatarLottie || null,
         last_activity_at: studyProgress.lastStudyDate ? new Date(`${studyProgress.lastStudyDate}T00:00:00`).toISOString() : null,
         opted_in: true,
       }, { onConflict: "phone_number" });
@@ -1953,7 +2192,8 @@ document.querySelector("#cancel-whatsapp").addEventListener("click", closeVerifi
 document.querySelector("#close-verification").addEventListener("click", closeVerification);
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
-  if (!authModal.hidden) closeVerification();
+  if (!document.querySelector("#profileModal").hidden) document.querySelector("#profileModal").hidden = true;
+  else if (!authModal.hidden) closeVerification();
   else if (!testDrawer.hidden) testDrawer.hidden = true;
   else if (!fuelDialog.hidden) fuelDialog.hidden = true;
 });
@@ -1969,11 +2209,116 @@ function signOut() {
   S.user = null;
   S.phoneNumber = "";
   window.localStorage.removeItem(AUTH_SESSION_KEY);
-  showStage("landingView");
+  document.querySelector("#profileModal").hidden = true;
+  document.querySelector("#authStatus").textContent = "";
+  showStage("authView");
 }
 
 document.querySelector("#adminLogout").addEventListener("click", signOut);
+document.querySelector("#studentSignOut").addEventListener("click", signOut);
+document.querySelector("#profileSignOut").addEventListener("click", signOut);
 adminSearch.addEventListener("input", () => renderAdminDirectory(adminSearch.value));
+
+function persistAuthSession() {
+  if (!currentStudent || !S.user) return;
+  try {
+    window.localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({
+      role: "student",
+      name: currentStudent.name,
+      registration: currentStudent.registration,
+      phoneNumber: S.phoneNumber,
+      level: S.level,
+      avatarUrl: S.user.avatarUrl || "",
+      avatarLottie: S.user.avatarLottie || "",
+      referralCount: studyProgress.referralCount,
+    }));
+  } catch (error) {
+    console.error("Could not save your profile to this browser:", error);
+    document.querySelector("#profileStatus").textContent = "Profile changes could not be saved on this device.";
+  }
+}
+
+document.querySelector("#profileButton").addEventListener("click", () => {
+  renderProfile();
+  document.querySelector("#profileStatus").textContent = "";
+  document.querySelector("#profileModal").hidden = false;
+  document.querySelector("#closeProfile").focus();
+});
+document.querySelector("#closeProfile").addEventListener("click", () => {
+  document.querySelector("#profileModal").hidden = true;
+});
+document.querySelector("#profileModal").addEventListener("click", (event) => {
+  if (event.target === document.querySelector("#profileModal")) {
+    document.querySelector("#profileModal").hidden = true;
+  }
+});
+document.querySelectorAll("[data-avatar-lottie]").forEach((button) => {
+  button.addEventListener("click", async () => {
+    if (!S.user || !PROFILE_AVATAR_LOTTIES.has(button.dataset.avatarLottie)) return;
+    S.user.avatarUrl = "";
+    S.user.avatarLottie = button.dataset.avatarLottie;
+    renderProfile();
+    persistAuthSession();
+    const saved = await persistStudentProfile();
+    document.querySelector("#profileStatus").textContent = saved
+      ? "Character avatar saved to your profile."
+      : "Character avatar saved on this device; Supabase sync failed.";
+  });
+});
+
+async function compressProfilePhoto(file) {
+  if (!file || !/^image\/(?:jpeg|png|webp)$/.test(file.type)) {
+    throw new Error("Choose a JPG, PNG or WebP image.");
+  }
+  if (file.size > 5 * 1024 * 1024) throw new Error("Choose an image smaller than 5 MB.");
+  if (typeof window.createImageBitmap !== "function") {
+    throw new Error("This browser cannot resize profile photos. Choose a character avatar instead.");
+  }
+  const bitmap = await window.createImageBitmap(file);
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+  if (!context) {
+    bitmap.close();
+    throw new Error("This browser could not process the selected photo.");
+  }
+  let scale = Math.min(1, 256 / Math.max(bitmap.width, bitmap.height));
+  let dataUrl = "";
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    dataUrl = canvas.toDataURL("image/jpeg", Math.max(0.45, 0.82 - attempt * 0.08));
+    if (dataUrl.length <= 140000) break;
+    scale *= 0.8;
+  }
+  bitmap.close();
+  if (dataUrl.length > 140000) throw new Error("That image could not be compressed small enough. Try a smaller photo.");
+  return dataUrl;
+}
+
+document.querySelector("#profilePhotoInput").addEventListener("change", async (event) => {
+  const input = event.currentTarget;
+  const file = input.files?.[0];
+  if (!file || !S.user) return;
+  const status = document.querySelector("#profileStatus");
+  status.textContent = "Preparing profile photo…";
+  try {
+    S.user.avatarUrl = await compressProfilePhoto(file);
+    S.user.avatarLottie = "";
+    renderProfile();
+    persistAuthSession();
+    const saved = await persistStudentProfile();
+    status.textContent = saved
+      ? "Photo saved to your profile."
+      : "Photo saved on this device; Supabase sync failed.";
+  } catch (error) {
+    console.error("Profile photo upload failed:", error);
+    status.textContent = error.message;
+  } finally {
+    input.value = "";
+  }
+});
 
 resultsForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -2078,7 +2423,6 @@ async function handleAuthSubmit(fullName, regNumber, phone) {
   submitButton.disabled = true;
   status.textContent = "Saving your WhatsApp opt-in…";
   try {
-    const saved = await saveWhatsAppOptIn(normalizedPhone, registration, student.name);
     currentStudent = { name: student.name, registration };
     isMasterAdmin = false;
     S.isAdmin = false;
@@ -2088,20 +2432,28 @@ async function handleAuthSubmit(fullName, regNumber, phone) {
       regNo: registration,
       phone: normalizedPhone,
       level: detectStudentLevel(registration),
+      avatarUrl: "",
+      avatarLottie: "",
+      referralCount: studyProgress.referralCount,
     };
     S.level = detectStudentLevel(registration);
     S.phoneNumber = normalizedPhone;
     currentStudentLevel = S.level;
     chatRegistrationInput.value = registration;
     setStudentRegistration(registration);
+    const saved = await saveWhatsAppOptIn(normalizedPhone, registration, student.name);
     window.localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({
       role: "student",
       name: student.name,
       registration,
       phoneNumber: normalizedPhone,
       level: S.level,
+      avatarUrl: S.user.avatarUrl,
+      avatarLottie: S.user.avatarLottie,
+      referralCount: studyProgress.referralCount,
     }));
     showStage("studentApp");
+    renderProfile();
     activateTab("home");
     void syncLeaderboardEntry();
     if (saved) {
@@ -2161,11 +2513,24 @@ function restoreAuthSession() {
       regNo: registration,
       phone: S.phoneNumber,
       level: S.level,
+      avatarUrl: typeof session.avatarUrl === "string"
+        && /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(session.avatarUrl)
+        && session.avatarUrl.length <= 140000 ? session.avatarUrl : "",
+      avatarLottie: typeof session.avatarLottie === "string"
+        && PROFILE_AVATAR_LOTTIES.has(session.avatarLottie) ? session.avatarLottie : "",
+      referralCount: studyProgress.referralCount,
     };
+    if (Number.isFinite(session.referralCount)) {
+      studyProgress.referralCount = Math.max(studyProgress.referralCount, Math.floor(session.referralCount));
+      S.referralCount = studyProgress.referralCount;
+      saveStudyProgress();
+    }
+    S.user.referralCount = studyProgress.referralCount;
     currentStudentLevel = S.level;
     chatRegistrationInput.value = registration;
     setStudentRegistration(registration);
     showStage("studentApp");
+    renderProfile();
     activateTab("home");
     void syncLeaderboardEntry();
     return true;

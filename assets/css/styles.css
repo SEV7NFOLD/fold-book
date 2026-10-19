@@ -1031,3 +1031,51 @@ textarea.admin-material-control { min-height: 140px; resize: vertical; }
   .bnav button { min-width: 46px; padding-right: 6px; padding-left: 6px; }
   .row .lab { width: 98px; }
 }
+
+.invite-reward-status { min-height: 1.4em; color: var(--fb-color-lime); font-size: 13px; }
+.header-profile { display: inline-flex; min-height: 36px; align-items: center; gap: 8px; padding: 3px 10px 3px 4px; border: 1px solid var(--border-light); border-radius: 999px; background: var(--surface); color: var(--text); font: inherit; font-size: 11px; cursor: pointer; }
+.profile-avatar { display: inline-grid; width: 30px; height: 30px; flex: 0 0 auto; overflow: hidden; place-items: center; border: 1px solid var(--border-light); border-radius: 50%; background: var(--surface-2); color: var(--accent); font-size: 12px; font-weight: 800; }
+.profile-avatar img, .profile-avatar dotlottie-player { display: block; width: 100%; height: 100%; object-fit: cover; }
+.profile-avatar svg, .streak-animation svg, .chat-message .message-avatar svg, .podium-award svg, .feedback-animation svg, .profile-avatar-option-preview svg { display: block; width: 100%; height: 100%; }
+.header-signout { min-height: 36px; padding: 6px 10px; font-size: 10px; }
+.streak-animation { display: inline-grid; width: 24px; height: 24px; place-items: center; }
+.streak-animation dotlottie-player { display: block; width: 24px; height: 24px; }
+.chat-message.has-avatar { display: flex; align-items: flex-end; gap: 8px; }
+.chat-message .message-avatar { width: 30px; height: 30px; }
+.chat-message .message-avatar dotlottie-player { width: 100%; height: 100%; }
+.assistant-message .message-avatar { order: 0; }
+.user-message .message-avatar { order: 1; }
+.podium-place .podium-award { display: block; width: 30px; height: 30px; margin: 0 auto; }
+.podium-place .podium-award dotlottie-player { display: block; width: 100%; height: 100%; }
+.podium-place .av, .leaderboard-avatar { overflow: hidden; }
+.podium-place .av img, .podium-place .av dotlottie-player, .leaderboard-avatar img, .leaderboard-avatar dotlottie-player { width: 100%; height: 100%; object-fit: cover; }
+.leaderboard-row strong { display: flex; align-items: center; gap: 7px; }
+.leaderboard-avatar { display: inline-grid; width: 26px; height: 26px; flex: 0 0 auto; place-items: center; border: 1px solid var(--fb-color-border); border-radius: 50%; }
+.feedback-animation { width: 50px; height: 50px; }
+.feedback-animation dotlottie-player { display: block; width: 100%; height: 100%; }
+.profile-modal-overlay { position: fixed; z-index: 40; inset: 0; display: grid; place-items: center; overflow-y: auto; padding: 18px; background: var(--fb-color-overlay); }
+.profile-modal-overlay:not([hidden]) { display: grid; }
+.profile-modal-card { position: relative; width: min(100%, 540px); max-height: min(92vh, 800px); overflow-y: auto; padding: 26px; border: 1px solid var(--fb-color-border); border-radius: 20px; background: var(--fb-color-surface); box-shadow: 0 24px 80px var(--fb-color-shadow); }
+.profile-modal-card h2 { margin: 6px 0 16px; font-size: 25px; }
+.profile-modal-card h3 { margin: 20px 0 10px; font-size: 15px; }
+.profile-close { position: absolute; top: 15px; right: 15px; min-width: 38px; padding: 3px 10px; font-size: 20px; }
+.profile-summary { display: flex; align-items: center; gap: 12px; margin: 14px 0 18px; }
+.profile-summary > div { display: grid; gap: 4px; }
+.profile-summary > div span, .profile-help { color: var(--fb-color-muted); font-size: 12px; }
+.profile-avatar-large { width: 64px; height: 64px; font-size: 21px; }
+.profile-upload-label { display: block; margin-bottom: 7px; font-size: 13px; font-weight: 700; }
+.profile-modal-card input[type="file"] { display: block; width: 100%; padding: 10px; border: 1px solid var(--fb-color-border); border-radius: 10px; background: var(--fb-color-bg); color: var(--fb-color-text); }
+.profile-avatar-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+.profile-avatar-option { display: grid; min-height: 96px; justify-items: center; gap: 5px; padding: 8px; border: 1px solid var(--fb-color-border); border-radius: 12px; background: var(--fb-color-bg); color: var(--fb-color-text); font: inherit; font-size: 11px; cursor: pointer; }
+.profile-avatar-option.is-selected { border-color: var(--fb-color-lime); box-shadow: inset 0 0 0 1px var(--fb-color-lime); }
+.profile-avatar-option-preview { display: block; width: 56px; height: 56px; }
+.profile-avatar-option-preview dotlottie-player { display: block; width: 100%; height: 100%; }
+.profile-status { min-height: 1.4em; color: var(--fb-color-muted); font-size: 12px; }
+.profile-signout { width: 100%; margin-top: 8px; }
+@media (max-width: 520px) {
+  .header-profile { min-height: 32px; gap: 4px; padding: 2px 6px 2px 2px; font-size: 0; }
+  .profile-avatar { width: 26px; height: 26px; }
+  .header-signout { min-height: 32px; padding: 4px 8px; font-size: 0; }
+  .header-signout::before { content: "🚪"; font-size: 14px; }
+  .profile-modal-card { padding: 20px 16px; }
+}

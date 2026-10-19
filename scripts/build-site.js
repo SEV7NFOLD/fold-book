@@ -13,11 +13,16 @@ const brandFiles = fs.readdirSync(brandDirectory, { withFileTypes: true })
 const lottieFiles = fs.readdirSync(lottieDirectory, { withFileTypes: true })
   .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".json"))
   .map((entry) => `assets/lottie/${entry.name}`);
+const sfxDirectory = path.join(root, "assets", "sfx");
+const sfxFiles = fs.readdirSync(sfxDirectory, { withFileTypes: true })
+  .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".mp3"))
+  .map((entry) => `assets/sfx/${entry.name}`);
 const lottieManifest = "assets/lottie/manifest.json";
 const allowedFiles = [
   "index.html",
   ...brandFiles,
   ...lottieFiles,
+  ...sfxFiles,
   lottieManifest,
   "assets/css/design-tokens.css",
   "assets/css/styles.css",

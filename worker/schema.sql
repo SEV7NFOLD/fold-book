@@ -2,6 +2,9 @@ alter table public.whatsapp_optins
   add column if not exists phone_number text,
   add column if not exists streak_count integer not null default 1,
   add column if not exists activity_count integer not null default 0,
+  add column if not exists referral_count integer not null default 0,
+  add column if not exists avatar_url text,
+  add column if not exists avatar_lottie text,
   add column if not exists last_activity_at timestamptz,
   add column if not exists opted_in boolean not null default false,
   add column if not exists last_nudged_at timestamptz;
@@ -35,7 +38,7 @@ create unique index if not exists whatsapp_optins_phone_number_key
 
 alter table public.whatsapp_optins enable row level security;
 
-grant insert, update (phone_number, whatsapp_number, reg_number, full_name, streak_count, activity_count, last_activity_at, course_code, grade, opted_in)
+grant insert, update (phone_number, whatsapp_number, reg_number, full_name, streak_count, activity_count, referral_count, avatar_url, avatar_lottie, last_activity_at, course_code, grade, opted_in)
   on public.whatsapp_optins to anon;
 
 do $$

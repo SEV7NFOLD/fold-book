@@ -32,7 +32,7 @@
         <div class="sp" aria-hidden="true"></div>
         <div class="student-header-widgets" id="studentHeaderWidgets" hidden>
           <div class="pill header-counter" id="pStreak" title="Daily streak">
-            <span class="flame" aria-hidden="true">🔥</span>
+            <span class="flame streak-animation" id="streakAnimation" aria-hidden="true">🔥</span>
             <span class="mono" id="vStreak">6</span>
           </div>
           <button class="pill fuel-pill" id="pFuel" type="button" aria-label="Open fuel and passes" title="Dr. Eco fuel">
@@ -41,6 +41,11 @@
             <span class="fuel-meter" aria-hidden="true"><i id="fbar"></i></span>
           </button>
           <button class="pill sound-toggle" id="sndToggle" type="button" aria-label="Turn sound off" aria-pressed="true" title="Toggle sound">🔊</button>
+          <button class="header-profile" id="profileButton" type="button" aria-haspopup="dialog" aria-controls="profileModal">
+            <span class="profile-avatar" id="headerProfileAvatar" aria-hidden="true">S</span>
+            <span id="headerProfileName">Profile</span>
+          </button>
+          <button class="header-signout card-secondary-button" id="studentSignOut" type="button">Sign Out 🚪</button>
         </div>
       </div>
     </header>
@@ -100,6 +105,7 @@
           <section class="card exam-session" id="examPredictorPanel" aria-live="polite" hidden>
             <span class="section-kicker" id="mockExamProgress"></span>
             <h2 id="mockExamTitle">UNIUYO Practice Mock</h2>
+            <div class="feedback-animation" id="mockExamAnimation" aria-hidden="true"></div>
             <p class="exam-disclaimer">Practice estimate only — not an official exam prediction.</p>
             <p class="lesson-question" id="mockExamQuestion"></p>
             <div class="answer-options" id="mockExamOptions"></div>
@@ -163,9 +169,9 @@
 
       <section id="invite" class="invite-section hide" hidden>
         <h1>Invite friends</h1>
-        <p class="invite-intro">Invite classmates to try FoldBook. This local demo counts invite taps; it does not verify real sign-ups.</p>
+        <p class="invite-intro">Share your study link with classmates. Copy and share actions earn demo rewards, but do not verify real sign-ups.</p>
         <section class="card invite-link-card">
-          <strong>Your invite link <small>(sample)</small></strong>
+          <strong>Your invite link</strong>
           <code class="invite-link" id="inviteLink"></code>
           <div class="invite-actions">
             <button class="results-submit" type="button" id="copyInvite">Copy link</button>
@@ -174,11 +180,11 @@
           <p class="invite-status" id="inviteStatus" role="status"></p>
         </section>
         <section class="card invite-progress-card">
-          <div class="invite-progress-heading"><strong>Friends joined</strong><strong class="mono" id="inviteCount">0 / 5</strong></div>
+          <div class="invite-progress-heading"><strong>Referral actions</strong><strong class="mono" id="inviteCount">0 / 5</strong></div>
           <div class="fuel-track"><i id="inviteBar"></i></div>
-          <p>Invite 5 friends to unlock the demo 48-hour unlimited pass.</p>
+          <p>Share or copy your link 5 times to earn +50 fuel credits and a 48-hour all-access demo pass. Referral actions are not verified sign-ups.</p>
           <div class="invite-friends" id="inviteFriends" aria-live="polite"></div>
-          <button class="card-secondary-button" type="button" id="simulateInvite">Demo: a friend joined</button>
+          <p class="invite-reward-status" id="inviteRewardStatus" role="status" aria-live="polite"></p>
         </section>
       </section>
 
@@ -416,6 +422,7 @@
         <aside class="lecturer-tip"><strong>UNIUYO marking tip</strong><p id="lecturerTip">Read the command word and define the key economic concept before explaining it.</p></aside>
         <section class="answer-drawer" id="testAnswerDrawer" aria-live="polite">
           <h3 id="testFeedbackHeading"></h3>
+          <div class="feedback-animation" id="testFeedbackAnimation" aria-hidden="true"></div>
           <p class="test-feedback" id="testFeedback" role="status"></p>
           <button class="results-submit" id="nextTestQuestion" type="button" disabled>Continue</button>
         </section>
@@ -433,6 +440,32 @@
           <article class="fuel-plan"><strong>Semester pass</strong><span>₦500 · demo only</span><button type="button" class="results-submit pass-button" data-plan="semester pass">Try demo</button></article>
         </div>
         <p id="fuelStatus" class="fuel-status" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <section class="profile-modal-overlay" id="profileModal" role="dialog" aria-modal="true" aria-labelledby="profileTitle" hidden>
+      <div class="profile-modal-card">
+        <button class="card-secondary-button profile-close" id="closeProfile" type="button" aria-label="Close profile">×</button>
+        <span class="section-kicker">YOUR FOLDBOOK PROFILE</span>
+        <h2 id="profileTitle">Profile & avatar</h2>
+        <div class="profile-summary">
+          <span class="profile-avatar profile-avatar-large" id="profilePreviewAvatar" aria-hidden="true">S</span>
+          <div><strong id="profileDisplayName">Student</strong><span id="profileDisplayLevel">100L</span></div>
+        </div>
+        <label class="profile-upload-label" for="profilePhotoInput">Upload a profile photo</label>
+        <input id="profilePhotoInput" type="file" accept="image/jpeg,image/png,image/webp">
+        <p class="profile-help">Photos are resized before being saved to your browser and opted-in profile record.</p>
+        <h3>Choose a character</h3>
+        <div class="profile-avatar-grid" id="profileAvatarGrid">
+          <button type="button" class="profile-avatar-option" data-avatar-lottie="cat-idle.json" aria-label="Choose cat idle avatar"><span class="profile-avatar-option-preview"></span><span>Cat</span></button>
+          <button type="button" class="profile-avatar-option" data-avatar-lottie="cat-stretch.json" aria-label="Choose stretching cat avatar"><span class="profile-avatar-option-preview"></span><span>Stretch</span></button>
+          <button type="button" class="profile-avatar-option" data-avatar-lottie="person-02-breathing.json" aria-label="Choose breathing avatar"><span class="profile-avatar-option-preview"></span><span>Calm</span></button>
+          <button type="button" class="profile-avatar-option" data-avatar-lottie="hello-wave.json" aria-label="Choose waving avatar"><span class="profile-avatar-option-preview"></span><span>Wave</span></button>
+          <button type="button" class="profile-avatar-option" data-avatar-lottie="heart-eyes.json" aria-label="Choose heart eyes avatar"><span class="profile-avatar-option-preview"></span><span>Cheer</span></button>
+          <button type="button" class="profile-avatar-option" data-avatar-lottie="winking-face.json" aria-label="Choose winking avatar"><span class="profile-avatar-option-preview"></span><span>Wink</span></button>
+        </div>
+        <p class="profile-status" id="profileStatus" role="status" aria-live="polite"></p>
+        <button class="card-secondary-button profile-signout" id="profileSignOut" type="button">Sign Out 🚪</button>
       </div>
     </section>
 
