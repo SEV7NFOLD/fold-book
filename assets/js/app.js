@@ -1008,11 +1008,32 @@ function renderMascot(mood, containerId) {
   renderLottieInto(container, candidates[0], mood === "streak" ? "🔥" : "✦", `Dr. Eco ${mood} mascot`);
 }
 
+function renderDrEcoFormatting(container, text) {
+  container.replaceChildren();
+  const lines = String(text).split(/\r?\n/);
+  lines.forEach((line, lineIndex) => {
+    if (lineIndex > 0) container.append(document.createElement("br"));
+    const boldParts = line.split(/(\*\*[^*]+?\*\*)/g);
+    boldParts.forEach((part) => {
+      if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+        const strong = document.createElement("strong");
+        strong.textContent = part.slice(2, -2);
+        container.append(strong);
+      } else {
+        const textPart = document.createElement("span");
+        textPart.textContent = part;
+        container.append(textPart);
+      }
+    });
+  });
+}
+
 function appendChatMessage(text, kind) {
   const article = document.createElement("article");
   const paragraph = document.createElement("p");
   article.className = `chat-message ${kind === "assistant" ? "assistant-message" : "user-message"}`;
-  paragraph.textContent = text;
+  if (kind === "assistant") renderDrEcoFormatting(paragraph, text);
+  else paragraph.textContent = text;
   article.append(paragraph);
   if (kind === "assistant") {
     const listen = document.createElement("button");
@@ -1038,6 +1059,119 @@ function appendChatMessage(text, kind) {
   chatMessages.scrollTop = chatMessages.scrollHeight;
   return article;
 }
+
+function ensureExternalScript(url, globalName) {
+  if (window[globalName]) return Promise.resolve(window[globalName]);
+  const existing = document.querySelector(`script[data-foldbook-parser="${globalName}"]`);
+  if (existing?.dataset.loaded === "true") return Promise.resolve(window[globalName]);
+  if (existing?.dataset.loading === "true") {
+    return new Promise((resolve, reject) => {
+      existing.addEventListener("load", () => resolve(window[globalName]), { once: true });
+      existing.addEventListener("error", () => reject(new Error(`Could not load ${globalName} parser.`)), { once: true });
+    });
+  }
+  const script = document.createElement("script");
+  script.src = url;
+  script.async = true;
+  script.dataset.foldbookParser = globalName;
+  script.dataset.loading = "true";
+  const loaded = new Promise((resolve, reject) => {
+    script.addEventListener("load", () => {
+      script.dataset.loading = "false";
+      script.dataset.loaded = "true";
+      if (!window[globalName]) reject(new Error(`${globalName} parser did not initialize.`));
+      else resolve(window[globalName]);
+    }, { once: true });
+    script.addEventListener("error", () => {
+      script.dataset.loading = "false";
+      script.remove();
+      reject(new Error(`Could not load ${globalName} parser.`));
+    }, { once: true });
+  });
+  document.head.append(script);
+  return loaded;
+}
+
+const MAX_INDEX_UPLOAD_BYTES = 20 * 1024 * 1024;
+const MAX_INDEXED_TEXT_LENGTH = 12000;
+const adminFileUploader = document.querySelector("#adminFileUploader");
+
+async function extractAdminUploadText(file) {
+  if (file.size > MAX_INDEX_UPLOAD_BYTES) {
+    throw new Error("Choose a file smaller than 20 MB.");
+  }
+  const extension = file.name.toLowerCase().split(".").pop();
+  if (extension === "txt") return file.text();
+
+  if (extension === "pdf") {
+    const pdfjs = await ensureExternalScript(
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js",
+      "pdfjsLib",
+    );
+    pdfjs.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+    if (pdf.numPages > 100) throw new Error("PDFs are limited to 100 pages for browser-side extraction.");
+    const pages = [];
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      const page = await pdf.getPage(pageNumber);
+      const content = await page.getTextContent();
+      pages.push(content.items.map((item) => item.str).join(" "));
+      if (pages.join("\n").length >= MAX_INDEXED_TEXT_LENGTH) break;
+    }
+    const extracted = pages.join("\n").trim();
+    if (!extracted) throw new Error("No selectable text was found in this PDF.");
+    return extracted;
+  }
+
+  if (extension === "docx") {
+    const mammoth = await ensureExternalScript(
+      "https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js",
+      "mammoth",
+    );
+    const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
+    if (!result.value.trim()) throw new Error("No text was found in this Word document.");
+    return result.value;
+  }
+
+  if (["png", "jpg", "jpeg", "webp"].includes(extension)) {
+    const tesseract = await ensureExternalScript(
+      "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js",
+      "Tesseract",
+    );
+    adminMaterialStatus.textContent = "Loading local OCR and extracting image text…";
+    const worker = await tesseract.createWorker("eng");
+    try {
+      const { data } = await worker.recognize(file);
+      if (!data.text.trim()) throw new Error("No readable text was found in this image.");
+      return data.text;
+    } finally {
+      await worker.terminate();
+    }
+  }
+
+  throw new Error("This file type is not supported. Choose PDF, DOCX, TXT, PNG, JPG or WEBP.");
+}
+
+adminFileUploader.addEventListener("change", async () => {
+  const file = adminFileUploader.files?.[0];
+  if (!file) return;
+  adminFileUploader.disabled = true;
+  adminMaterialStatus.textContent = `Extracting text from "${file.name}" in your browser…`;
+  try {
+    const extracted = await extractAdminUploadText(file);
+    adminMaterialTitle.value = file.name.replace(/\.[^/.]+$/, "");
+    adminMaterialText.value = extracted.slice(0, MAX_INDEXED_TEXT_LENGTH);
+    adminMaterialStatus.textContent = extracted.length > MAX_INDEXED_TEXT_LENGTH
+      ? `Extracted text was truncated to ${MAX_INDEXED_TEXT_LENGTH.toLocaleString()} characters. Review it before indexing.`
+      : "Text extracted in your browser. Review it before indexing.";
+  } catch (error) {
+    console.error("Admin course file extraction failed:", error);
+    adminMaterialStatus.textContent = `Could not extract this file: ${error.message}`;
+  } finally {
+    adminFileUploader.disabled = false;
+    adminFileUploader.value = "";
+  }
+});
 
 async function retrieveCourseMaterialContext(courseCode, level, count = 3) {
   if (!supabaseClient) throw new Error("Supabase is unavailable; indexed course materials cannot be loaded.");
@@ -1133,6 +1267,179 @@ async function generateQuestionsFromMaterials(count, courseCode, level) {
 }
 
 let chatRequestInProgress = false;
+let voiceRecognition = null;
+let voiceCallActive = false;
+let voiceMicMuted = false;
+let voiceSpeakerEnabled = true;
+let voiceTurnInProgress = false;
+
+function speakText(text, onEnd = () => {}) {
+  if (!voiceSpeakerEnabled || !("speechSynthesis" in window)
+    || typeof window.SpeechSynthesisUtterance !== "function") {
+    onEnd();
+    return false;
+  }
+  window.speechSynthesis.cancel();
+  const utterance = new window.SpeechSynthesisUtterance(String(text).replace(/\*\*/g, ""));
+  utterance.rate = 1;
+  utterance.pitch = 1;
+  const voices = window.speechSynthesis.getVoices();
+  const preferredVoice = voices.find((voice) => {
+    const name = voice.name.toLowerCase();
+    return voice.lang.toLowerCase().includes("en")
+      && (name.includes("google") || name.includes("natural") || name.includes("samantha"));
+  });
+  if (preferredVoice) utterance.voice = preferredVoice;
+  utterance.onend = onEnd;
+  utterance.onerror = onEnd;
+  window.speechSynthesis.speak(utterance);
+  return true;
+}
+
+function setVoiceCallStatus(message) {
+  document.querySelector("#voiceCallStatus").textContent = message;
+}
+
+function startVoiceRecognition() {
+  if (!voiceCallActive || voiceMicMuted || voiceTurnInProgress || !voiceRecognition) return;
+  try {
+    voiceRecognition.start();
+    setVoiceCallStatus("Listening");
+  } catch (error) {
+    if (error.name !== "InvalidStateError") {
+      console.warn("Voice recognition could not start:", error);
+      setVoiceCallStatus("Microphone unavailable. Check browser permissions.");
+    }
+  }
+}
+
+async function handleVoiceTranscript(transcript) {
+  if (voiceTurnInProgress || !transcript.trim()) return;
+  voiceTurnInProgress = true;
+  if (!consumeStudyFuel(2)) {
+    voiceTurnInProgress = false;
+    setVoiceCallStatus("Not enough fuel to ask Dr. Eco.");
+    return;
+  }
+  appendChatMessage(transcript, "user");
+  document.querySelector("#voiceCaption").textContent = "Dr. Eco is thinking…";
+  setVoiceCallStatus("Thinking");
+  startLoadingSfx();
+  try {
+    const answer = await callGeminiRAG(transcript, chatCourseCode, currentStudentLevel);
+    if (!voiceCallActive) return;
+    appendChatMessage(answer, "assistant");
+    document.querySelector("#voiceCaption").textContent = `Dr. Eco: ${answer}`;
+    setVoiceCallStatus("Dr. Eco is speaking");
+    voiceTurnInProgress = false;
+    speakText(answer, () => {
+      if (voiceCallActive && !voiceMicMuted) startVoiceRecognition();
+      else if (voiceCallActive) setVoiceCallStatus("Microphone muted");
+    });
+  } catch (error) {
+    console.error("Dr. Eco voice response failed:", error);
+    if (!voiceCallActive) return;
+    const message = `Dr. Eco could not respond: ${error.message}`;
+    appendChatMessage(message, "assistant");
+    document.querySelector("#voiceCaption").textContent = message;
+    voiceTurnInProgress = false;
+    setVoiceCallStatus("Response failed");
+    if (voiceCallActive && !voiceMicMuted) startVoiceRecognition();
+  } finally {
+    stopCustomSfx("loading");
+  }
+}
+
+function startVoiceCallSession() {
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const caption = document.querySelector("#voiceCaption");
+  if (!Recognition) {
+    caption.textContent = "Voice recognition is not supported in this browser. Try Chrome, or close the call and type your question.";
+    setVoiceCallStatus("Voice recognition unavailable");
+    showNotice("Voice recognition is not supported in this browser. Try Chrome.");
+    return;
+  }
+  voiceRecognition = new Recognition();
+  voiceRecognition.lang = "en-US";
+  voiceRecognition.interimResults = true;
+  voiceRecognition.continuous = false;
+  voiceRecognition.onresult = (event) => {
+    let interimTranscript = "";
+    let finalTranscript = "";
+    for (let index = event.resultIndex; index < event.results.length; index += 1) {
+      const result = event.results[index];
+      if (result.isFinal) finalTranscript += result[0].transcript;
+      else interimTranscript += result[0].transcript;
+    }
+    if (interimTranscript) caption.textContent = `You: ${interimTranscript}`;
+    if (finalTranscript.trim()) {
+      caption.textContent = `You: ${finalTranscript.trim()}`;
+      void handleVoiceTranscript(finalTranscript.trim());
+    }
+  };
+  voiceRecognition.onerror = (event) => {
+    console.warn("Voice recognition failed:", event.error);
+    if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+      voiceMicMuted = true;
+      document.querySelector("#voiceMuteButton").setAttribute("aria-pressed", "true");
+      document.querySelector("#voiceMuteButton").textContent = "🔇 Unmute mic";
+    }
+    setVoiceCallStatus(event.error === "not-allowed"
+      ? "Microphone permission was denied."
+      : `Voice recognition error: ${event.error}`);
+  };
+  voiceRecognition.onend = () => {
+    if (voiceCallActive && !voiceMicMuted && !voiceTurnInProgress) {
+      window.setTimeout(startVoiceRecognition, 300);
+    }
+  };
+  startVoiceRecognition();
+}
+
+function toggleVoiceCallRoom(open) {
+  const room = document.querySelector("#voiceCallRoom");
+  room.hidden = !open;
+  room.classList.toggle("hide", !open);
+  voiceCallActive = open;
+  const toggle = document.querySelector("#voiceToggle");
+  toggle.setAttribute("aria-pressed", String(open));
+  toggle.textContent = open ? "🎙️ Voice call: on" : "🎙️ Voice call";
+  if (open) {
+    voiceMicMuted = false;
+    document.querySelector("#voiceMuteButton").setAttribute("aria-pressed", "false");
+    document.querySelector("#voiceMuteButton").textContent = "🎙️ Mute mic";
+    renderLottieInto(document.querySelector("#voiceCallMascot"), "person-02-breathing.json", "✦", "Dr. Eco in a live voice call");
+    startVoiceCallSession();
+    document.querySelector("#voiceEndButton").focus();
+    return;
+  }
+  if (voiceRecognition) {
+    voiceRecognition.onend = null;
+    voiceRecognition.stop();
+    voiceRecognition = null;
+  }
+  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  voiceTurnInProgress = false;
+  setVoiceCallStatus("Call ended");
+}
+
+document.querySelector("#voiceMuteButton").addEventListener("click", (event) => {
+  voiceMicMuted = !voiceMicMuted;
+  event.currentTarget.setAttribute("aria-pressed", String(voiceMicMuted));
+  event.currentTarget.textContent = voiceMicMuted ? "🔇 Unmute mic" : "🎙️ Mute mic";
+  if (voiceMicMuted) {
+    if (voiceRecognition) voiceRecognition.stop();
+    setVoiceCallStatus("Microphone muted");
+  } else startVoiceRecognition();
+});
+document.querySelector("#voiceSpeakerButton").addEventListener("click", (event) => {
+  voiceSpeakerEnabled = !voiceSpeakerEnabled;
+  event.currentTarget.setAttribute("aria-pressed", String(voiceSpeakerEnabled));
+  event.currentTarget.textContent = voiceSpeakerEnabled ? "🔊 Speaker on" : "🔇 Speaker off";
+  if (!voiceSpeakerEnabled && "speechSynthesis" in window) window.speechSynthesis.cancel();
+});
+document.querySelector("#voiceEndButton").addEventListener("click", () => toggleVoiceCallRoom(false));
+
 async function submitChatQuestion(question) {
   const cleaned = question.trim();
   if (!cleaned || chatRequestInProgress) return;
@@ -1144,7 +1451,7 @@ async function submitChatQuestion(question) {
   renderLottieInto(responseMessage.querySelector(".message-avatar"), "typing-indicator.json", "💭", "Dr. Eco is thinking");
   try {
     const answer = await callGeminiRAG(cleaned, chatCourseCode, currentStudentLevel);
-    responseMessage.querySelector("p").textContent = answer;
+    renderDrEcoFormatting(responseMessage.querySelector("p"), answer);
     renderLottieInto(responseMessage.querySelector(".message-avatar"), "heart-eyes.json", "✨", "Dr. Eco response ready");
     sfx.msg();
     if (/generate|quiz|10.?q/i.test(cleaned)) {
@@ -1162,7 +1469,7 @@ async function submitChatQuestion(question) {
     }
   } catch (error) {
     console.error("Dr. Eco could not answer the question:", error);
-    responseMessage.querySelector("p").textContent = `Dr. Eco could not respond: ${error.message}`;
+    renderDrEcoFormatting(responseMessage.querySelector("p"), `Dr. Eco could not respond: ${error.message}`);
     renderLottieInto(responseMessage.querySelector(".message-avatar"), "cat-idle.json", "🐾", "Dr. Eco is resting");
   } finally {
     stopCustomSfx("loading");
@@ -1189,49 +1496,10 @@ chatMessages.addEventListener("click", (event) => {
     appendChatMessage("Text-to-speech is not supported by this browser.", "assistant");
     return;
   }
-  window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(new window.SpeechSynthesisUtterance(text));
+  speakText(text);
 });
-let voiceRecognition = null;
 document.querySelector("#voiceToggle").addEventListener("click", (event) => {
-  const button = event.currentTarget;
-  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (button.getAttribute("aria-pressed") === "true") {
-    if (voiceRecognition) voiceRecognition.stop();
-    button.setAttribute("aria-pressed", "false");
-    button.textContent = "🎙️ Voice mode: off";
-    return;
-  }
-  if (!Recognition) {
-    document.querySelector("#chatInput").placeholder = "Voice recognition is unavailable; type your question";
-    return;
-  }
-  voiceRecognition = new Recognition();
-  voiceRecognition.lang = "en";
-  voiceRecognition.onresult = (resultEvent) => {
-    const transcript = resultEvent.results[0][0].transcript;
-    document.querySelector("#chatInput").value = transcript;
-    submitChatQuestion(transcript);
-  };
-  voiceRecognition.onerror = (errorEvent) => {
-    console.error("Voice recognition failed:", errorEvent.error);
-    button.textContent = "🎙️ Voice mode: unavailable";
-    button.setAttribute("aria-pressed", "false");
-  };
-  voiceRecognition.onend = () => {
-    button.setAttribute("aria-pressed", "false");
-    button.textContent = "🎙️ Voice mode: off";
-  };
-  try {
-    voiceRecognition.start();
-    button.setAttribute("aria-pressed", "true");
-    button.textContent = "🎙️ Listening…";
-  } catch (error) {
-    console.error("Voice recognition could not start:", error);
-    button.setAttribute("aria-pressed", "false");
-    button.textContent = "🎙️ Voice mode: unavailable";
-    document.querySelector("#chatInput").placeholder = "Microphone unavailable; type your question";
-  }
+  toggleVoiceCallRoom(!voiceCallActive);
 });
 document.querySelector("#micButton").addEventListener("click", () => document.querySelector("#voiceToggle").click());
 
@@ -2193,6 +2461,7 @@ document.querySelector("#close-verification").addEventListener("click", closeVer
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
   if (!document.querySelector("#profileModal").hidden) document.querySelector("#profileModal").hidden = true;
+  else if (!document.querySelector("#voiceCallRoom").hidden) toggleVoiceCallRoom(false);
   else if (!authModal.hidden) closeVerification();
   else if (!testDrawer.hidden) testDrawer.hidden = true;
   else if (!fuelDialog.hidden) fuelDialog.hidden = true;

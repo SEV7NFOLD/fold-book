@@ -136,6 +136,12 @@ test("production output keeps the dark branding and compiles student results int
   assert.match(html, /id="weekTracker"/);
   assert.match(html, /id="leaderboardList"/);
   assert.match(html, /id="sndToggle"/);
+  assert.match(html, /id="voiceCallRoom"/);
+  assert.match(html, /id="voiceCaption"/);
+  assert.match(html, /id="voiceMuteButton"/);
+  assert.match(html, /id="voiceSpeakerButton"/);
+  assert.match(html, /id="voiceEndButton"/);
+  assert.match(html, /id="adminFileUploader"/);
   assert.match(html, /id="examPredictorButton"/);
   assert.match(html, /id="examPredictorPanel"/);
   assert.match(app, /const STUDY_MODULES = \[/);
@@ -356,6 +362,16 @@ test("students can look up and view their compiled results in the production app
     "#chatPrompts",
     "#chatForm",
     "#voiceToggle",
+    "#voiceCallRoom",
+    "#voiceCallMascot",
+    "#voiceCallStatus",
+    "#voiceCaption",
+    "#voiceMuteButton",
+    "#voiceSpeakerButton",
+    "#voiceEndButton",
+    "#adminFileUploader",
+    "#adminMaterialTitle",
+    "#adminMaterialText",
     "#micButton",
     "#openTest",
     "#tdr",
@@ -518,6 +534,7 @@ test("students can look up and view their compiled results in the production app
   elements.get("#adminDashboard").hidden = true;
   elements.get("#accessToast").hidden = true;
   elements.get("#authModal").hidden = true;
+  elements.get("#voiceCallRoom").hidden = true;
   elements.get("#poster-wrapper").hidden = true;
   elements.get("#poster-wrapper").scrollIntoView = () => {};
   elements.get("#whatsappForm").querySelector = (selector) => {
@@ -683,7 +700,7 @@ test("students can look up and view their compiled results in the production app
         return {
           ok: true,
           status: 200,
-          json: async () => ({ candidates: [{ content: { parts: [{ text: "Gemini RAG response." }] } }] }),
+          json: async () => ({ candidates: [{ content: { parts: [{ text: "Gemini **RAG** response.\nSecond line." }] } }] }),
         };
       }
       return { ok: true, json: async () => [] };
@@ -768,10 +785,22 @@ test("students can look up and view their compiled results in the production app
   assert.ok(elements.get("#leaderboardList").children.length > 0);
   elements.get("#navLearn").listeners.click();
   elements.get("#navChat").listeners.click();
+  elements.get("#voiceToggle").listeners.click();
+  assert.equal(elements.get("#voiceCallRoom").hidden, false);
+  assert.match(elements.get("#voiceCallStatus").textContent, /recognition unavailable/i);
+  elements.get("#voiceEndButton").listeners.click();
+  assert.equal(elements.get("#voiceCallRoom").hidden, true);
   elements.get("#chatInput").value = "Explain peak-load pricing";
   elements.get("#chatForm").listeners.submit({ preventDefault() {} });
   await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(elements.get("#chatMessages").children.at(-1).children[0].textContent, "Gemini RAG response.");
+  const formattedReply = elements.get("#chatMessages").children.at(-1).children[0];
+  assert.deepEqual(formattedReply.children.map((part) => [part.tagName, part.textContent]), [
+    ["SPAN", "Gemini "],
+    ["STRONG", "RAG"],
+    ["SPAN", " response."],
+    ["BR", ""],
+    ["SPAN", "Second line."],
+  ]);
   assert.equal(ragCalls.length, 1);
   assert.equal(ragCalls[0].name, "match_course_materials");
   assert.equal(ragCalls[0].args.match_course, "ECO 128");
@@ -780,6 +809,21 @@ test("students can look up and view their compiled results in the production app
   assert.equal(geminiRequests[0].url, "/api/dr-eco");
   assert.match(geminiRequests[0].body.contents[0].parts[0].text, /Retrieved notes for this course/);
   assert.equal(elements.get("#vFuel").textContent, "83/100");
+  let activeRecognition;
+  runtime.window.SpeechRecognition = class CapturedRecognition {
+    constructor() { activeRecognition = this; }
+    start() {}
+    stop() {}
+  };
+  elements.get("#voiceToggle").listeners.click();
+  activeRecognition.onresult({
+    resultIndex: 0,
+    results: [Object.assign([{ transcript: "Explain trade" }], { isFinal: true })],
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.match(elements.get("#voiceCaption").textContent, /^Dr\. Eco: Gemini \*\*RAG\*\* response\./);
+  assert.equal(ragCalls.length, 2);
+  elements.get("#voiceEndButton").listeners.click();
   elements.get("#chatRegistration").value = "24/SS/EC/071";
   elements.get("#chatRegistration").listeners.input();
   assert.equal(elements.get("#chatLevel").textContent, "Detected level: 200L");
@@ -1010,6 +1054,14 @@ test("students can look up and view their compiled results in the production app
   assert.equal(runtime.window.location.hash, "#adminDashboard");
   assert.equal(savedOptIns.length, optInCountBeforeAdmin);
   assert.equal(JSON.parse(studyStorage.get("foldBook.authSession")).role, "admin");
+  elements.get("#adminFileUploader").files = [{
+    name: "lecture-notes.txt",
+    size: 25,
+    async text() { return "First note.\nSecond note."; },
+  }];
+  await elements.get("#adminFileUploader").listeners.change();
+  assert.equal(elements.get("#adminMaterialTitle").value, "lecture-notes");
+  assert.equal(elements.get("#adminMaterialText").value, "First note.\nSecond note.");
   assert.equal(elements.get("#adminResults").children.length, 114);
   elements.get("#adminSearch").value = "Godspower Esther";
   elements.get("#adminSearch").listeners.input();

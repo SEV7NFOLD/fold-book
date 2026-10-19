@@ -383,6 +383,8 @@
                 <label for="adminLevelSelect">Target Academic Level<select id="adminLevelSelect" class="admin-material-control"><option value="100L">100 Level</option><option value="200L">200 Level</option><option value="300L">300 Level</option><option value="400L">400 Level</option></select></label>
                 <label for="adminCourseSelect">Course Code<select id="adminCourseSelect" class="admin-material-control"></select></label>
               </div>
+              <label for="adminFileUploader">Upload PDF, DOCX, TXT, or image for text extraction</label>
+              <input type="file" id="adminFileUploader" class="admin-material-control" accept=".pdf,.docx,.txt,.png,.jpg,.jpeg,.webp,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,image/png,image/jpeg,image/webp">
               <label for="adminMaterialTitle">Material Title</label>
               <input type="text" id="adminMaterialTitle" class="admin-material-control" placeholder="Lecture 4: Peak-Load Pricing &amp; Congestion">
               <label for="adminMaterialText">Lecture slides, outline, or past questions</label>
@@ -398,6 +400,25 @@
             <p id="studentRecordsStatus" class="admin-material-status" role="status" aria-live="polite"></p>
             <div class="results-table-wrap"><table class="results-table"><thead><tr><th>Name</th><th>Registration</th><th>WhatsApp</th><th>Streak</th><th>Active Days</th><th>Last Activity</th></tr></thead><tbody id="studentRecords"></tbody></table></div>
           </section>
+        </div>
+      </div>
+    </section>
+
+    <section class="voice-call-room hide" id="voiceCallRoom" role="dialog" aria-modal="true" aria-labelledby="voiceCallTitle" hidden>
+      <div class="voice-call-content">
+        <p class="section-kicker">LIVE STUDY CALL</p>
+        <h1 id="voiceCallTitle">Dr. Eco</h1>
+        <p class="voice-call-subtitle">UNIUYO Economics Study Companion</p>
+        <div class="voice-call-orbit" aria-hidden="true">
+          <div id="voiceCallMascot" class="voice-call-mascot"></div>
+          <span class="voice-call-pulse"></span>
+        </div>
+        <p class="voice-call-status" id="voiceCallStatus" role="status" aria-live="polite">Starting voice session…</p>
+        <div class="voice-call-caption" id="voiceCaption" aria-live="polite">Dr. Eco is listening…</div>
+        <div class="voice-call-controls">
+          <button type="button" class="voice-call-control" id="voiceMuteButton" aria-pressed="false">🎙️ Mute mic</button>
+          <button type="button" class="voice-call-control" id="voiceSpeakerButton" aria-pressed="true">🔊 Speaker on</button>
+          <button type="button" class="voice-call-end" id="voiceEndButton">End Call</button>
         </div>
       </div>
     </section>
