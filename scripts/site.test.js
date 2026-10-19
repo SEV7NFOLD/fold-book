@@ -106,7 +106,7 @@ test("production output keeps the dark branding and compiles student results int
   assert.match(html, /id="authWhatsapp"[^>]+required/);
   assert.match(html, /xlsx@0\.18\.5/);
   assert.match(html, /<div class="shell" id="studentApp" hidden>/);
-  assert.match(html, /<section id="adminDashboard" class="admin-portal" hidden>/);
+  assert.match(html, /<section id="adminDashboard" class="admin-portal hide sec" hidden>/);
   assert.match(html, /SevenFold Admin Portal/);
   assert.match(html, /data-admin-view="broadsheets"/);
   assert.match(html, /data-admin-view="catalog"/);
@@ -896,7 +896,7 @@ test("students can look up and view their compiled results in the production app
 
   elements.get("#adminLogout").listeners.click();
   elements.get("#launchApp").listeners.click();
-  elements.get("#authFullName").value = "Dr Nssien Admin";
+  elements.get("#authFullName").value = "";
   elements.get("#authRegNo").value = "101010";
   elements.get("#authWhatsapp").value = "";
   elements.get("#authMarketingConsent").checked = false;
@@ -904,6 +904,9 @@ test("students can look up and view their compiled results in the production app
   await elements.get("#appAuthForm").listeners.submit(submittedEvent);
   assert.equal(panel.hidden, true);
   assert.equal(elements.get("#adminDashboard").hidden, false);
+  assert.equal(elements.get("#adminDashboard").className.includes("hide"), false);
+  assert.equal(elements.get("#studentApp").className.includes("hide"), true);
+  assert.equal(runtime.window.location.hash, "#adminDashboard");
   assert.equal(savedOptIns.length, optInCountBeforeAdmin);
   assert.equal(JSON.parse(studyStorage.get("foldBook.authSession")).role, "admin");
   assert.equal(elements.get("#adminResults").children.length, 114);

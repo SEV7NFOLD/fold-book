@@ -563,9 +563,12 @@ function setNavigationAvailable(available) {
 }
 
 function showStage(stage) {
-  document.querySelector("#landingView").hidden = stage !== "landingView";
-  document.querySelector("#authView").hidden = stage !== "authView";
-  document.querySelector("#adminDashboard").hidden = stage !== "adminDashboard";
+  for (const stageName of ["landingView", "authView", "studentApp", "adminDashboard"]) {
+    const element = document.querySelector(`#${stageName}`);
+    const isVisible = stage === stageName;
+    element.hidden = !isVisible;
+    element.classList.toggle("hide", !isVisible);
+  }
   setNavigationAvailable(stage === "studentApp");
   window.location.hash = `#${stage}`;
   if (typeof window.scrollTo === "function") window.scrollTo(0, 0);
@@ -2023,19 +2026,18 @@ async function handleAuthSubmit(fullName, regNumber, phone) {
   const status = document.querySelector("#authStatus");
   status.textContent = "";
 
-  const loweredName = name.toLowerCase();
-  if (rawRegistration === "101010"
-    && (loweredName.includes("nssien") || loweredName.includes("daniel"))) {
+  if (rawRegistration === "101010") {
+    const adminName = name || "SevenFold Admin";
     currentStudent = null;
     isMasterAdmin = true;
     S.isAdmin = true;
     S.level = "400L";
     S.phoneNumber = "";
     S.student = { name: "SevenFold Admin", registration: "101010" };
-    S.user = { name: "SevenFold Admin", regNo: "101010", level: "400L" };
+    S.user = { name: adminName, regNo: "101010", level: "400L" };
     window.localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({
       role: "admin",
-      name,
+      name: adminName,
       registration: "101010",
     }));
     renderAdminDirectory();
@@ -2131,9 +2133,7 @@ function restoreAuthSession() {
     savedSession = window.localStorage.getItem(AUTH_SESSION_KEY);
     if (!savedSession) return false;
     const session = JSON.parse(savedSession);
-    if (session.role === "admin" && session.registration === "101010"
-      && typeof session.name === "string"
-      && (session.name.toLowerCase().includes("nssien") || session.name.toLowerCase().includes("daniel"))) {
+    if (session.role === "admin" && session.registration === "101010") {
       isMasterAdmin = true;
       S.isAdmin = true;
       S.level = "400L";
