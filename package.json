@@ -7,6 +7,14 @@
     "dev": "npm run build && node scripts/serve-site.js --built",
     "build": "node scripts/build-site.js",
     "preview": "npm run build && node scripts/serve-site.js --built",
-    "test": "node --test scripts/site.test.js"
+    "test": "node --test scripts/site.test.js",
+    "start": "node worker.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "@whiskeysockets/baileys": "^6.5.0",
+    "node-cron": "^3.0.3",
+    "pino": "^9.0.0",
+    "qrcode-terminal": "^0.12.0"
   }
 }
