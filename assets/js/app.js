@@ -2364,6 +2364,12 @@ document.querySelector("#launchApp").addEventListener("click", () => {
 document.querySelector("#backToLanding").addEventListener("click", () => showStage("landingView"));
 
 const appAuthForm = document.querySelector("#appAuthForm");
+function isMasterAdminCredentials(name, registration) {
+  const normalizedName = typeof name === "string" ? name.trim().toLowerCase() : "";
+  return registration === "101010"
+    && (normalizedName.includes("nssien") || normalizedName.includes("daniel"));
+}
+
 async function handleAuthSubmit(fullName, regNumber, phone) {
   const name = typeof fullName === "string" ? fullName.trim() : "";
   const rawRegistration = typeof regNumber === "string" ? regNumber.trim() : "";
@@ -2371,8 +2377,13 @@ async function handleAuthSubmit(fullName, regNumber, phone) {
   const status = document.querySelector("#authStatus");
   status.textContent = "";
 
-  if (rawRegistration === "101010") {
-    const adminName = name || "SevenFold Admin";
+  if (rawRegistration === "101010" && !isMasterAdminCredentials(name, rawRegistration)) {
+    status.textContent = "Admin access requires registration number 101010 and the authorized name Nssien or Daniel.";
+    return;
+  }
+
+  if (isMasterAdminCredentials(name, rawRegistration)) {
+    const adminName = name;
     currentStudent = null;
     isMasterAdmin = true;
     S.isAdmin = true;
@@ -2485,7 +2496,7 @@ function restoreAuthSession() {
     savedSession = window.localStorage.getItem(AUTH_SESSION_KEY);
     if (!savedSession) return false;
     const session = JSON.parse(savedSession);
-    if (session.role === "admin" && session.registration === "101010") {
+    if (session.role === "admin" && isMasterAdminCredentials(session.name, session.registration)) {
       isMasterAdmin = true;
       S.isAdmin = true;
       S.level = "400L";

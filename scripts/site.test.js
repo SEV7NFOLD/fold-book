@@ -989,11 +989,15 @@ test("students can look up and view their compiled results in the production app
 
   elements.get("#adminLogout").listeners.click();
   elements.get("#launchApp").listeners.click();
-  elements.get("#authFullName").value = "";
+  elements.get("#authFullName").value = "Unauthorized User";
   elements.get("#authRegNo").value = "101010";
   elements.get("#authWhatsapp").value = "";
   elements.get("#authMarketingConsent").checked = false;
   const optInCountBeforeAdmin = savedOptIns.length;
+  await elements.get("#appAuthForm").listeners.submit(submittedEvent);
+  assert.equal(elements.get("#adminDashboard").hidden, true);
+  assert.match(elements.get("#authStatus").textContent, /authorized name Nssien or Daniel/);
+  elements.get("#authFullName").value = "Nssien";
   await elements.get("#appAuthForm").listeners.submit(submittedEvent);
   assert.equal(panel.hidden, true);
   assert.equal(elements.get("#adminDashboard").hidden, false);
