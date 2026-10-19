@@ -83,22 +83,13 @@ test("production output keeps the dark branding and compiles student results int
   assert.match(html, /id="searchRegNo"/);
   assert.match(html, /id="searchFullName"/);
   assert.match(html, /id="results-table"/);
-<<<<<<< HEAD
-  assert.match(html, /class="sf-poster-card" id="exportCard"/);
-  assert.match(html, /class="sf-result-box"/);
-  assert.match(html, /id="cardStudentName"/);
-  assert.match(html, /viewBox="0 0 100 120"/);
-  assert.match(html, /<circle cx="50" cy="12" r="4\.5"/);
-  assert.match(html, /<path d="M15 25 H85 L50 95 L15 25 Z"/);
-  assert.match(html, /<path d="M32 37 H68 L50 72 L38 50 H62"/);
-  assert.match(html, /<circle cx="50" cy="108" r="4\.5"/);
-  assert.match(html, /href="https:\/\/bignssien\.wixstudio\.com\/sev7nfold"/);
-  assert.doesNotMatch(html, /www\.sevenfold\.agency/);
-  assert.match(html, /Built to move student careers &amp; brands forward\./);
-  assert.match(styles, /\.sf-poster-card::before/);
-=======
-  assert.match(html, /class="brand-mark" src="\/assets\/brand\/Seven%20fold%20logo%20svg%20WHITE\.svg"/);
-  assert.match(html, /src="\/assets\/brand\/Seven%20fold%20logo%20svg%20WHITE\.svg" alt="" class="art-mark"/);
+  assert.match(html, /class="brand-logo brand-mark" src="\/assets\/brand\/Seven%20fold%20logo%20svg%20WHITE\.svg"/);
+  assert.match(html, /src="\/assets\/brand\/Seven%20fold%20logo%20svg%20WHITE\.svg" alt="" class="hero-logo art-mark"/);
+  assert.doesNotMatch(html, /class="art-caption"[^>]*>[^<]*MAKE MORE/i);
+  assert.match(styles, /\.hero-art\s*\{[^}]*background:\s*transparent/i);
+  assert.match(styles, /@keyframes halo-breathe/);
+  assert.match(styles, /@keyframes halo-ring-breathe/);
+  assert.match(styles, /\.art-halo::after\s*\{[^}]*animation-delay:\s*1\.6s/);
   assert.match(html, /src="\/assets\/brand\/SEV7N%20FOLD%20LOGO%20BLACK\.svg"/);
   assert.match(html, /src="\/assets\/brand\/SEV7N%20FOLD%20white%20with%20word%20mark\.png"/);
   assert.match(html, /id="authModal"/);
@@ -118,11 +109,7 @@ test("production output keeps the dark branding and compiles student results int
   const contentSecurityPolicy = vercel.headers[0].headers.find((header) => header.key === "Content-Security-Policy").value;
   assert.match(contentSecurityPolicy, /script-src 'self' https:\/\/cdn\.jsdelivr\.net/);
   assert.match(contentSecurityPolicy, /connect-src 'self' https:\/\/fdutgltyptcqeyajsnua\.supabase\.co/);
->>>>>>> 0e87989 (Feat: Add gated full-name auth, master key 101010, deferred WhatsApp opt-in, and Supabase integration)
   assert.match(app, /function normalizeRegistration/);
-  assert.match(app, /context\.fillStyle = "#F7F5F0"/);
-  assert.match(app, /bignssien\.wixstudio\.com\/sev7nfold/);
-  assert.doesNotMatch(app, /www\.sevenfold\.agency/);
   assert.match(app, /function gradeForScore/);
   assert.ok(lookupMatch, "The production app contains its compiled results lookup.");
 
@@ -159,8 +146,6 @@ test("public timetable and announcement exports are valid and contain usable ent
 });
 
 test("students can look up and view their compiled results in the production app", async () => {
-  const downloads = [];
-  const canvases = [];
   class Element {
     constructor() {
       this.children = [];
@@ -223,25 +208,6 @@ test("students can look up and view their compiled results in the production app
     "#result-summary",
     "#results-table",
     "#results-empty",
-<<<<<<< HEAD
-    "#celebration-modal",
-    "#celebration-close",
-    "#celebration-title",
-    "#celebration-course-count",
-    "#celebration-course-nav",
-    "#celebration-course-position",
-    "#celebration-previous",
-    "#celebration-next",
-    "#celebration-export",
-    "#celebration-export-status",
-    "#cardStudentName",
-    "#cardRegNo",
-    "#cardGrade",
-    "#cardCourse",
-    "#cardCourseTitle",
-    "#cardScore",
-    "#cardRemark",
-=======
     "#authModal",
     "#whatsappForm",
     "#exportWhatsapp",
@@ -261,7 +227,6 @@ test("students can look up and view their compiled results in the production app
     "#close-verification",
     "#print-card",
     "#dismiss-card",
->>>>>>> 0e87989 (Feat: Add gated full-name auth, master key 101010, deferred WhatsApp opt-in, and Supabase integration)
   ].map((selector) => [selector, new Element()]));
   elements.get("#authModal").hidden = true;
   elements.get("#poster-wrapper").hidden = true;
@@ -284,79 +249,20 @@ test("students can look up and view their compiled results in the production app
       assert.equal(selector, ".filter-button");
       return filterButtons;
     },
-<<<<<<< HEAD
-    createElement(tagName) {
-      const element = new Element();
-      element.tagName = tagName;
-      if (tagName === "canvas") {
-        const context = new Proxy({
-          measureText: (text) => ({ width: String(text).length * 5 }),
-        }, {
-          get(target, property) {
-            return property in target ? target[property] : () => {};
-          },
-        });
-        element.getContext = () => context;
-        element.toBlob = (callback, mimeType) => callback({ type: mimeType });
-        canvases.push(element);
-      }
-      return element;
-=======
     addEventListener() {},
     createElement() {
       return new Element();
->>>>>>> 0e87989 (Feat: Add gated full-name auth, master key 101010, deferred WhatsApp opt-in, and Supabase integration)
     },
     createDocumentFragment() {
       return new Element();
     },
   };
 
-<<<<<<< HEAD
-  const app = fs.readFileSync(path.join(output, "assets/js/app.js"), "utf8");
-  const audioFrequencies = [];
-  class TestAudioContext {
-    currentTime = 0;
-    destination = {};
-
-    createOscillator() {
-      return {
-        frequency: { setValueAtTime: (value) => audioFrequencies.push(value) },
-        connect() {},
-        start() {},
-        stop() {},
-      };
-    }
-
-    createBiquadFilter() {
-      return { frequency: { setValueAtTime() {} }, connect() {} };
-    }
-
-    createGain() {
-      return {
-        gain: {
-          setValueAtTime() {},
-          linearRampToValueAtTime() {},
-          exponentialRampToValueAtTime() {},
-        },
-        connect() {},
-      };
-    }
-
-    resume() {
-      return Promise.resolve();
-    }
-  }
-
-  const runtime = {
-    document,
-    AudioContext: TestAudioContext,
-=======
   const app = fs.readFileSync(path.join(output, "assets/js/app.js"), "utf8")
     .replace(/const SUPABASE_ANON_KEY = .*;/, 'const SUPABASE_ANON_KEY = "header.payload.signature";');
   let insertResponse = { error: null };
   const insertedOptIns = [];
-  vm.runInNewContext(app, {
+  const runtime = {
     document,
     console: { error() {} },
     window: {
@@ -379,19 +285,9 @@ test("students can look up and view their compiled results in the production app
         },
       },
     },
->>>>>>> 0e87989 (Feat: Add gated full-name auth, master key 101010, deferred WhatsApp opt-in, and Supabase integration)
     fetch: async () => ({ ok: true, text: async () => "" }),
-    URL: {
-      createObjectURL: (blob) => {
-        assert.equal(blob.type, "image/png");
-        return "blob:grade-card";
-      },
-      revokeObjectURL: (url) => assert.equal(url, "blob:grade-card"),
-    },
-    setTimeout: (callback) => callback(),
   };
   vm.runInNewContext(app, runtime);
-  const lookup = vm.runInNewContext("RESULT_LOOKUP", runtime);
 
   const form = elements.get("#lookupForm");
   const registration = elements.get("#searchRegNo");
@@ -406,27 +302,6 @@ test("students can look up and view their compiled results in the production app
   assert.equal(panel.hidden, false);
   assert.equal(elements.get("#result-name").textContent, "Godspower Esther Gift");
   assert.equal(elements.get("#result-registration").textContent, "25/SS/EC/001");
-  const celebration = elements.get("#celebration-modal");
-  assert.equal(celebration.open, true);
-  assert.deepEqual(audioFrequencies, [523.25, 659.25, 783.99, 1046.5]);
-  assert.equal(elements.get("#cardGrade").textContent, "B");
-  assert.equal(elements.get("#cardCourse").textContent, "ECO 127");
-  assert.match(elements.get("#celebration-course-count").textContent, /2 courses earned an A or B/);
-  elements.get("#celebration-next").listeners.click();
-  assert.equal(elements.get("#cardCourse").textContent, "GST 121");
-  elements.get("#celebration-previous").listeners.click();
-  assert.equal(elements.get("#cardCourse").textContent, "ECO 127");
-  elements.get("#celebration-export").listeners.click();
-  assert.equal(canvases[0].width, 1080);
-  assert.equal(canvases[0].height, 1920);
-  assert.equal(canvases[0].width / canvases[0].height, 9 / 16);
-  assert.deepEqual(downloads, [{
-    download: "GODSPOWER_ESTHER_GIFT_ECO_127_SevenFold_Grade.png",
-    href: "blob:grade-card",
-  }]);
-  assert.match(elements.get("#celebration-export-status").textContent, /1080 × 1920 PNG/);
-  elements.get("#celebration-close").listeners.click();
-  assert.equal(celebration.open, false);
 
   const resultRows = elements.get("#results-table").children;
   assert.equal(resultRows.length, 6);
@@ -439,25 +314,6 @@ test("students can look up and view their compiled results in the production app
       row.children[6].children[0].textContent,
     ]),
     [
-<<<<<<< HEAD
-      ["ECO 121Principles of Economics II", "11", "25", "36", "F", "FAIL"],
-      ["ECO 122Introductory Statistics II", "16", "38", "54", "C", "PASS"],
-      ["ECO 123Introductory Mathematics II", "8", "18", "26", "F", "FAIL"],
-      ["ECO 127ECO 127", "18", "42", "60", "B", "PASS"],
-      ["ECO 128Intro to Transportation Economics", "15", "35", "50", "C", "PASS"],
-      ["GST 121Nigerian People and Culture", "18", "42", "60", "B", "PASS"],
-    ],
-  );
-
-  const eco127 = lookup["25/SS/EC/001"].results.find((result) => result.course === "ECO 127");
-  eco127.grade = "A";
-  eco127.total = 75;
-  form.listeners.submit(submittedEvent);
-  assert.equal(elements.get("#cardGrade").textContent, "A");
-  assert.equal(elements.get("#cardScore").textContent, "75");
-  eco127.grade = "B";
-  eco127.total = 60;
-=======
       ["ECO 121Principles of Economics II", "36", "F", "FAIL"],
       ["ECO 122Introductory Statistics II", "54", "C", "PASS"],
       ["ECO 123Introductory Mathematics II", "26", "F", "FAIL"],
@@ -520,27 +376,19 @@ test("students can look up and view their compiled results in the production app
   assert.equal(elements.get("#cardGrade").textContent, "A");
   assert.equal(elements.get("#gradeAsset").src, "/assets/brand/trophy.png");
   assert.equal(elements.get("#gradeAsset").hidden, false);
->>>>>>> 0e87989 (Feat: Add gated full-name auth, master key 101010, deferred WhatsApp opt-in, and Supabase integration)
 
   registration.value = "19/SS/EC/1592";
   fullName.value = "GODWIN Okwubunka";
   form.listeners.submit(submittedEvent);
   assert.equal(elements.get("#result-name").textContent, "Okwubunka Godwin");
   assert.equal(elements.get("#results-table").children.length, 1);
-  assert.equal(celebration.open, false);
 
   registration.value = "001";
   form.listeners.submit(submittedEvent);
-  assert.equal(celebration.open, true);
   registration.value = "not-a-registration";
   form.listeners.submit(submittedEvent);
   assert.equal(panel.hidden, true);
-<<<<<<< HEAD
-  assert.equal(celebration.open, false);
-  assert.match(status.textContent, /Enter a valid registration number/);
-=======
   assert.equal(status.textContent, "Invalid Registration Number or Full Name combination. Please verify your details.");
->>>>>>> 0e87989 (Feat: Add gated full-name auth, master key 101010, deferred WhatsApp opt-in, and Supabase integration)
 
   registration.value = "25/SS/EC/999";
   fullName.value = "Any Valid Name";

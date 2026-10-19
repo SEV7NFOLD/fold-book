@@ -19,7 +19,7 @@
 
     <header class="site-header">
       <a class="brand" href="#top" aria-label="Fold Book by SEV7N FOLD, home">
-        <img class="brand-mark" src="/assets/brand/Seven%20fold%20logo%20svg%20WHITE.svg" alt="" width="32" height="38">
+        <img class="brand-logo brand-mark" src="/assets/brand/Seven%20fold%20logo%20svg%20WHITE.svg" alt="" width="32" height="38">
         <span class="brand-name">SEV7N <span>FOLD</span></span>
       </a>
       <span class="header-edition">ECONOMICS 100L <span>·</span> 2025/2026</span>
@@ -35,8 +35,7 @@
         </div>
         <div class="hero-art" aria-hidden="true">
           <div class="art-halo"></div>
-          <img src="/assets/brand/Seven%20fold%20logo%20svg%20WHITE.svg" alt="" class="art-mark">
-          <span class="art-caption">SEV7N FOLD<br>MAKE MORE.</span>
+          <img src="/assets/brand/Seven%20fold%20logo%20svg%20WHITE.svg" alt="" class="hero-logo art-mark">
         </div>
         <span class="hero-index" aria-hidden="true">01 — RESULTS</span>
       </section>
@@ -98,9 +97,6 @@
             </div>
             <p class="results-empty" id="results-empty" hidden>No course results have been published for this registration number yet.</p>
           </section>
-<<<<<<< HEAD
-          <p class="score-note"><span class="score-note-marker" aria-hidden="true">i</span> CA is scored out of 30; the exam is scored out of 70.</p>
-=======
           <section class="poster-wrapper" id="poster-wrapper" aria-label="Exportable course result card" hidden>
             <div class="poster-actions">
               <button class="results-submit" id="print-card" type="button">Print / Save card</button>
@@ -144,8 +140,7 @@
               </div>
             </article>
           </section>
-          <p class="score-note"><span class="score-note-marker" aria-hidden="true">i</span> The published data provides total scores only. CA and exam breakdowns were not supplied.</p>
->>>>>>> 0e87989 (Feat: Add gated full-name auth, master key 101010, deferred WhatsApp opt-in, and Supabase integration)
+          <p class="helper-text"><span class="score-note-marker" aria-hidden="true">i</span> The published data provides total scores and grades. Enter your registration number and full name to access your statement.</p>
           <div class="results-foot"><span>PUBLISHED COURSE RESULTS.</span><span>MADE WITH INTENTION BY SEV7N FOLD.</span></div>
         </div>
       </section>
@@ -164,64 +159,6 @@
       <a class="footer-top" href="#top">BACK TO TOP <span aria-hidden="true">↑</span></a>
     </footer>
 
-<<<<<<< HEAD
-    <dialog class="celebration-modal" id="celebration-modal" aria-labelledby="celebration-title">
-      <div class="celebration-shell">
-        <div class="celebration-confetti" aria-hidden="true">
-          <span></span><span></span><span></span><span></span><span></span><span></span>
-          <span></span><span></span><span></span><span></span><span></span><span></span>
-        </div>
-        <button class="celebration-close" id="celebration-close" type="button" aria-label="Close celebration">×</button>
-        <h2 class="celebration-title" id="celebration-title">Your hard work deserves a moment.</h2>
-        <p class="celebration-intro" id="celebration-course-count"></p>
-
-        <article class="sf-poster-card" id="exportCard" aria-label="Grade celebration card preview">
-          <div class="sf-poster-brand">
-            <div class="sf-brand-header">
-              <svg class="sf-logo-svg" viewBox="0 0 100 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                <circle cx="50" cy="12" r="4.5" fill="#111111" />
-                <path d="M15 25 H85 L50 95 L15 25 Z" stroke="#111111" stroke-width="7" stroke-linejoin="miter" stroke-miterlimit="3" />
-                <path d="M32 37 H68 L50 72 L38 50 H62" stroke="#111111" stroke-width="6" stroke-linecap="square" stroke-linejoin="miter" />
-                <circle cx="50" cy="108" r="4.5" fill="#111111" />
-              </svg>
-              <div class="sf-brand-text"><h2>SEVENFOLD</h2><p>Make More</p></div>
-            </div>
-          </div>
-          <div class="sf-poster-body">
-            <span class="sf-badge">ACADEMIC EXCELLENCE</span>
-            <p class="sf-congrats-text">CONGRATULATIONS!</p>
-            <h3 class="sf-student-title" id="cardStudentName"></h3>
-            <p class="sf-student-reg" id="cardRegNo"></p>
-            <div class="sf-result-box">
-              <div class="sf-grade-badge" id="cardGrade"></div>
-              <div class="sf-result-details">
-                <h4 id="cardCourse"></h4>
-                <p class="sf-course-name" id="cardCourseTitle"></p>
-                <p class="sf-score-meta">Score: <strong id="cardScore"></strong> / 100 &bull; Remark: <strong id="cardRemark"></strong></p>
-              </div>
-            </div>
-            <div class="sf-purple-bar"></div>
-            <div class="sf-agency-info">
-              <h4>Strategy. Design. Technology.</h4>
-              <p>Built to move student careers &amp; brands forward.</p>
-            </div>
-          </div>
-          <footer class="sf-poster-footer">
-            <p class="sf-footer-powered">POWERED BY SEVENFOLD CREATIVE TECH AGENCY</p>
-            <a class="sf-footer-link" href="https://bignssien.wixstudio.com/sev7nfold" target="_blank" rel="noopener noreferrer">bignssien.wixstudio.com/sev7nfold</a>
-          </footer>
-        </article>
-
-        <div class="celebration-course-nav" id="celebration-course-nav" hidden>
-          <button type="button" id="celebration-previous" aria-label="Previous qualifying course">←</button>
-          <span id="celebration-course-position"></span>
-          <button type="button" id="celebration-next" aria-label="Next qualifying course">→</button>
-        </div>
-        <button class="celebration-export" id="celebration-export" type="button">Export Image / Share to Status</button>
-        <p class="celebration-export-status" id="celebration-export-status" role="status" aria-live="polite"></p>
-      </div>
-    </dialog>
-=======
     <div class="auth-modal-overlay" id="authModal" hidden>
       <section class="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title" aria-describedby="auth-description">
         <button type="button" class="modal-close" id="close-verification" aria-label="Close verification dialog">×</button>
@@ -242,6 +179,5 @@
         </form>
       </section>
     </div>
->>>>>>> 0e87989 (Feat: Add gated full-name auth, master key 101010, deferred WhatsApp opt-in, and Supabase integration)
   </body>
 </html>
