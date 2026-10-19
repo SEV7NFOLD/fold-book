@@ -4,43 +4,178 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#090909">
-    <meta name="description" content="SEV7N FOLD Economics 100L student results checker for the University of Uyo.">
-    <meta property="og:title" content="Fold Book — Results Checker">
-    <meta property="og:description" content="Check your published Economics 100L course results with Fold Book by SEV7N FOLD.">
+    <meta name="description" content="Study smarter with FoldBook by SEV7NFOLD.">
+    <meta property="og:title" content="FoldBook — Study Buddy">
+    <meta property="og:description" content="Study Economics with Dr. Eco, course milestones, and gated results.">
     <meta property="og:type" content="website">
-    <title>Fold Book — Results Checker</title>
+    <title>FoldBook — Study Buddy</title>
     <link rel="icon" type="image/svg+xml" href="/assets/brand/mark.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/css/design-tokens.css">
     <link rel="stylesheet" href="/assets/css/styles.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+    <script src="https://unpkg.com/@dotlottie/player-component@latest/dist/dotlottie-player.mjs" type="module"></script>
     <script src="/assets/js/app.js" defer></script>
   </head>
   <body>
-    <a class="skip-link" href="#results">Skip to results checker</a>
+    <a class="skip-link" href="#home">Skip to Learn</a>
 
-    <header class="site-header">
-      <a class="brand" href="#top" aria-label="Fold Book by SEV7N FOLD, home">
-        <img class="brand-logo brand-mark" src="/assets/brand/Seven%20fold%20logo%20svg%20WHITE.svg" alt="" width="32" height="38">
-        <span class="brand-name">SEV7N <span>FOLD</span></span>
-      </a>
-      <span class="header-edition">ECONOMICS 100L <span>·</span> 2025/2026</span>
+    <header class="top">
+      <div class="top-inner">
+        <a class="brand" href="#top" aria-label="FoldBook home">
+          <img src="/assets/brand/Seven%20fold%20logo%20svg%20WHITE.svg" alt="SEV7NFOLD" class="brand-logo-img">
+          <span>FoldBook</span>
+        </a>
+        <div class="sp" aria-hidden="true"></div>
+        <div class="pill header-counter" id="pStreak" title="Daily streak">
+          <span class="flame" aria-hidden="true">🔥</span>
+          <span class="mono" id="vStreak">6</span>
+        </div>
+        <button class="pill fuel-pill" id="pFuel" type="button" aria-label="Open fuel and passes" title="Dr. Eco fuel">
+          <span aria-hidden="true">⚡</span>
+          <span class="mono" id="vFuel">85/100</span>
+          <span class="fuel-meter" aria-hidden="true"><i id="fbar"></i></span>
+        </button>
+        <button class="pill sound-toggle" id="sndToggle" type="button" aria-label="Turn sound off" aria-pressed="true" title="Toggle sound">🔊</button>
+      </div>
     </header>
 
+    <div class="shell">
+      <nav class="side" aria-label="Main navigation">
+        <button class="btn primary-cta" id="navChat" type="button" data-tab="chat">🎓 Chat with Dr. Eco</button>
+        <button class="nav-item on" id="navLearn" type="button" data-tab="home" aria-current="page"><i>🗺️</i>Learn</button>
+        <button class="nav-item" id="navBoard" type="button" data-tab="board"><i>🏆</i>Leaderboard</button>
+        <button class="nav-item" id="navInvite" type="button" data-tab="invite"><i>👥</i>Invite Friends</button>
+        <button class="nav-item" id="navResults" type="button" data-tab="results"><i>📄</i>Results Checker</button>
+      </nav>
     <main id="top">
-      <section class="hero" aria-labelledby="hero-title">
-        <div class="hero-content">
-          <span class="eyebrow"><span class="status-dot" aria-hidden="true"></span> STUDENT RESULTS PORTAL</span>
-          <h1 id="hero-title">Your work,<br><span>your results.</span></h1>
-          <p class="hero-description">A clear look at your published course results. Enter your registration number to get started.</p>
-          <div class="hero-caption"><span>ECONOMICS 100L</span><span>UNIVERSITY OF UYO</span></div>
+      <section id="home" class="learn-section">
+        <div class="main-path-area">
+          <div class="course-switcher" id="courseSwitcher" aria-label="Choose a course">
+            <button type="button" class="course-choice cs is-selected" data-course="ECO 128" aria-pressed="true"><strong>ECO 128</strong><small>Transportation Economics</small></button>
+            <button type="button" class="course-choice cs" data-course="ECO 122" aria-pressed="false"><strong>ECO 122</strong><small>Statistics</small></button>
+          </div>
+          <header class="course-header-card wk">
+            <div class="meta"><small class="mono course-code-label" id="courseCodeLabel">ECO 128 · STUDY PATH</small><small id="wkdays">YOUR STUDY ROADMAP</small></div>
+            <h1 id="courseTitle">Transportation Economics</h1>
+            <p>Short lessons, one clear idea at a time. Complete a node to unlock the next.</p>
+            <div class="progress-row">
+              <div class="bar-bg" role="progressbar" aria-label="Course progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <div id="cbar" class="bar-fill" style="width: 0%;"></div>
+              </div>
+              <b class="mono" id="cpct">0%</b>
+            </div>
+            <div class="course-week-meta"><span class="mono" id="wkd">COURSE PROGRESS</span><span id="wkp">0 / 5 modules</span></div>
+          </header>
+          <div class="path-tree path" id="pathTree" aria-label="Course learning modules"></div>
+          <section class="lesson-panel" id="lessonPanel" aria-live="polite" hidden>
+            <div class="lesson-panel-heading">
+              <div>
+                <span class="section-kicker" id="lessonStep"></span>
+                <h2 id="lessonTitle"></h2>
+              </div>
+              <button class="card-secondary-button" id="closeLesson" type="button">Close</button>
+            </div>
+            <p class="lesson-question" id="lessonQuestion"></p>
+            <div class="answer-options" id="answerOptions"></div>
+            <p class="lesson-feedback" id="lessonFeedback" role="status"></p>
+          </section>
         </div>
-        <div class="hero-art" aria-hidden="true">
-          <div class="art-halo"></div>
-          <img src="/assets/brand/Seven%20fold%20logo%20svg%20WHITE.svg" alt="" class="hero-logo art-mark">
-        </div>
-        <span class="hero-index" aria-hidden="true">01 — RESULTS</span>
+        <aside class="study-sidebar">
+          <section class="card">
+            <h2>This Week's Activity</h2>
+            <div class="week-tracker" id="weekTracker" aria-label="Study activity for this week"></div>
+          </section>
+          <section class="card exam-card">
+            <span class="section-kicker" id="examPredictorStatus">LOCKED</span>
+            <h2>Exam Predictor</h2>
+            <p id="examPredictorDescription">Complete every module to unlock the practice mock, or view the ₦200 demo pass option. No payment is collected.</p>
+            <button class="results-submit" id="examPredictorButton" type="button" disabled>Complete all modules to unlock</button>
+          </section>
+          <section class="card exam-session" id="examPredictorPanel" aria-live="polite" hidden>
+            <span class="section-kicker" id="mockExamProgress"></span>
+            <h2 id="mockExamTitle">UNIUYO Practice Mock</h2>
+            <p class="exam-disclaimer">Practice estimate only — not an official exam prediction.</p>
+            <p class="lesson-question" id="mockExamQuestion"></p>
+            <div class="answer-options" id="mockExamOptions"></div>
+            <p class="lesson-feedback" id="mockExamFeedback" role="status"></p>
+            <button class="results-submit" id="mockExamNext" type="button" disabled>Next question</button>
+          </section>
+        </aside>
       </section>
 
-      <section class="results-section" id="results" aria-labelledby="results-title">
+      <section id="chat" class="chat-section hide" hidden>
+        <div class="chat-header">
+          <div class="chat-profile">
+            <div class="chat-mascot" id="chatMascot" aria-hidden="true"></div>
+            <div class="chat-title">
+              <div class="chat-profile-heading"><h1>Dr. Eco</h1><span class="chat-availability"><i></i>Study guide</span></div>
+              <p>Economics study assistant <span>·</span> UNIUYO</p>
+            </div>
+          </div>
+          <label class="course-chat-select">Course
+            <select id="chatCourse" aria-label="Chat course"><option>ECO 128</option><option>ECO 122</option></select>
+          </label>
+          <button type="button" class="voice-toggle" id="voiceToggle" aria-pressed="false">🎙️ Voice mode: off</button>
+        </div>
+        <div class="chat-fuel"><span>⚡ Fuel</span><div class="fuel-track"><i id="chatFuelBar"></i></div><strong class="mono" id="chatFuelValue">85/100</strong></div>
+        <div class="chat-messages" id="chatMessages" aria-live="polite">
+          <article class="chat-message assistant-message"><p>Hello! I’m Dr. Eco. Ask me about transportation economics or statistics, or try one of the prompts below.</p><button type="button" class="listen-button">🔊 Listen</button></article>
+        </div>
+        <div class="chat-prompts" id="chatPrompts">
+          <button type="button" class="prompt-chip" data-prompt="Explain Peak-Load Pricing">Explain Peak-Load Pricing</button>
+          <button type="button" class="prompt-chip" data-prompt="Generate 10-Q Quiz">Generate 10-Q Quiz</button>
+          <button type="button" class="prompt-chip" data-prompt="What's on this week?">What's on this week?</button>
+        </div>
+        <form class="chat-composer" id="chatForm">
+          <button type="button" class="chat-icon-button" id="micButton" aria-label="Speak your question">🎤</button>
+          <input id="chatInput" type="text" placeholder="Ask Dr. Eco about your course" autocomplete="off" aria-label="Your question">
+          <button type="submit" class="results-submit">Send</button>
+          <button type="button" class="results-submit quiz-launch" id="openTest">Test Me 📝</button>
+        </form>
+        <p class="chat-disclaimer">Demo study assistant. Replies are prepared course guidance, not live AI or official academic advice.</p>
+      </section>
+
+      <section id="board" class="leaderboard-section hide" hidden>
+        <div class="lb-card">
+          <div class="lb-header">
+            <div>
+              <h1>UNIUYO Economics League</h1>
+              <small class="text-muted">Weekly XP Ranking · resets Monday</small>
+            </div>
+            <div class="pill gold-pill">🏆 TOP 10 PROMOTION ZONE</div>
+          </div>
+          <p class="leaderboard-notice">Sample rankings for preview only. Your progress is stored in this browser.</p>
+          <div class="podium" id="leaderboardPodium"></div>
+          <div id="leaderboardList" class="leaderboard-list" aria-live="polite"></div>
+          <div class="your-rank"><span>Your rank</span><strong id="yourRank">—</strong><span class="mono" id="yourXp">0 XP</span></div>
+        </div>
+      </section>
+
+      <section id="invite" class="invite-section hide" hidden>
+        <h1>Invite friends</h1>
+        <p class="invite-intro">Invite classmates to try FoldBook. This local demo counts invite taps; it does not verify real sign-ups.</p>
+        <section class="card invite-link-card">
+          <strong>Your invite link <small>(sample)</small></strong>
+          <code class="invite-link" id="inviteLink"></code>
+          <div class="invite-actions">
+            <button class="results-submit" type="button" id="copyInvite">Copy link</button>
+            <a class="results-submit whatsapp-share" id="shareInvite" target="_blank" rel="noopener">Share on WhatsApp</a>
+          </div>
+          <p class="invite-status" id="inviteStatus" role="status"></p>
+        </section>
+        <section class="card invite-progress-card">
+          <div class="invite-progress-heading"><strong>Friends joined</strong><strong class="mono" id="inviteCount">0 / 5</strong></div>
+          <div class="fuel-track"><i id="inviteBar"></i></div>
+          <p>Invite 5 friends to unlock the demo 48-hour unlimited pass.</p>
+          <div class="invite-friends" id="inviteFriends" aria-live="polite"></div>
+          <button class="card-secondary-button" type="button" id="simulateInvite">Demo: a friend joined</button>
+        </section>
+      </section>
+
+      <section class="results-section hide" id="results" hidden>
         <div class="results-shell">
           <div class="results-heading">
             <span class="section-kicker"><span class="section-number">01</span> / RESULTS LOOKUP</span>
@@ -49,7 +184,7 @@
           <div class="results-intro">
             <div>
               <h2 id="results-title">Find your <span>results.</span></h2>
-              <p class="section-description">Enter your matriculation number to see your published scores and grades.</p>
+              <p class="section-description">Enter your registration number and full name to see your published scores and grades.</p>
             </div>
             <form class="results-form" id="lookupForm" novalidate>
               <div class="lookup-grid">
@@ -96,6 +231,16 @@
               </table>
             </div>
             <p class="results-empty" id="results-empty" hidden>No course results have been published for this registration number yet.</p>
+          </section>
+          <section class="admin-panel" id="adminPanel" hidden>
+            <div class="admin-heading"><div><h2>Admin broadsheet view</h2><p>Master-key access · this static demo cannot keep this key private.</p></div><button type="button" class="card-secondary-button" id="adminLogout">Exit admin view</button></div>
+            <label class="lookup-field admin-search">Filter student records<input id="adminSearch" type="search" placeholder="Search by name or registration"></label>
+            <div class="results-table-wrap"><table class="results-table"><thead><tr><th scope="col">Student</th><th scope="col">Registration</th><th scope="col">Courses</th><th scope="col">Action</th></tr></thead><tbody id="adminResults"></tbody></table></div>
+            <section class="admin-student-detail" id="adminStudentDetail" hidden>
+              <h3 id="adminStudentName"></h3>
+              <p id="adminStudentRegistration"></p>
+              <div class="results-table-wrap"><table class="results-table"><thead><tr><th scope="col">Course</th><th scope="col">Total</th><th scope="col">Grade</th><th scope="col">Remark</th></tr></thead><tbody id="adminStudentCourses"></tbody></table></div>
+            </section>
           </section>
           <section class="poster-wrapper" id="poster-wrapper" aria-label="Exportable course result card" hidden>
             <div class="poster-actions">
@@ -145,16 +290,52 @@
         </div>
       </section>
 
-      <section class="closing-section" aria-label="SEV7N FOLD brand">
-        <img src="/assets/brand/Seven%20fold%20logo%20svg%20WHITE.svg" alt="" width="48" height="58">
-        <span class="closing-name">SEV7N FOLD</span>
-        <p>Make more.</p>
-        <span class="closing-caption">A LITTLE MORE, EVERY DAY.</span>
-      </section>
     </main>
+    </div>
+
+    <nav class="bnav" aria-label="Mobile navigation">
+      <button class="on" id="mobileLearn" type="button" data-tab="home" aria-current="page"><i>🗺️</i>Learn</button>
+      <button id="mobileBoard" type="button" data-tab="board"><i>🏆</i>Ranks</button>
+      <button class="fab" id="mobileChat" type="button" data-tab="chat" aria-label="Chat with Dr. Eco">🎓</button>
+      <button id="mobileInvite" type="button" data-tab="invite"><i>👥</i>Invite</button>
+      <button id="mobileResults" type="button" data-tab="results"><i>📄</i>Results</button>
+    </nav>
+
+    <section class="test-drawer" id="tdr" role="dialog" aria-modal="true" aria-labelledby="testTitle" hidden>
+      <div class="test-drawer-card">
+        <div class="test-drawer-header">
+          <div><span class="section-kicker">PRACTICE SESSION</span><h2 id="testTitle">Quick Test</h2></div>
+          <button class="card-secondary-button" id="closeTest" type="button" aria-label="Close test">×</button>
+        </div>
+        <div class="test-controls"><label for="questionCount">Questions</label><select id="questionCount"><option value="5">5 Questions</option><option value="10">10 Questions</option><option value="20">20 Questions</option></select><strong id="testHearts">❤️❤️❤️</strong></div>
+        <div class="test-progress"><div class="fuel-track"><i id="testBar"></i></div><span class="mono" id="testProgress">0 / 5</span></div>
+        <h3 id="testQuestion"></h3>
+        <div class="test-options" id="testOptions"></div>
+        <aside class="lecturer-tip"><strong>UNIUYO marking tip</strong><p id="lecturerTip">Read the command word and define the key economic concept before explaining it.</p></aside>
+        <section class="answer-drawer" id="testAnswerDrawer" aria-live="polite">
+          <h3 id="testFeedbackHeading"></h3>
+          <p class="test-feedback" id="testFeedback" role="status"></p>
+          <button class="results-submit" id="nextTestQuestion" type="button" disabled>Continue</button>
+        </section>
+      </div>
+    </section>
+
+    <section class="fuel-modal" id="fuel" role="dialog" aria-modal="true" aria-labelledby="fuelTitle" hidden>
+      <div class="fuel-modal-card">
+        <button class="card-secondary-button fuel-close" id="closeFuel" type="button" aria-label="Close fuel panel">×</button>
+        <span class="section-kicker">FUEL OPTIONS · DEMO ONLY</span>
+        <h2 id="fuelTitle">Keep your study session flowing</h2>
+        <p>Fuel refills and course passes are preview simulations only. No payment is collected and no paid access is granted.</p>
+        <div class="fuel-plans">
+          <article class="fuel-plan"><strong>48-hour pass</strong><span>₦200 · demo only</span><button type="button" class="results-submit pass-button" data-plan="48-hour pass">Try demo</button></article>
+          <article class="fuel-plan"><strong>Semester pass</strong><span>₦500 · demo only</span><button type="button" class="results-submit pass-button" data-plan="semester pass">Try demo</button></article>
+        </div>
+        <p id="fuelStatus" class="fuel-status" role="status" aria-live="polite"></p>
+      </div>
+    </section>
 
     <footer class="site-footer">
-      <a class="footer-brand" href="#top">FOLD <span>BOOK</span></a>
+      <a class="footer-brand" href="#top">FoldBook</a>
       <span class="footer-note">ECONOMICS 100L <span>·</span> UNIVERSITY OF UYO</span>
       <a class="footer-top" href="#top">BACK TO TOP <span aria-hidden="true">↑</span></a>
     </footer>

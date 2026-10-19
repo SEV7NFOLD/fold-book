@@ -10,6 +10,7 @@ const { after, before, test } = require("node:test");
 const root = path.join(__dirname, "..");
 const output = path.join(root, "dist");
 const brandDirectory = path.join(root, "assets", "brand");
+const lottieDirectory = path.join(root, "assets", "lottie");
 const host = "127.0.0.1";
 const port = 18371;
 const origin = `http://${host}:${port}`;
@@ -18,6 +19,11 @@ const publicFiles = [
   ...fs.readdirSync(brandDirectory, { withFileTypes: true })
     .filter((entry) => entry.isFile())
     .map((entry) => `assets/brand/${entry.name}`),
+  ...fs.readdirSync(lottieDirectory, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".json"))
+    .map((entry) => `assets/lottie/${entry.name}`),
+  "assets/lottie/manifest.json",
+  "assets/css/design-tokens.css",
   "assets/css/styles.css",
   "assets/js/app.js",
   "data/announcements.csv",
@@ -83,13 +89,37 @@ test("production output keeps the dark branding and compiles student results int
   assert.match(html, /id="searchRegNo"/);
   assert.match(html, /id="searchFullName"/);
   assert.match(html, /id="results-table"/);
-  assert.match(html, /class="brand-logo brand-mark" src="\/assets\/brand\/Seven%20fold%20logo%20svg%20WHITE\.svg"/);
-  assert.match(html, /src="\/assets\/brand\/Seven%20fold%20logo%20svg%20WHITE\.svg" alt="" class="hero-logo art-mark"/);
-  assert.doesNotMatch(html, /class="art-caption"[^>]*>[^<]*MAKE MORE/i);
-  assert.match(styles, /\.hero-art\s*\{[^}]*background:\s*transparent/i);
-  assert.match(styles, /@keyframes halo-breathe/);
-  assert.match(styles, /@keyframes halo-ring-breathe/);
-  assert.match(styles, /\.art-halo::after\s*\{[^}]*animation-delay:\s*1\.6s/);
+  assert.match(html, /id="navLearn"[^>]+data-tab="home"/);
+  assert.match(html, /id="navBoard"[^>]+data-tab="board"/);
+  assert.match(html, /id="navResults"[^>]+data-tab="results"/);
+  assert.match(html, /id="navChat"[^>]+data-tab="chat"/);
+  assert.match(html, /id="navInvite"[^>]+data-tab="invite"/);
+  assert.match(html, /id="mobileLearn"[^>]+data-tab="home"/);
+  assert.match(html, /FoldBook/);
+  assert.doesNotMatch(html, /Fold Book V2|FOLD BOOK V2/);
+  assert.match(html, /@dotlottie\/player-component/);
+  assert.match(html, /id="tdr"/);
+  assert.match(html, /id="fuel"/);
+  assert.match(html, /id="pathTree"/);
+  assert.match(html, /id="weekTracker"/);
+  assert.match(html, /id="leaderboardList"/);
+  assert.match(html, /id="sndToggle"/);
+  assert.match(html, /id="examPredictorButton"/);
+  assert.match(html, /id="examPredictorPanel"/);
+  assert.match(app, /const STUDY_MODULES = \[/);
+  assert.match(app, /function saveStudyProgress/);
+  assert.match(app, /function renderMascot/);
+  assert.match(app, /function tone/);
+  assert.match(app, /101010/);
+  assert.match(app, /Nssien/);
+  assert.match(app, /function setCourse/);
+  assert.match(app, /SpeechRecognition/);
+  const lottieManifest = JSON.parse(fs.readFileSync(path.join(output, "assets/lottie/manifest.json"), "utf8"));
+  assert.ok(lottieManifest.length > 0);
+  assert.ok(lottieManifest.every((file) => fs.existsSync(path.join(output, file.slice(1)))));
+  assert.match(styles, /\.learn-section\s*\{[^}]*display:\s*grid/);
+  assert.match(styles, /\.leaderboard-row\.is-current-user/);
+  assert.match(html, /src="\/assets\/brand\/Seven%20fold%20logo%20svg%20WHITE\.svg" alt="SEV7NFOLD" class="brand-logo-img"/);
   assert.match(html, /src="\/assets\/brand\/SEV7N%20FOLD%20LOGO%20BLACK\.svg"/);
   assert.match(html, /src="\/assets\/brand\/SEV7N%20FOLD%20white%20with%20word%20mark\.png"/);
   assert.match(html, /id="authModal"/);
@@ -107,7 +137,7 @@ test("production output keeps the dark branding and compiles student results int
   assert.match(styles, /--poster-purple:\s*#7a28ff/i);
   assert.match(styles, /border-left:\s*4px solid var\(--poster-purple\)/);
   const contentSecurityPolicy = vercel.headers[0].headers.find((header) => header.key === "Content-Security-Policy").value;
-  assert.match(contentSecurityPolicy, /script-src 'self' https:\/\/cdn\.jsdelivr\.net/);
+  assert.match(contentSecurityPolicy, /script-src 'self' https:\/\/cdn\.jsdelivr\.net https:\/\/unpkg\.com/);
   assert.match(contentSecurityPolicy, /connect-src 'self' https:\/\/fdutgltyptcqeyajsnua\.supabase\.co/);
   assert.match(app, /function normalizeRegistration/);
   assert.match(app, /function gradeForScore/);
@@ -153,13 +183,22 @@ test("students can look up and view their compiled results in the production app
       this.attributes = Object.create(null);
       this.dataset = Object.create(null);
       this.className = "";
+      this.style = {};
       this.classList = {
-        toggle: () => {},
+        toggle: (name, enabled = true) => {
+          const current = this.className.split(/\s+/).filter(Boolean);
+          this.className = enabled
+            ? [...new Set([...current, name])].join(" ")
+            : current.filter((entry) => entry !== name).join(" ");
+        },
+        add: (name) => this.classList.toggle(name, true),
       };
       this.hidden = false;
       this.textContent = "";
       this.value = "";
       this.checked = false;
+      this.isConnected = true;
+      this.scrollHeight = 0;
     }
 
     addEventListener(name, listener) {
@@ -178,6 +217,14 @@ test("students can look up and view their compiled results in the production app
       this.attributes[name] = value;
     }
 
+    getAttribute(name) {
+      return this.attributes[name] ?? null;
+    }
+
+    removeAttribute(name) {
+      delete this.attributes[name];
+    }
+
     showModal() {
       this.open = true;
     }
@@ -191,14 +238,104 @@ test("students can look up and view their compiled results in the production app
     }
 
     focus() {}
+
+    scrollIntoView() {}
   }
 
   const elements = new Map([
-    "#timetable-list",
-    "#timetable-status",
-    "#announcements-list",
-    "#announcements-status",
     "#lookupForm",
+    "#home",
+    "#chat",
+    "#board",
+    "#invite",
+    "#results",
+    "#navChat",
+    "#navLearn",
+    "#navBoard",
+    "#navInvite",
+    "#navResults",
+    "#mobileLearn",
+    "#mobileBoard",
+    "#mobileChat",
+    "#mobileInvite",
+    "#mobileResults",
+    "#learn",
+    "#leaderboard",
+    "#chatInput",
+    "#chatCourse",
+    "#courseCodeLabel",
+    "#courseTitle",
+    "#chatFuelBar",
+    "#chatFuelValue",
+    "#chatMessages",
+    "#chatPrompts",
+    "#chatForm",
+    "#voiceToggle",
+    "#micButton",
+    "#openTest",
+    "#tdr",
+    "#closeTest",
+    "#questionCount",
+    "#testHearts",
+    "#testBar",
+    "#testProgress",
+    "#testQuestion",
+    "#testOptions",
+    "#testFeedback",
+    "#lecturerTip",
+    "#nextTestQuestion",
+    "#pFuel",
+    "#fuel",
+    "#closeFuel",
+    "#fuelStatus",
+    "#inviteLink",
+    "#shareInvite",
+    "#copyInvite",
+    "#inviteStatus",
+    "#inviteCount",
+    "#inviteBar",
+    "#inviteFriends",
+    "#simulateInvite",
+    "#leaderboardPodium",
+    "#yourRank",
+    "#yourXp",
+    "#adminPanel",
+    "#adminSearch",
+    "#adminResults",
+    "#adminStudentDetail",
+    "#adminStudentName",
+    "#adminStudentRegistration",
+    "#adminStudentCourses",
+    "#adminLogout",
+    "#vFuel",
+    "#fbar",
+    "#courseSwitcher",
+    "#pathTree",
+    "#lessonPanel",
+    "#lessonStep",
+    "#lessonTitle",
+    "#lessonQuestion",
+    "#answerOptions",
+    "#lessonFeedback",
+    "#cbar",
+    ".bar-bg",
+    "#cpct",
+    "#vStreak",
+    "#vGems",
+    "#sndToggle",
+    "#weekTracker",
+    "#leaderboardList",
+    "#closeLesson",
+    "#examPredictorButton",
+    "#examPredictorStatus",
+    "#examPredictorDescription",
+    "#examPredictorPanel",
+    "#mockExamProgress",
+    "#mockExamTitle",
+    "#mockExamQuestion",
+    "#mockExamOptions",
+    "#mockExamFeedback",
+    "#mockExamNext",
     "#searchRegNo",
     "#searchFullName",
     "#results-status",
@@ -228,6 +365,32 @@ test("students can look up and view their compiled results in the production app
     "#print-card",
     "#dismiss-card",
   ].map((selector) => [selector, new Element()]));
+  const navTabs = [
+    ["#navChat", "chat"],
+    ["#navLearn", "home"],
+    ["#navBoard", "board"],
+    ["#navInvite", "invite"],
+    ["#navResults", "results"],
+    ["#mobileLearn", "home"],
+    ["#mobileBoard", "board"],
+    ["#mobileChat", "chat"],
+    ["#mobileInvite", "invite"],
+    ["#mobileResults", "results"],
+  ].map(([selector, tab]) => {
+    const element = elements.get(selector);
+    element.dataset.tab = tab;
+    return element;
+  });
+  const courseChoices = ["ECO 128", "ECO 122"].map((course) => {
+    const choice = new Element();
+    choice.dataset.course = course;
+    return choice;
+  });
+  elements.get("#home").hidden = false;
+  elements.get("#chat").hidden = true;
+  elements.get("#board").hidden = true;
+  elements.get("#invite").hidden = true;
+  elements.get("#results").hidden = true;
   elements.get("#authModal").hidden = true;
   elements.get("#poster-wrapper").hidden = true;
   elements.get("#poster-wrapper").scrollIntoView = () => {};
@@ -235,22 +398,24 @@ test("students can look up and view their compiled results in the production app
     assert.equal(selector, 'button[type="submit"]');
     return elements.get("#whatsapp-submit");
   };
-  const filterButtons = ["all", "Mon", "Tue", "Wed", "Thu", "Fri"].map((day) => {
-    const button = new Element();
-    button.dataset.day = day;
-    return button;
-  });
   const document = {
     querySelector(selector) {
-      assert.ok(elements.has(selector), `Unexpected document selector: ${selector}`);
+      if (!elements.has(selector)) elements.set(selector, new Element());
       return elements.get(selector);
     },
     querySelectorAll(selector) {
-      assert.equal(selector, ".filter-button");
-      return filterButtons;
+      if (selector === "[data-tab]") return navTabs;
+      if (selector === ".course-choice") return courseChoices;
+      return [];
     },
     addEventListener() {},
+    getElementById(id) {
+      return this.querySelector(`#${id}`);
+    },
     createElement() {
+      return new Element();
+    },
+    createElementNS() {
       return new Element();
     },
     createDocumentFragment() {
@@ -262,11 +427,23 @@ test("students can look up and view their compiled results in the production app
     .replace(/const SUPABASE_ANON_KEY = .*;/, 'const SUPABASE_ANON_KEY = "header.payload.signature";');
   let insertResponse = { error: null };
   const insertedOptIns = [];
+  const studyStorage = new Map();
   const runtime = {
     document,
     console: { error() {} },
     window: {
       print() {},
+      location: { origin, pathname: "/" },
+      setTimeout() { return 1; },
+      navigator: { vibrate() { return true; } },
+      localStorage: {
+        getItem(key) {
+          return studyStorage.get(key) || null;
+        },
+        setItem(key, value) {
+          studyStorage.set(key, value);
+        },
+      },
       supabase: {
         createClient(url, key) {
           assert.equal(url, "https://fdutgltyptcqeyajsnua.supabase.co");
@@ -285,9 +462,88 @@ test("students can look up and view their compiled results in the production app
         },
       },
     },
-    fetch: async () => ({ ok: true, text: async () => "" }),
+    fetch: async () => ({ ok: true, json: async () => [] }),
   };
   vm.runInNewContext(app, runtime);
+
+  const tree = elements.get("#pathTree");
+  assert.equal(tree.children.length, 5);
+  assert.equal(tree.children[0].children[0].disabled, false);
+  assert.equal(tree.children[1].children[0].disabled, false);
+  assert.equal(tree.children[1].children[0].getAttribute("aria-disabled"), "true");
+  tree.children[1].children[0].listeners.click();
+  assert.equal(tree.children[1].children[0].className.includes("shake"), true);
+  assert.equal(tree.children[1].children[0].getAttribute("aria-disabled"), "true");
+  assert.equal(elements.get("#vStreak").textContent, "6");
+  assert.equal(elements.get("#vGems").textContent, "0");
+  assert.equal(elements.get("#examPredictorButton").disabled, false);
+  assert.equal(elements.get("#examPredictorStatus").textContent, "LOCKED");
+  elements.get("#examPredictorButton").listeners.click();
+  assert.equal(elements.get("#fuel").hidden, false);
+  elements.get("#closeFuel").listeners.click();
+  courseChoices[1].listeners.click();
+  assert.equal(elements.get("#courseTitle").textContent, "Statistics");
+  assert.match(tree.children[0].children[1].children[0].textContent, /Data and variables/);
+  courseChoices[0].listeners.click();
+  assert.equal(elements.get("#courseTitle").textContent, "Transportation Economics");
+  elements.get("#navBoard").listeners.click();
+  assert.equal(elements.get("#home").hidden, true);
+  assert.equal(elements.get("#board").hidden, false);
+  assert.ok(elements.get("#leaderboardList").children.length > 0);
+  elements.get("#navLearn").listeners.click();
+  elements.get("#navChat").listeners.click();
+  elements.get("#chatInput").value = "Explain peak-load pricing";
+  elements.get("#chatForm").listeners.submit({ preventDefault() {} });
+  assert.match(elements.get("#chatMessages").children.at(-1).children[0].textContent, /Peak-load pricing charges more/);
+  assert.equal(elements.get("#vFuel").textContent, "83/100");
+  elements.get("#questionCount").value = "10";
+  elements.get("#openTest").listeners.click();
+  assert.equal(elements.get("#tdr").hidden, false);
+  assert.equal(elements.get("#testProgress").textContent, "1 / 10");
+  elements.get("#testOptions").children[0].listeners.click();
+  elements.get("#nextTestQuestion").listeners.click();
+  assert.equal(elements.get("#testProgress").textContent, "2 / 10");
+  elements.get("#closeTest").listeners.click();
+  assert.equal(elements.get("#tdr").hidden, true);
+  for (let index = 0; index < 5; index += 1) elements.get("#simulateInvite").listeners.click();
+  assert.equal(elements.get("#inviteCount").textContent, "5 / 5");
+  assert.match(elements.get("#inviteStatus").textContent, /48-hour unlimited study fuel/);
+  assert.equal(elements.get("#vFuel").textContent, "∞ PASS");
+  elements.get("#navLearn").listeners.click();
+
+  tree.children[0].children[0].listeners.click();
+  assert.equal(elements.get("#lessonPanel").hidden, false);
+  assert.equal(elements.get("#answerOptions").children.length, 3);
+  elements.get("#answerOptions").children[1].listeners.click();
+  assert.match(elements.get("#lessonFeedback").textContent, /try another answer/i);
+  elements.get("#answerOptions").children[0].listeners.click();
+  assert.match(elements.get("#lessonFeedback").textContent, /\+20 XP/);
+  assert.equal(elements.get("#cpct").textContent, "20%");
+  assert.equal(elements.get("#vGems").textContent, "5");
+  assert.equal(tree.children[0].children[0].className.includes("done"), true);
+  assert.equal(tree.children[1].children[0].getAttribute("aria-disabled"), "false");
+  assert.equal(JSON.parse(studyStorage.get("foldBook.studyProgress")).xp, 20);
+  elements.get("#sndToggle").listeners.click();
+  assert.equal(elements.get("#sndToggle").getAttribute("aria-pressed"), "false");
+
+  for (let index = 1; index < 5; index += 1) {
+    tree.children[index].children[0].listeners.click();
+    elements.get("#answerOptions").children[0].listeners.click();
+  }
+  assert.equal(elements.get("#cpct").textContent, "100%");
+  assert.equal(elements.get("#examPredictorButton").disabled, false);
+  assert.equal(elements.get("#examPredictorStatus").textContent, "MOCK EXAM READY");
+  elements.get("#examPredictorButton").listeners.click();
+  assert.equal(elements.get("#examPredictorPanel").hidden, false);
+  for (let index = 0; index < 5; index += 1) {
+    elements.get("#mockExamOptions").children[0].listeners.click();
+    elements.get("#mockExamNext").listeners.click();
+  }
+  assert.match(elements.get("#mockExamProgress").textContent, /5 \/ 5/);
+  assert.equal(elements.get("#vGems").textContent, "35");
+  assert.equal(JSON.parse(studyStorage.get("foldBook.studyProgress")).xp, 125);
+  elements.get("#navResults").listeners.click();
+  assert.equal(elements.get("#results").hidden, false);
 
   const form = elements.get("#lookupForm");
   const registration = elements.get("#searchRegNo");
@@ -406,7 +662,16 @@ test("students can look up and view their compiled results in the production app
   fullName.value = "Nssien";
   form.listeners.submit(submittedEvent);
   assert.equal(panel.hidden, true);
-  assert.equal(status.textContent, "Invalid Registration Number or Full Name combination. Please verify your details.");
+  assert.equal(elements.get("#adminPanel").hidden, false);
+  assert.equal(elements.get("#adminResults").children.length, 114);
+  elements.get("#adminSearch").value = "Godspower Esther";
+  elements.get("#adminSearch").listeners.input();
+  assert.equal(elements.get("#adminResults").children.length, 1);
+  elements.get("#adminResults").children[0].children[3].children[0].listeners.click();
+  assert.equal(elements.get("#adminStudentDetail").hidden, false);
+  assert.equal(elements.get("#adminStudentName").textContent, "Godspower Esther Gift");
+  elements.get("#adminLogout").listeners.click();
+  assert.equal(elements.get("#adminPanel").hidden, true);
 });
 
 test("production preview serves public pages but keeps raw CSV and source files out of the site", async () => {

@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fold Book V2</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0A0A0B;--s1:#131315;--s2:#1b1b1e;--line:#2A2A2F;--tx:#f2efe8;--mu:#8e8e96;--lime:#D9F07C;--limed:#9db843;--ok:#22c55e;--okd:#15803d;--no:#ef4444;--nod:#b91c1c;--pu:#8B5CF6;--pud:#6d3fd1;--gold:#F5C451;--goldd:#b88a1c;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:500 16px/1.5 "Inter Tight",system-ui,sans-serif;letter-spacing:-.01em;min-height:100vh}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+:focus-visible{outline:2px solid var(--lime);outline-offset:3px}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.btn{--f:var(--lime);--e:var(--limed);--c:#111;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 20px;border-radius:12px;background:var(--f);color:var(--c);font-weight:700;box-shadow:0 4px 0 var(--e);transition:transform .06s,box-shadow .06s,filter .15s}
+.btn:hover{filter:brightness(1.07)}.btn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--e)}
+.btn.ghost{--f:var(--s2);--e:#0d0d0f;--c:var(--tx);border:1px solid var(--line)}
+.btn.ok{--f:var(--ok);--e:var(--okd);--c:#04210f}.btn.no{--f:var(--no);--e:var(--nod);--c:#fff}
+.btn.pu{--f:var(--pu);--e:var(--pud);--c:#fff}.btn.gold{--f:var(--gold);--e:var(--goldd);--c:#2a1d00}
+.btn.sm{padding:8px 14px;font-size:14px;border-radius:10px;box-shadow:0 3px 0 var(--e)}
+.btn:disabled{--f:var(--s2);--e:#0d0d0f;--c:#55555c;cursor:not-allowed;filter:none;transform:none;box-shadow:0 4px 0 var(--e)}
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:rgba(10,10,11,.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.top>div{max-width:1120px;margin:auto;padding:10px 20px;display:flex;align-items:center;gap:14px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.06em;white-space:nowrap;line-height:1.1}.brand small{display:block;color:var(--lime);font:700 10px "JetBrains Mono",monospace;letter-spacing:.14em}
+.tabs{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none}.tabs button{padding:8px 13px;border-radius:10px;color:var(--mu);font-weight:700;white-space:nowrap}.tabs button[aria-selected=true]{color:var(--tx);background:var(--s2)}
+.sp{flex:1}
+.pill{display:flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;background:var(--s1);border:1px solid var(--line);font-weight:700;white-space:nowrap}
+.pill.bump{animation:bump .5s}@keyframes bump{40%{transform:scale(1.12);border-color:var(--lime)}}
+.pill .mb{width:34px;height:5px;border-radius:9px;background:var(--s2);overflow:hidden}.pill .mb i{display:block;height:100%;background:var(--lime);transition:width .5s,background .3s}
+.pill.low{border-color:var(--no);animation:bump 1.4s infinite}
+.flame{display:inline-block;animation:flick 1.6s ease-in-out infinite;transform-origin:50% 90%}@keyframes flick{50%{transform:scale(1.15) rotate(-5deg)}}
+main{flex:1;min-width:0;padding:4px 0 90px}
+.hide{display:none!important}
+.study{display:grid;grid-template-columns:330px minmax(0,1fr);gap:20px;align-items:start}
+.card{background:var(--s1);border:1px solid var(--line);border-radius:16px;padding:18px}
+.buddy{position:sticky;top:78px}
+.bwrap{display:flex;gap:12px;align-items:flex-end}
+.bubble{position:relative;background:var(--tx);color:#111;border-radius:14px 14px 14px 4px;padding:12px 14px;font-weight:600;line-height:1.35;min-height:80px;flex:1;font-size:15px}
+.bubble::after{content:"";display:inline-block;width:2px;height:1em;background:#111;vertical-align:-2px;animation:cur 1s steps(1) infinite}.bubble.done::after{display:none}@keyframes cur{50%{opacity:0}}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}
+.chip{padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:var(--s2);font-weight:700;font-size:14px;box-shadow:0 3px 0 #0d0d0f;transition:transform .06s,box-shadow .06s,border-color .15s}
+.chip:hover{border-color:var(--lime)}.chip:active{transform:translateY(2px);box-shadow:0 1px 0 #0d0d0f}.chip.on{border-color:var(--lime);color:var(--lime)}
+.meter h3{margin:0 0 8px;font-size:14px;display:flex;justify-content:space-between}.meter .bar{height:12px}
+.bar{height:10px;border-radius:99px;background:var(--s2);overflow:hidden}.bar i{display:block;height:100%;border-radius:99px;background:var(--lime);transition:width .5s,background .3s}
+.meter p{margin:8px 0 0;color:var(--mu);font-size:13px}
+.perk{margin-top:12px;display:flex;gap:10px;align-items:center;color:var(--mu);font-size:13px;border-top:1px solid var(--line);padding-top:12px}.perk.on{color:var(--gold)}
+.chat{display:flex;flex-direction:column;height:calc(100vh - 130px);min-height:520px;padding:0;overflow:hidden}
+.ch{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line)}.ch b{flex:1}
+.tg{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:10px;border:1px solid var(--line);color:var(--mu);font-weight:700;font-size:14px}.tg.on{color:#111;background:var(--pu);border-color:var(--pu);color:#fff}
+#msgs{flex:1;overflow:auto;padding:18px 16px;display:flex;flex-direction:column;gap:12px}
+.m{max-width:82%;padding:11px 14px;border-radius:14px;line-height:1.45;animation:in .25s ease-out}@keyframes in{from{opacity:0;transform:translateY(6px)}}
+.m.u{align-self:flex-end;background:var(--pu);border-bottom-right-radius:4px}
+.m.b{align-self:flex-start;background:var(--s2);border:1px solid var(--line);border-bottom-left-radius:4px}
+.m .spk{display:inline-flex;margin-top:8px;padding:4px 10px;border-radius:8px;border:1px solid var(--line);font-size:13px;color:var(--mu);font-weight:700}.m .spk:hover{color:var(--lime);border-color:var(--lime)}
+.dots{display:flex;gap:4px;padding:4px 0}.dots i{width:7px;height:7px;border-radius:50%;background:var(--mu);animation:dot 1s infinite}.dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}@keyframes dot{50%{transform:translateY(-4px);background:var(--lime)}}
+.inp{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line);flex-wrap:wrap}
+.inp input{flex:1;min-width:140px;padding:12px 14px;border-radius:12px;background:var(--bg);border:2px solid var(--line);color:var(--tx);font:inherit}.inp input:focus{outline:0;border-color:var(--lime)}
+.mic.rec{--f:var(--no);--e:var(--nod);--c:#fff;animation:bump 1s infinite}
+/* test drawer */
+.tdr{position:fixed;top:0;right:0;bottom:0;width:min(460px,100%);z-index:20;background:var(--bg);border-left:1px solid var(--line);transform:translateX(105%);transition:transform .35s cubic-bezier(.2,1,.3,1);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);box-shadow:-20px 0 60px rgba(0,0,0,.5)}
+.tdr.on{transform:none}
+.th{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line)}.th b{flex:1}
+.x{width:34px;height:34px;border-radius:10px;color:var(--mu);font-size:18px}.x:hover{background:var(--s2)}
+.tb{flex:1;overflow:auto;padding:18px 18px 200px}
+.nset{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0 20px}
+.nset button{padding:16px 0;border-radius:12px;background:var(--s1);border:2px solid var(--line);box-shadow:0 4px 0 #0d0d0f;font-weight:800;font-size:22px;transition:transform .06s,box-shadow .06s}.nset button:active{transform:translateY(3px);box-shadow:0 1px 0 #0d0d0f}.nset button.sel{border-color:var(--lime);background:#1a1d10;color:var(--lime)}.nset small{display:block;color:var(--mu);font-size:12px;font-weight:500}
+.qtop{display:flex;align-items:center;gap:14px;margin-bottom:22px}.qtop .bar{flex:1}
+.lives{display:flex;align-items:center;gap:5px;font-weight:800;color:#ff8a8a}
+.ask{display:flex;gap:14px;align-items:center;margin-bottom:22px}.ask h2{font-size:20px;line-height:1.3;margin:0;letter-spacing:-.02em}
+.opt{display:flex;gap:12px;align-items:center;width:100%;text-align:left;padding:13px 14px;margin-bottom:10px;border-radius:14px;background:var(--s1);border:2px solid var(--line);box-shadow:0 4px 0 #0d0d0f;transition:transform .06s,box-shadow .06s,border-color .15s}
+.opt:hover{border-color:#3d3d44}.opt:active{transform:translateY(3px);box-shadow:0 1px 0 #0d0d0f}
+.opt kbd{flex:none;display:grid;place-items:center;width:26px;height:26px;border-radius:8px;border:1px solid var(--line);color:var(--mu);font:700 12px "JetBrains Mono",monospace}
+.opt.sel{border-color:var(--lime);background:#1a1d10}.opt.sel kbd{background:var(--lime);color:#111;border-color:var(--lime)}
+.opt.good{border-color:var(--ok);background:#0f2417}.opt.bad{border-color:var(--no);background:#2a1214}.opt[disabled]{pointer-events:none}
+.tf{position:absolute;left:0;right:0;bottom:0;border-top:1px solid var(--line);background:var(--bg);padding:16px 18px calc(16px + env(safe-area-inset-bottom,0px))}
+.tf .btn{width:100%}
+.fb{position:absolute;left:0;right:0;bottom:0;padding:18px 18px calc(18px + env(safe-area-inset-bottom,0px));transform:translateY(105%);transition:transform .35s cubic-bezier(.2,1,.3,1);z-index:2}
+.fb.on{transform:none}.fb.g{background:#0f2a19;border-top:2px solid var(--ok)}.fb.r{background:#2c1315;border-top:2px solid var(--no)}
+.fb h3{margin:0;font-size:19px}.fb.g h3{color:var(--ok)}.fb.r h3{color:#ff7a7a}.fb p{margin:3px 0 14px;color:#d8d8dd;font-size:15px}.fb .btn{width:100%}
+.stats{display:flex;gap:10px;margin:16px 0 22px}.stats div{flex:1;border:1px solid var(--line);border-radius:12px;padding:10px;background:var(--s2);text-align:center}.stats b{display:block;font-size:20px}.stats small{color:var(--mu)}
+.tpill{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:19;transform:translateY(120px);transition:transform .3s}.tpill.on{transform:none}
+/* modals */
+.ov{position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.78);display:none;place-items:center;padding:20px;overflow:auto}.ov.on{display:grid}
+.box{background:var(--s1);border:1px solid var(--line);border-radius:20px;padding:26px;max-width:440px;width:100%;animation:pop .4s cubic-bezier(.2,1.4,.4,1)}@keyframes pop{from{transform:scale(.9);opacity:0}}
+.box h2{margin:8px 0 4px;font-size:24px;letter-spacing:-.02em;text-align:center}.box>p{color:var(--mu);margin:0 0 18px;text-align:center}
+.plan{display:flex;gap:14px;align-items:center;width:100%;text-align:left;padding:14px;margin-bottom:12px;border-radius:14px;background:var(--s2);border:2px solid var(--line);box-shadow:0 4px 0 #0d0d0f;transition:transform .06s,box-shadow .06s,border-color .15s}
+.plan:active{transform:translateY(3px);box-shadow:0 1px 0 #0d0d0f}.plan.sel{border-color:var(--lime);background:#1a1d10}.plan.best.sel{border-color:var(--gold);background:#251f0a}
+.plan .pr{font:800 22px "JetBrains Mono",monospace;min-width:76px}.plan b{display:block}.plan small{color:var(--mu);line-height:1.3;display:block}
+.tag{font:700 10px "JetBrains Mono",monospace;background:var(--gold);color:#2a1d00;border-radius:6px;padding:2px 6px;margin-left:6px;vertical-align:2px}
+.fld{display:block;margin:12px 0 6px;color:var(--mu);font-size:14px}
+.in{width:100%;padding:12px 14px;border-radius:12px;background:var(--bg);border:2px solid var(--line);color:var(--tx);font:inherit}.in:focus{outline:0;border-color:var(--lime)}
+.err{color:#ff7a7a;font-size:14px;min-height:22px;margin:6px 0}
+/* leaderboard */
+.pod{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:end;max-width:560px;margin:10px auto 26px}
+.pod div{text-align:center}.pod .blk{border-radius:14px 14px 0 0;display:grid;place-items:start center;padding-top:10px;font:800 26px "JetBrains Mono",monospace;margin-top:8px;background:var(--s1);border:1px solid var(--line);border-bottom:0}
+.pod .p1 .blk{height:130px;background:#251f0a;border-color:var(--gold);color:var(--gold)}.pod .p2 .blk{height:96px}.pod .p3 .blk{height:76px}
+.av{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;margin:auto;background:var(--s2);border:2px solid var(--line);font-weight:800}.pod .p1 .av{border-color:var(--gold);width:58px;height:58px}
+.lr{display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid var(--line)}.lr:last-child{border:0}.lr .rk{width:28px;color:var(--mu);font-weight:800}.lr b{flex:1}.lr.me{background:#1a1d10;border-left:3px solid var(--lime)}
+.lrow{position:sticky;bottom:12px;margin-top:14px;display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:14px;background:var(--lime);color:#111;font-weight:800;box-shadow:0 4px 0 var(--limed)}.lrow span:first-child{flex:1}
+table{width:100%;border-collapse:collapse;margin-top:16px}td,th{padding:10px 8px;border-bottom:1px solid var(--line);text-align:left}th{color:var(--mu);font-weight:500;font-size:13px}
+.toast{position:fixed;left:50%;bottom:calc(28px + env(safe-area-inset-bottom,0px));transform:translate(-50%,30px);opacity:0;background:var(--tx);color:#111;padding:10px 16px;border-radius:12px;font-weight:700;z-index:50;transition:.3s;pointer-events:none;max-width:90vw;text-align:center}.toast.on{opacity:1;transform:translate(-50%,0)}
+.sec{max-width:640px;margin:auto}.sec h1{font-size:38px;line-height:1.05;letter-spacing:-.04em;margin:0 0 8px}
+@media(max-width:860px){.study{grid-template-columns:1fr}.buddy{position:static}.chat{height:70vh}.brand small{display:none}.top>div{flex-wrap:wrap;gap:10px;padding:10px 12px}.tabs{order:5;width:100%}.sp{display:none}.top>div .pill:first-of-type{margin-left:auto}}
+@media(max-width:520px){main{padding:16px 12px 90px}.m{max-width:92%}.pill{padding:5px 9px}.bwrap{flex-direction:column;align-items:flex-start}.bubble{border-radius:14px 14px 14px 4px;width:100%}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+
+.shell{max-width:1180px;margin:auto;display:flex;gap:28px;padding:20px 20px 0}
+.side{width:224px;flex:none;position:sticky;top:78px;align-self:flex-start;display:flex;flex-direction:column;gap:6px}
+.side .cta{margin-bottom:14px;padding:15px 16px;width:100%;font-size:16px}
+.nv{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:12px;color:var(--mu);font-weight:700;border:2px solid transparent;text-align:left;width:100%}
+.nv:hover{background:var(--s1)}.nv.on{color:var(--lime);background:#1a1d10;border-color:#2e3516}.nv i{font-style:normal;width:24px;text-align:center}
+.bnav{display:none;position:fixed;left:0;right:0;bottom:0;z-index:12;background:rgba(10,10,11,.96);backdrop-filter:blur(10px);border-top:1px solid var(--line);padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));justify-content:space-around;align-items:center}
+.bnav button{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 10px;border-radius:10px;color:var(--mu);font-size:11px;font-weight:700}.bnav button.on{color:var(--lime)}.bnav i{font-style:normal;font-size:20px}
+.bnav .fab{width:58px;height:58px;border-radius:50%;margin-top:-28px;background:var(--lime);color:#111;box-shadow:0 5px 0 var(--limed);display:grid;place-items:center;font-size:26px;padding:0;transition:transform .06s,box-shadow .06s}.bnav .fab:active{transform:translateY(3px);box-shadow:0 2px 0 var(--limed)}
+.csw{display:flex;gap:10px;overflow-x:auto;padding:2px 2px 12px;scrollbar-width:none}
+.cs{flex:none;text-align:left;padding:10px 16px;border-radius:14px;background:var(--s1);border:2px solid var(--line);box-shadow:0 4px 0 #0d0d0f;transition:transform .06s,box-shadow .06s,border-color .15s}
+.cs b{display:block}.cs small{color:var(--mu);font-size:12px}.cs:active{transform:translateY(3px);box-shadow:0 1px 0 #0d0d0f}.cs.on{border-color:var(--lime);background:#1a1d10}.cs.on b{color:var(--lime)}.cs.add{border-style:dashed;color:var(--mu);box-shadow:none}
+.wk h2{margin:2px 0 0;font-size:21px;letter-spacing:-.02em}.wk .rw{display:flex;gap:12px;align-items:center;margin:12px 0}.wk .rw .bar{flex:1}
+.wk .meta{display:flex;justify-content:space-between;color:var(--mu);font-size:13px;gap:10px}
+.wk summary{cursor:pointer;color:var(--mu);font-size:14px;font-weight:700}.wk ul{margin:10px 0 0;padding-left:18px;color:var(--mu);font-size:14px}
+.path{position:relative;display:flex;flex-direction:column;align-items:center;padding:70px 0 10px;gap:30px}
+.row{position:relative;display:flex;align-items:center;transform:translateX(var(--x))}
+.row .lab{position:absolute;left:98px;width:190px;color:var(--mu);font-size:14px;line-height:1.3}.row .lab b{display:block;color:var(--tx);font-size:15px}.row.flip .lab{left:auto;right:98px;text-align:right}
+.node{position:relative;width:76px;height:76px;border-radius:50%;display:grid;place-items:center;background:var(--s2);border:3px solid var(--line);box-shadow:0 6px 0 #0d0d0f;transition:transform .06s,box-shadow .06s;color:#fff}
+.node:active{transform:translateY(4px);box-shadow:0 2px 0 #0d0d0f}
+.node.done{border-color:var(--ok);box-shadow:0 6px 0 var(--okd),0 0 28px rgba(34,197,94,.25)}
+.node.active{background:var(--pu);border-color:#b79cff;box-shadow:0 6px 0 var(--pud)}
+.node.active::after{content:"";position:absolute;inset:-12px;border-radius:50%;border:2px solid var(--pu);animation:ring 1.8s ease-out infinite}@keyframes ring{from{opacity:.9;transform:scale(.9)}to{opacity:0;transform:scale(1.25)}}
+.node.boss{background:#2a2108;border-color:var(--gold);box-shadow:0 6px 0 var(--goldd)}.node.boss.active::after{border-color:var(--gold)}.node.boss.locked{opacity:.55;color:var(--gold)}
+.node.boss.done{background:var(--s2);border-color:var(--ok);box-shadow:0 6px 0 var(--okd)}
+.node.locked{color:#5b5b63}.node.shake{animation:shake .35s}@keyframes shake{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+.stars{position:absolute;bottom:-20px;display:flex;gap:2px}
+.mas{position:absolute;bottom:90px;left:50%;transform:translateX(-50%);pointer-events:none}
+.mas .tip{position:absolute;top:-30px;left:50%;transform:translateX(-50%);background:var(--tx);color:#111;border-radius:10px;padding:2px 10px;font-weight:800;font-size:13px}
+.mas .tip::after{content:"";position:absolute;bottom:-5px;left:50%;margin-left:-5px;border:5px solid transparent;border-bottom:0;border-top-color:var(--tx)}
+.nextw{margin-top:18px;max-width:340px;text-align:center;color:var(--mu);font-size:14px;border:1px dashed var(--line);border-radius:14px;padding:12px 16px}
+.gen{text-align:center;padding:30px 0;color:var(--mu)}.gen b{display:block;color:var(--tx);font-size:18px;margin:8px 0}.gen ul{list-style:none;padding:0;margin:12px 0 0;color:var(--lime);line-height:1.9}.gen li{animation:in .3s}
+.chat{max-width:780px;margin:auto;width:100%;height:calc(100dvh - 130px)}
+.mrow{display:flex;align-items:center;gap:10px;padding:8px 16px 2px;font-size:13px;color:var(--mu)}.mrow .bar{flex:1;height:8px}.mnote{padding:0 16px 8px;font-size:12px;color:var(--mu);border-bottom:1px solid var(--line)}
+#msgs .bubble{min-height:70px}.gr{margin-bottom:6px}
+.lnk{margin:10px 0 14px;padding:12px 14px;border-radius:12px;background:var(--bg);border:2px dashed var(--line);word-break:break-all}.irow{display:flex;gap:10px;flex-wrap:wrap}
+a.btn{text-decoration:none}.fr{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line);animation:in .3s}.fr .av{margin:0;width:36px;height:36px;font-size:13px}
+@media(max-width:860px){.shell{padding:12px 12px 0}.side{display:none}.bnav{display:flex}main{padding-bottom:110px}.tpill{bottom:calc(88px + env(safe-area-inset-bottom,0px))}.toast{bottom:calc(100px + env(safe-area-inset-bottom,0px))}.chat{height:calc(100dvh - 200px)}.sp{display:block}}
+@media(max-width:520px){.row .lab{width:150px;font-size:13px}.row .lab b{font-size:14px}}
+</style>
+</head>
+<body>
+<header class="top"><div>
+  <div class="brand"><svg width="28" height="28" viewBox="0 0 32 32" fill="none" stroke="#f2efe8" stroke-width="2.4" stroke-linejoin="round"><path d="M4 9h24L16 28z"/><path d="M10 9l6 11 6-11"/></svg><div>SEV7N FOLD<small>FOLD BOOK V2</small></div></div>
+    <div class="sp"></div>
+  <div class="pill" id="pStreak" title="Daily streak"><span class="flame">🔥</span><b class="mono" id="vStreak">6</b></div>
+  <button class="pill" id="pFuel" title="Dr. Eco fuel"><span>⚡</span><b class="mono" id="vFuel">85/100</b><span class="mb"><i id="fbar" style="width:85%"></i></span></button>
+  <button class="pill" id="snd" aria-label="Toggle sound">🔊</button>
+</div></header>
+
+<div class="shell">
+<nav class="side" aria-label="Main"><button class="btn cta" data-tab="chat">🎓 Chat with Dr. Eco</button>
+<button class="nv on" data-tab="home"><i>🗺️</i>Learn</button><button class="nv" data-tab="board"><i>🏆</i>Leaderboard</button><button class="nv" data-tab="invite"><i>👥</i>Invite friends</button><button class="nv" data-tab="results"><i>📄</i>Results Checker</button></nav>
+<main>
+<section id="home">
+  <div class="csw" id="csw"><button class="cs on" data-c="ECO 128"><b>ECO 128</b><small>Transportation Economics</small></button><button class="cs" data-c="ECO 122"><b>ECO 122</b><small>Statistics</small></button><button class="cs add" data-c="+"><b>＋ Add course</b><small>More coming soon</small></button></div>
+  <div class="card wk"><div class="meta"><span class="mono" id="wkd"></span><span id="wkdays"></span></div><h2 id="wkt"></h2>
+    <div class="rw"><div class="bar"><i id="wkb" style="width:0"></i></div><b class="mono" id="wkp"></b></div>
+    <details><summary id="wkm"></summary><ul id="wkl"></ul></details></div>
+  <div class="path" id="path"></div>
+</section>
+
+<section id="chat" class="hide card chat">
+  <div class="ch"><span>🎓</span><b>Dr. Eco</b><select class="in" id="csel" aria-label="Course" style="width:auto;padding:6px 10px"><option>ECO 128</option><option>ECO 122</option></select><button class="tg" id="vtg" aria-pressed="false">🎙️ Voice mode</button></div>
+  <div class="mrow"><span>⚡ Fuel</span><div class="bar"><i id="mbar" style="width:85%"></i></div><b class="mono" id="mtxt">85/100</b></div><div class="mnote" id="mnote"></div><div id="perk" class="hide"></div>
+  <div id="msgs" aria-live="polite"><div class="gr"><div class="bwrap"><div id="mas"></div><div class="bubble" id="bub"></div></div>
+    <div class="chips" id="chips"><button class="chip" data-a="peak">Explain Peak-Load Pricing</button><button class="chip" data-a="quiz10">Generate 10-Q Quiz</button><button class="chip" data-a="week">What’s on this week?</button></div></div></div>
+  <div class="inp"><button class="btn ghost mic" id="mic" aria-label="Speak your question">🎤</button><input id="ti" placeholder="Ask Dr. Eco about your course" autocomplete="off"><button class="btn" id="send">Send</button><button class="btn pu" id="tm">Test Me Now 📝</button></div>
+</section>
+
+<section id="invite" class="hide sec">
+  <h1>Invite friends</h1><p style="color:var(--mu);margin:0 0 16px">Studying is easier with company. When a friend finishes their first quiz, you both get 30 fuel credits.</p>
+  <div class="card" style="margin-bottom:14px"><b>Your invite link</b> <small style="color:var(--mu)">(sample)</small><div class="lnk mono" id="ilink">https://foldbook.app/join/FOLD-7K2Q</div>
+    <div class="irow"><button class="btn" id="icopy">Copy link</button><a class="btn ok" id="iwa" target="_blank" rel="noopener">Share on WhatsApp</a></div></div>
+  <div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><b>Friends joined</b><b class="mono" id="ic"></b></div><div class="bar" style="margin:10px 0"><i id="ib" style="width:0"></i></div>
+    <p style="color:var(--mu);margin:0 0 10px;font-size:14px">Invite 5 friends and unlock a free 48-hour unlimited pass.</p><div id="ifr"></div><button class="btn ghost sm" id="isim" style="margin-top:12px">Demo: a friend joined</button></div>
+</section>
+
+<section id="board" class="hide sec">
+  <h1>Economics Leaderboard</h1><p style="color:var(--mu);margin:0 0 6px">UNIUYO Economics department. Weekly XP resets every Monday. Sample data.</p>
+  <div class="pod" id="pod"></div>
+  <div class="card" style="padding:0" id="lst"></div>
+  <div class="lrow"><span>Your rank</span><b class="mono" id="myr"></b><span class="mono" id="myx"></span></div>
+</section>
+
+<section id="results" class="hide sec">
+  <h1>Your work,<br><span style="color:var(--lime)">your results.</span></h1>
+  <p style="color:var(--mu)" id="rsub">Verify who you are, then view your published results.</p>
+  <form id="r1" novalidate>
+    <label class="fld" for="reg">Registration number / matric no.</label><input class="in" id="reg" placeholder="25/SS/EC/071" autocomplete="off">
+    <label class="fld" for="nm">Full name</label><input class="in" id="nm" placeholder="Surname first" autocomplete="off">
+    <div class="err" id="e1" role="alert"></div><button class="btn" type="submit">Send verification code</button>
+  </form>
+  <form id="r2" class="hide" novalidate>
+    <div class="card" style="margin-bottom:8px">We sent a 6-digit code to the phone linked to <b id="rg"></b>. Demo code: <b class="mono">123456</b></div>
+    <label class="fld" for="pin">Verification code</label><input class="in mono" id="pin" inputmode="numeric" maxlength="6" placeholder="······" autocomplete="off">
+    <div class="err" id="e2" role="alert"></div><div style="display:flex;gap:10px"><button class="btn" type="submit">Verify and view results</button><button class="btn ghost" type="button" id="rback">Back</button></div>
+  </form>
+  <div id="r3" class="hide"></div>
+</section>
+</main></div>
+<nav class="bnav" aria-label="Main"><button class="on" data-tab="home"><i>🗺️</i>Learn</button><button data-tab="board"><i>🏆</i>Ranks</button><button class="fab" data-tab="chat" aria-label="Chat with Dr. Eco">🎓</button><button data-tab="invite"><i>👥</i>Invite</button><button data-tab="results"><i>📄</i>Results</button></nav>
+
+<aside class="tdr" id="tdr" aria-label="Test drawer">
+  <div class="th"><span>📝</span><b id="tt">Test Me</b><button class="x" id="tmin" aria-label="Minimise" title="Minimise">–</button><button class="x" id="tcl" aria-label="Close">✕</button></div>
+  <div class="tb">
+    <div id="vSet"><h2 style="margin:0">How many questions?</h2><p style="color:var(--mu);margin:4px 0 0" id="setsub"></p>
+      <div class="nset" id="nset"><button data-n="5">5<small>Quick</small></button><button data-n="10" class="sel">10<small>Standard</small></button><button data-n="20">20<small>Full drill</small></button></div>
+      <button class="btn" id="go" style="width:100%">Start test</button></div>
+    <div id="vQ" class="hide"><div class="qtop"><div class="bar"><i id="qb" style="width:0"></i></div><div class="lives">❤️ <b class="mono" id="lv">3</b></div></div>
+      <div class="ask"><div id="qm"></div><h2 id="qt"></h2></div><div id="qo"></div></div>
+    <div id="vEnd" class="hide" style="text-align:center"><div id="em" style="display:flex;justify-content:center"></div><h2 id="eh" style="margin:10px 0 4px;font-size:26px"></h2><p id="ep" style="color:var(--mu);margin:0"></p><div class="stats" id="es"></div><button class="btn" id="eb" style="width:100%;margin-bottom:12px"></button><button class="btn ghost" id="ec" style="width:100%">Back to chat</button></div>
+  </div>
+  <div class="tf" id="tfoot"><button class="btn" id="chk" disabled>Check answer</button></div>
+  <div class="fb" id="fb"><h3 id="fh"></h3><p id="fp"></p><button class="btn" id="fc">Continue</button></div>
+</aside>
+<button class="btn gold tpill" id="tpill">📝 <span id="tps">Resume test</span></button>
+
+<div class="ov" id="fuel"><div class="box"><div style="display:flex;justify-content:center" id="fm"></div><h2>Dr. Eco Needs Fuel! ☕</h2><p>Top up to keep studying. Your streak and XP are safe.</p>
+  <button class="plan sel" data-p="48h"><span class="pr">₦200</span><span><b>48-Hour Unlimited Pass</b><small>Unlimited Dr. Eco chat and tests for two days.</small></span></button>
+  <button class="plan best" data-p="sem"><span class="pr">₦500</span><span><b>Full Semester All-Access<span class="tag">BEST VALUE</span></b><small>Unlimited all semester, plus Exam Predictor and past questions.</small></span></button>
+  <button class="btn gold" id="pay" style="width:100%;margin:6px 0 10px">Pay ₦200 with Paystack</button><button class="btn ghost" id="later" style="width:100%">Not now</button></div></div>
+
+<div class="ov" id="ps"><div class="box"><h2 style="text-align:left;font-size:20px">Paystack checkout</h2><p style="text-align:left" id="psd"></p>
+  <label class="fld" for="em2">Email</label><input class="in" id="em2" type="email" placeholder="you@uniuyo.edu.ng"><div class="err" id="pe" role="alert"></div>
+  <button class="btn ok" id="psb" style="width:100%;margin-bottom:10px"></button><button class="btn ghost" id="psx" style="width:100%">Cancel</button>
+  <p style="font-size:12px;margin:12px 0 0;text-align:left">Prototype checkout. In production, launchPaystack() opens the Paystack inline popup.</p></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const shuf=a=>{for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a};
+/* ---------- sound + haptics ---------- */
+let AC=null,soundOn=true;
+function tone(f,t0,d,type="sine",g=.12){if(!soundOn)return;try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();const o=AC.createOscillator(),v=AC.createGain(),t=AC.currentTime+t0;o.type=type;o.frequency.setValueAtTime(f,t);v.gain.setValueAtTime(g,t);v.gain.exponentialRampToValueAtTime(.0001,t+d);o.connect(v);v.connect(AC.destination);o.start(t);o.stop(t+d+.02)}catch(e){}}
+const sfx={tap(){tone(540,0,.05,"triangle",.07)},ok(){tone(660,0,.14);tone(990,.1,.28)},no(){tone(190,0,.22,"sawtooth",.06);tone(140,.12,.3,"sawtooth",.06)},win(){[523,659,784,1047].forEach((f,i)=>tone(f,i*.11,.3))},gem(){tone(1250,0,.08,"square",.035);tone(1700,.07,.14,"square",.035)},low(){[392,330,262].forEach((f,i)=>tone(f,i*.14,.25,"triangle",.1))},msg(){tone(780,0,.07,"sine",.06);tone(1040,.06,.1,"sine",.05)},pour(){for(let i=0;i<5;i++)tone(500+i*140,i*.06,.1,"triangle",.06)}};
+const buzz=n=>{try{navigator.vibrate&&navigator.vibrate(n)}catch(e){}};
+document.addEventListener("pointerdown",e=>{if(e.target.closest(".btn,.opt,.chip,.plan,[data-tab],.cs,.node,.nset button,.pill,.tg")){sfx.tap();buzz(8)}});
+$("#snd").onclick=()=>{soundOn=!soundOn;$("#snd").textContent=soundOn?"🔊":"🔇";if(soundOn)sfx.tap()};
+function toast(t){const e=$("#toast");e.textContent=t;e.classList.add("on");clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove("on"),2400)}
+function bump(s){const e=$(s);e.classList.remove("bump");void e.offsetWidth;e.classList.add("bump")}
+/* ---------- Dr. Eco mascot (SVG stand-in; swap for Lottie) ---------- */
+function mascot(m="idle",s=72){const e={idle:'<circle cx="25" cy="22" r="2.6" fill="#111"/><circle cx="39" cy="22" r="2.6" fill="#111"/>',happy:'<path d="M21 23q4-6 8 0M35 23q4-6 8 0" stroke="#111" stroke-width="2.6" fill="none" stroke-linecap="round"/>',sad:'<path d="M21 21q4 5 8 0M35 21q4 5 8 0" stroke="#111" stroke-width="2.6" fill="none" stroke-linecap="round"/>'}[m]||"";
+return `<svg width="${s}" height="${s}" viewBox="0 0 64 64" class="${m==="idle"?"bob":""}" style="${m==="sad"?"transform:rotate(-8deg)":""}"><style>.bob{animation:bb 2.2s ease-in-out infinite}@keyframes bb{50%{transform:translateY(-5px)}}
+.shell{max-width:1180px;margin:auto;display:flex;gap:28px;padding:20px 20px 0}
+.side{width:224px;flex:none;position:sticky;top:78px;align-self:flex-start;display:flex;flex-direction:column;gap:6px}
+.side .cta{margin-bottom:14px;padding:15px 16px;width:100%;font-size:16px}
+.nv{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:12px;color:var(--mu);font-weight:700;border:2px solid transparent;text-align:left;width:100%}
+.nv:hover{background:var(--s1)}.nv.on{color:var(--lime);background:#1a1d10;border-color:#2e3516}.nv i{font-style:normal;width:24px;text-align:center}
+.bnav{display:none;position:fixed;left:0;right:0;bottom:0;z-index:12;background:rgba(10,10,11,.96);backdrop-filter:blur(10px);border-top:1px solid var(--line);padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));justify-content:space-around;align-items:center}
+.bnav button{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 10px;border-radius:10px;color:var(--mu);font-size:11px;font-weight:700}.bnav button.on{color:var(--lime)}.bnav i{font-style:normal;font-size:20px}
+.bnav .fab{width:58px;height:58px;border-radius:50%;margin-top:-28px;background:var(--lime);color:#111;box-shadow:0 5px 0 var(--limed);display:grid;place-items:center;font-size:26px;padding:0;transition:transform .06s,box-shadow .06s}.bnav .fab:active{transform:translateY(3px);box-shadow:0 2px 0 var(--limed)}
+.csw{display:flex;gap:10px;overflow-x:auto;padding:2px 2px 12px;scrollbar-width:none}
+.cs{flex:none;text-align:left;padding:10px 16px;border-radius:14px;background:var(--s1);border:2px solid var(--line);box-shadow:0 4px 0 #0d0d0f;transition:transform .06s,box-shadow .06s,border-color .15s}
+.cs b{display:block}.cs small{color:var(--mu);font-size:12px}.cs:active{transform:translateY(3px);box-shadow:0 1px 0 #0d0d0f}.cs.on{border-color:var(--lime);background:#1a1d10}.cs.on b{color:var(--lime)}.cs.add{border-style:dashed;color:var(--mu);box-shadow:none}
+.wk h2{margin:2px 0 0;font-size:21px;letter-spacing:-.02em}.wk .rw{display:flex;gap:12px;align-items:center;margin:12px 0}.wk .rw .bar{flex:1}
+.wk .meta{display:flex;justify-content:space-between;color:var(--mu);font-size:13px;gap:10px}
+.wk summary{cursor:pointer;color:var(--mu);font-size:14px;font-weight:700}.wk ul{margin:10px 0 0;padding-left:18px;color:var(--mu);font-size:14px}
+.path{position:relative;display:flex;flex-direction:column;align-items:center;padding:70px 0 10px;gap:30px}
+.row{position:relative;display:flex;align-items:center;transform:translateX(var(--x))}
+.row .lab{position:absolute;left:98px;width:190px;color:var(--mu);font-size:14px;line-height:1.3}.row .lab b{display:block;color:var(--tx);font-size:15px}.row.flip .lab{left:auto;right:98px;text-align:right}
+.node{position:relative;width:76px;height:76px;border-radius:50%;display:grid;place-items:center;background:var(--s2);border:3px solid var(--line);box-shadow:0 6px 0 #0d0d0f;transition:transform .06s,box-shadow .06s;color:#fff}
+.node:active{transform:translateY(4px);box-shadow:0 2px 0 #0d0d0f}
+.node.done{border-color:var(--ok);box-shadow:0 6px 0 var(--okd),0 0 28px rgba(34,197,94,.25)}
+.node.active{background:var(--pu);border-color:#b79cff;box-shadow:0 6px 0 var(--pud)}
+.node.active::after{content:"";position:absolute;inset:-12px;border-radius:50%;border:2px solid var(--pu);animation:ring 1.8s ease-out infinite}@keyframes ring{from{opacity:.9;transform:scale(.9)}to{opacity:0;transform:scale(1.25)}}
+.node.boss{background:#2a2108;border-color:var(--gold);box-shadow:0 6px 0 var(--goldd)}.node.boss.active::after{border-color:var(--gold)}.node.boss.locked{opacity:.55;color:var(--gold)}
+.node.boss.done{background:var(--s2);border-color:var(--ok);box-shadow:0 6px 0 var(--okd)}
+.node.locked{color:#5b5b63}.node.shake{animation:shake .35s}@keyframes shake{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+.stars{position:absolute;bottom:-20px;display:flex;gap:2px}
+.mas{position:absolute;bottom:90px;left:50%;transform:translateX(-50%);pointer-events:none}
+.mas .tip{position:absolute;top:-30px;left:50%;transform:translateX(-50%);background:var(--tx);color:#111;border-radius:10px;padding:2px 10px;font-weight:800;font-size:13px}
+.mas .tip::after{content:"";position:absolute;bottom:-5px;left:50%;margin-left:-5px;border:5px solid transparent;border-bottom:0;border-top-color:var(--tx)}
+.nextw{margin-top:18px;max-width:340px;text-align:center;color:var(--mu);font-size:14px;border:1px dashed var(--line);border-radius:14px;padding:12px 16px}
+.gen{text-align:center;padding:30px 0;color:var(--mu)}.gen b{display:block;color:var(--tx);font-size:18px;margin:8px 0}.gen ul{list-style:none;padding:0;margin:12px 0 0;color:var(--lime);line-height:1.9}.gen li{animation:in .3s}
+.chat{max-width:780px;margin:auto;width:100%;height:calc(100dvh - 130px)}
+.mrow{display:flex;align-items:center;gap:10px;padding:8px 16px 2px;font-size:13px;color:var(--mu)}.mrow .bar{flex:1;height:8px}.mnote{padding:0 16px 8px;font-size:12px;color:var(--mu);border-bottom:1px solid var(--line)}
+#msgs .bubble{min-height:70px}.gr{margin-bottom:6px}
+.lnk{margin:10px 0 14px;padding:12px 14px;border-radius:12px;background:var(--bg);border:2px dashed var(--line);word-break:break-all}.irow{display:flex;gap:10px;flex-wrap:wrap}
+a.btn{text-decoration:none}.fr{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line);animation:in .3s}.fr .av{margin:0;width:36px;height:36px;font-size:13px}
+@media(max-width:860px){.shell{padding:12px 12px 0}.side{display:none}.bnav{display:flex}main{padding-bottom:110px}.tpill{bottom:calc(88px + env(safe-area-inset-bottom,0px))}.toast{bottom:calc(100px + env(safe-area-inset-bottom,0px))}.chat{height:calc(100dvh - 200px)}.sp{display:block}}
+@media(max-width:520px){.row .lab{width:150px;font-size:13px}.row .lab b{font-size:14px}}
+</style><path d="M6 10h52L32 58z" fill="#D9F07C" stroke="#9db843" stroke-width="3" stroke-linejoin="round"/><path d="M18 10l14 26 14-26" fill="none" stroke="#9db843" stroke-width="2.4"/>${e}<circle cx="25" cy="22" r="6.5" fill="none" stroke="#111" stroke-width="1.6"/><circle cx="39" cy="22" r="6.5" fill="none" stroke="#111" stroke-width="1.6"/><path d="M31.500 22h1" stroke="#111" stroke-width="1.6"/></svg>`}
+/* ---------- state ---------- */
+const S={fuel:85,pass:null,streak:6,today:false,xp:340,course:"ECO 128",voice:false,plan:"48h",prog:{"ECO 128":2,"ECO 122":0},stars:{"ECO 128":[3,2],"ECO 122":[]},built:{},inv:2};
+const GREET="Hello! What are we studying today? Select your course or tap below to start chatting.";
+function typeGreet(){const b=$("#bub");b.classList.remove("done");b.textContent="";let i=0;clearInterval(typeGreet.t);typeGreet.t=setInterval(()=>{b.textContent=GREET.slice(0,++i);if(i>=GREET.length){clearInterval(typeGreet.t);b.classList.add("done")}},22)}
+function renderFuel(){const p=S.pass,pct=p?100:S.fuel;const col=p?"var(--gold)":S.fuel>30?"var(--lime)":S.fuel>15?"var(--gold)":"var(--no)";
+ $("#vFuel").textContent=p?"∞":S.fuel+"/100";$("#mtxt").textContent=p?(p==="sem"?"All-access":"Unlimited · 48h"):S.fuel+"/100";
+ ["#fbar","#mbar"].forEach(s=>{$(s).style.width=pct+"%";$(s).style.background=col});
+ $("#pFuel").classList.toggle("low",!p&&S.fuel<=15);$("#mnote").textContent=p?"No credits needed while your pass is active.":"Each reply uses 15 credits. Starting a test uses 10.";
+ const pk=$("#perk");pk.classList.toggle("on",p==="sem");pk.innerHTML=p==="sem"?"🔓 <span>Exam Predictor and past questions are unlocked.</span>":"🔒 <span>Exam Predictor and past questions unlock with the semester pass.</span>"}
+function spend(n){if(S.pass)return true;if(S.fuel<n){sfx.low();buzz([30,40,30]);openFuel();return false}S.fuel-=n;renderFuel();bump("#pFuel");return true}
+/* ---------- chat ---------- */
+const KB=[
+[/peak|load pric/,"<b>Peak-load pricing</b> charges more when demand hits capacity and less when it doesn’t. It works because transport capacity can’t be stored: an empty seat at 2pm is lost for good.<br><br><b>Marking tip:</b> UNIUYO lecturers give 4 marks for naming <i>non-storable capacity</i> and <i>peak vs off-peak</i>."],
+[/marginal/,"<b>Marginal cost pricing</b> sets price equal to the cost of carrying one more passenger. It is efficient, but with high fixed costs it can leave an operator making a loss, which is the usual case for a subsidy."],
+[/congest|externalit/,"<b>Congestion</b> is an externality: each driver ignores the delay they impose on everyone else. A congestion charge makes drivers pay that external cost."],
+[/statistic|mean|varian|122|median|standard dev/,"<b>ECO 122 core ideas:</b> the <b>mean</b> is pulled by outliers, the <b>median</b> is not. <b>Variance</b> is the average squared deviation from the mean, and the standard deviation is its square root. Want a test on this?"],
+[/transport|128/,"<b>ECO 128 map:</b> demand and capacity, marginal cost pricing, peak-load pricing, congestion and externalities, then subsidies. Tell me which one to start with, or tap <i>Test Me Now</i>."],
+[/this week|milestone|my week/,()=>{const c=C[S.course],p=S.prog[S.course],n=c.nodes.length;return `<b>Week ${c.wk}: ${c.theme}</b><br>You’ve finished ${Math.min(p,n)} of ${n} milestones. Open <i>Learn</i> to continue with “${c.nodes[Math.min(p,n-1)][0]}”.`}],
+[/hello|^hi\b|hey/,"Hello! Ask me about a topic, or say <i>test me</i> and I’ll quiz you."]];
+function addMsg(html,who){const d=document.createElement("div");d.className="m "+who;d.innerHTML=html;if(who==="b"){const b=document.createElement("button");b.className="spk";b.textContent="🔊 Listen";b.onclick=()=>speak(d.firstChild.innerHTML||html);d.append(document.createElement("br"),b)}$("#msgs").append(d);$("#msgs").scrollTop=1e9;return d}
+function speak(h){if(!("speechSynthesis" in window)){toast("Speech isn’t supported on this device");return}speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(h.replace(/<br>/g,". ").replace(/<[^>]+>/g,""));speechSynthesis.speak(u)}
+function ask(txt){txt=txt.trim();if(!txt)return;if(/\b(test|quiz|questions?)\b/i.test(txt)&&!/explain/i.test(txt)){addMsg(txt.replace(/</g,"&lt;"),"u");$("#ti").value="";botSay("Let’s test you. Pick how many questions.",()=>openDrawer());return}
+ if(!spend(15))return;addMsg(txt.replace(/</g,"&lt;"),"u");$("#ti").value="";
+ const hit=KB.find(k=>k[0].test(txt.toLowerCase()));botSay(hit?(typeof hit[1]==="function"?hit[1]():hit[1]):"I can help with <b>ECO 128</b> and <b>ECO 122</b>. Try asking about peak-load pricing, marginal cost, congestion, or the mean and variance.")}
+function botSay(h,cb){const t=addMsg('<div class="dots"><i></i><i></i><i></i></div>',"u");t.className="m b";setTimeout(()=>{t.remove();const m=addMsg(h,"b");sfx.msg();if(S.voice)speak(h);cb&&cb()},750)}
+$("#send").onclick=()=>ask($("#ti").value);$("#ti").onkeydown=e=>{if(e.key==="Enter")ask(e.target.value)};
+$("#vtg").onclick=()=>{S.voice=!S.voice;$("#vtg").classList.toggle("on",S.voice);$("#vtg").setAttribute("aria-pressed",S.voice);toast(S.voice?"Voice mode on: Dr. Eco will read replies aloud":"Voice mode off");if(!S.voice&&"speechSynthesis" in window)speechSynthesis.cancel()};
+$("#mic").onclick=()=>{const R=window.SpeechRecognition||window.webkitSpeechRecognition;if(!R){toast("Voice input isn’t supported in this browser");return}const r=new R();r.lang="en-NG";$("#mic").classList.add("rec");r.onresult=e=>{$("#ti").value=e.results[0][0].transcript;ask($("#ti").value)};r.onend=()=>$("#mic").classList.remove("rec");r.onerror=()=>toast("Couldn’t hear you. Try again.");r.start()};
+$("#chips").onclick=e=>{const c=e.target.closest(".chip");if(!c)return;if(c.dataset.a==="peak")ask("Explain peak-load pricing");else if(c.dataset.a==="week")ask("What is on this week?");else openDrawer(10,true)};
+$("#tm").onclick=()=>openDrawer();
+/* ---------- test drawer ---------- */
+const Q=[
+{c:"ECO 128",q:"What is the primary condition for peak-load pricing?",o:["Capacity must be rigid during peak hours","Marginal cost must be zero at off-peak","Demand must be uniform across all times"],a:0,m:4,t:"the definition of peak-load pricing"},
+{c:"ECO 128",q:"Why can’t a bus operator store unused seats for later?",o:["Seats are legally restricted","Transport is perishable, so unused capacity is lost","Fares are set by government"],a:1,m:3,t:"perishability of transport services"},
+{c:"ECO 128",q:"Under peak-load pricing, what do peak users pay for?",o:["Operating cost plus the capacity cost","Operating cost only","Nothing extra"],a:0,m:4,t:"who carries the capacity cost"},
+{c:"ECO 128",q:"What should the off-peak price cover?",o:["The full capacity cost","Nothing at all","Marginal operating cost"],a:2,m:3,t:"off-peak pricing"},
+{c:"ECO 128",q:"What is the expected effect of a higher peak price?",o:["Peak demand rises","Some demand shifts to off-peak","Total demand is unaffected"],a:1,m:3,t:"demand shifting"},
+{c:"ECO 128",q:"Why is road congestion called an externality?",o:["Roads are publicly owned","Each driver ignores the delay imposed on others","Fuel prices are volatile"],a:1,m:4,t:"the definition of an externality"},
+{c:"ECO 122",q:"Which measure of central tendency is most affected by extreme values?",o:["Mean","Median","Mode"],a:0,m:2,t:"outliers and the mean"},
+{c:"ECO 122",q:"What does variance measure?",o:["The middle value","The most frequent value","The average squared deviation from the mean"],a:2,m:3,t:"the definition of variance"},
+{c:"ECO 122",q:"In a normal distribution, about what share lies within one standard deviation of the mean?",o:["50%","68%","95%"],a:1,m:2,t:"the empirical rule"},
+{c:"ECO 122",q:"What is a Type I error?",o:["Rejecting a true null hypothesis","Accepting a false null hypothesis","Using the wrong sample size"],a:0,m:3,t:"Type I vs Type II errors"},
+{c:"ECO 122",q:"If every value in a data set rises by 5, what happens to the standard deviation?",o:["It rises by 5","It stays the same","It doubles"],a:1,m:3,t:"spread vs location"},
+{c:"ECO 122",q:"Which average suits skewed income data best?",o:["Mean","Range","Median"],a:2,m:3,t:"choosing the right average"}];
+let T=null,pickN=10;
+function view(v){["vSet","vQ","vEnd"].forEach(x=>$("#"+x).classList.toggle("hide",x!==v));$("#tfoot").classList.toggle("hide",v!=="vQ");$("#fb").classList.remove("on")}
+function openDrawer(n,auto){$("#tdr").classList.add("on");$("#tpill").classList.remove("on");if(T&&T.live){return}$("#setsub").textContent=S.course+" · Dr. Eco picks questions from your course notes.";view("vSet");if(n){pickN=n;$$("#nset button").forEach(b=>b.classList.toggle("sel",+b.dataset.n===n))}if(auto)startTest(pickN)}
+$("#nset").onclick=e=>{const b=e.target.closest("button");if(!b)return;pickN=+b.dataset.n;$$("#nset button").forEach(x=>x.classList.toggle("sel",x===b))};
+$("#go").onclick=()=>startTest(pickN);
+function startTest(n,o={}){if(!o.free&&!spend(10))return;let pool=Q.filter(q=>q.c===S.course),qs=[];while(qs.length<n)qs=qs.concat(shuf(pool.slice()));
+ qs=qs.slice(0,n).map(q=>{const ix=shuf(q.o.map((_,i)=>i));return{...q,o:ix.map(i=>q.o[i]),a:ix.indexOf(q.a)}});
+ T={n,qs,i:0,lives:n===5?3:n===10?5:7,mist:0,sel:null,lock:false,live:true,xp:0,node:o.node==null?null:o.node};$("#tt").textContent=o.title||(S.course+" · "+n+" questions");view("vQ");showQ()}
+function showQ(){const q=T.qs[T.i];T.sel=null;T.lock=false;$("#qb").style.width=(T.i/T.n*100)+"%";$("#lv").textContent=T.lives;$("#qm").innerHTML=mascot("idle",60);$("#qt").textContent=q.q;
+ $("#qo").innerHTML=q.o.map((t,k)=>`<button class="opt" data-k="${k}"><kbd>${"ABC"[k]}</kbd><span>${t}</span></button>`).join("");const c=$("#chk");c.disabled=true;$("#fb").classList.remove("on");$("#tps").textContent="Resume test · "+(T.i+1)+"/"+T.n}
+function pick(k){if(T.lock)return;T.sel=k;$$(".opt").forEach((o,j)=>o.classList.toggle("sel",j===k));$("#chk").disabled=false}
+$("#qo").onclick=e=>{const o=e.target.closest(".opt");if(o&&T)pick(+o.dataset.k)};
+$("#chk").onclick=()=>{if(!T||T.sel===null||T.lock)return;T.lock=true;const q=T.qs[T.i],good=T.sel===q.a;
+ $$(".opt").forEach((o,j)=>{o.disabled=true;o.classList.remove("sel");if(j===q.a)o.classList.add("good");else if(j===T.sel)o.classList.add("bad")});
+ const f=$("#fb");f.className="fb on "+(good?"g":"r");const tip=`UNIUYO lecturers allocate ${q.m} marks for ${q.t}.`;
+ if(good){sfx.ok();buzz(15);T.xp+=10;$("#qm").innerHTML=mascot("happy",60);$("#fh").textContent="Spot on!";$("#fp").textContent=tip;$("#fc").className="btn ok"}
+ else{sfx.no();buzz([40,40,40]);T.mist++;T.lives--;$("#lv").textContent=T.lives;$("#qm").innerHTML=mascot("sad",60);$("#fh").textContent="Not quite";$("#fp").textContent="Correct answer: "+q.o[q.a]+". "+tip;$("#fc").className="btn no"}
+ $("#chk").disabled=true};
+$("#fc").onclick=()=>{if(T.lives<=0)return endTest(false);T.i++;T.i>=T.n?endTest(true):showQ()};
+function endTest(win){T.live=false;S.lastWin=win;view("vEnd");$("#tpill").classList.remove("on");const nd=T.node;$("#ec").classList.remove("hide");$("#ec").textContent=nd!=null?"Back to map":"Back to chat";const acc=Math.round((T.n-T.mist)/T.n*100);
+ if(win){const bonus=T.mist===0?20:0,gain=T.xp+bonus;S.xp+=gain;if(nd!=null&&nd===S.prog[S.course]){S.prog[S.course]++;S.stars[S.course][nd]=T.mist===0?3:T.mist<2?2:1;if(S.prog[S.course]>=C[S.course].nodes.length)setTimeout(()=>toast("Week complete! Week "+(C[S.course].wk+1)+" unlocks Monday."),1200)}sfx.win();buzz([30,40,60]);$("#em").innerHTML=mascot("happy",84);$("#eh").textContent=T.mist===0?"Flawless":"Test complete";$("#ep").textContent="Dr. Eco has noted your weak spots for next time.";
+  $("#es").innerHTML=`<div><b class="mono">+${gain}</b><small>XP</small></div><div><b class="mono">${acc}%</b><small>Accuracy</small></div><div><b class="mono">${S.today?S.streak:S.streak+1}</b><small>Day streak</small></div>`;
+  if(!S.today){S.today=true;S.streak++}setTimeout(()=>{sfx.gem();$("#vStreak").textContent=S.streak;bump("#pStreak");renderBoard()},500);
+  $("#eb").className="btn";$("#eb").textContent=nd!=null?"Continue":"New test";$("#ec").classList.toggle("hide",nd!=null);$("#eb").onclick=()=>{T=null;if(nd!=null){$("#tdr").classList.remove("on");go("home")}else openDrawer()}}
+ else{sfx.low();$("#em").innerHTML=mascot("sad",84);$("#eh").textContent="Out of lives";$("#ep").textContent="Ask Dr. Eco to explain the topic, then try again.";$("#es").innerHTML="";$("#eb").className="btn gold";$("#eb").textContent="Try again";$("#eb").onclick=()=>{T=null;if(nd!=null)runNode(nd);else openDrawer()}}}
+$("#ec").onclick=()=>{const nd=T&&T.node!=null;$("#tdr").classList.remove("on");T=null;if(nd)go("home");else if(S.lastWin)botSay("Nice work. Want me to explain anything you missed?")};
+$("#tmin").onclick=()=>{$("#tdr").classList.remove("on");if(T&&T.live)$("#tpill").classList.add("on")};
+$("#tpill").onclick=()=>openDrawer();
+$("#tcl").onclick=()=>{if(T&&T.live){if(!confirm("Leave this test? This attempt will be lost."))return;T=null}$("#tdr").classList.remove("on");$("#tpill").classList.remove("on")};
+document.addEventListener("keydown",e=>{if(!$("#tdr").classList.contains("on")||!T||!T.live||e.target.tagName==="INPUT")return;if(["1","2","3"].includes(e.key)&&!T.lock)pick(+e.key-1);if(e.key==="Enter"){$("#fb").classList.contains("on")?$("#fc").click():$("#chk").click()}});
+/* ---------- fuel + payment ---------- */
+function openFuel(){$("#fm").innerHTML=mascot("sad",80);$("#fuel").classList.add("on")}
+$("#pFuel").onclick=openFuel;$("#later").onclick=()=>$("#fuel").classList.remove("on");
+$$(".plan").forEach(p=>p.onclick=()=>{S.plan=p.dataset.p;$$(".plan").forEach(x=>x.classList.toggle("sel",x===p));$("#pay").textContent="Pay "+(S.plan==="sem"?"₦500":"₦200")+" with Paystack"});
+$("#pay").onclick=()=>launchPaystack(S.plan);
+function launchPaystack(plan){const amt=plan==="sem"?500:200;$("#psd").textContent=(plan==="sem"?"Full Semester All-Access":"48-Hour Unlimited Pass")+" · ₦"+amt;$("#psb").textContent="Pay ₦"+amt;$("#psb").dataset.p=plan;$("#pe").textContent="";$("#ps").classList.add("on");
+ /* Production: PaystackPop.setup({key:"pk_live_xxx",email,amount:amt*100,currency:"NGN",callback:r=>verify(r.reference)}).openIframe() */}
+$("#psx").onclick=()=>$("#ps").classList.remove("on");
+$("#psb").onclick=()=>{const em=$("#em2").value.trim();if(!/^\S+@\S+\.\S+$/.test(em)){sfx.no();$("#pe").textContent="Enter a valid email so Paystack can send your receipt.";return}
+ S.pass=$("#psb").dataset.p;$("#ps").classList.remove("on");$("#fuel").classList.remove("on");sfx.pour();setTimeout(sfx.win,350);buzz([30,40,60]);renderFuel();bump("#pFuel");toast(S.pass==="sem"?"Semester pass active. Exam Predictor unlocked.":"48-hour pass active. Study freely.")};
+/* ---------- leaderboard ---------- */
+const B=[["Idara E.",1280],["Mfon U.",1195],["Emem A.",1110],["Ubong I.",980],["Nsikak O.",905],["Aniekan B.",860],["Ifiok J.",610],["Utibe M.",540],["Ekaette N.",470]];
+function renderBoard(){const L=B.map(([n,x])=>({n,x})).concat({n:"You",x:S.xp,me:true}).sort((a,b)=>b.x-a.x);const ini=n=>n.split(" ").map(w=>w[0]).join("").slice(0,2);
+ const pd=(r,c)=>`<div class="${c}"><div class="av">${ini(L[r].n)}</div><div style="font-weight:700;margin-top:6px">${L[r].n}</div><div class="mono" style="color:var(--mu);font-size:13px">${L[r].x} XP</div><div class="blk">${r+1}</div></div>`;
+ $("#pod").innerHTML=pd(1,"p2")+pd(0,"p1")+pd(2,"p3");
+ $("#lst").innerHTML=L.slice(3).map((p,i)=>`<div class="lr ${p.me?"me":""}"><span class="rk mono">${i+4}</span><b>${p.n}</b><span class="mono">${p.x} XP</span></div>`).join("");
+ const r=L.findIndex(p=>p.me)+1;$("#myr").textContent="#"+r+" of "+L.length;$("#myx").textContent=S.xp+" XP"}
+/* ---------- results (gated) ---------- */
+let tries=0;
+$("#r1").onsubmit=e=>{e.preventDefault();const r=$("#reg").value.trim(),n=$("#nm").value.trim();
+ if(!/^(\d{2}\/[A-Z]{2}\/[A-Z]{2}\/)?\d{3}$/i.test(r)){sfx.no();$("#e1").textContent="Enter your registration number like 25/SS/EC/071, or just 071.";return}
+ if(n.length<4){sfx.no();$("#e1").textContent="Enter your full name, surname first.";return}
+ $("#e1").textContent="";sfx.ok();$("#rg").textContent=r.toUpperCase();$("#r1").classList.add("hide");$("#r2").classList.remove("hide");$("#pin").focus()};
+$("#rback").onclick=()=>{$("#r2").classList.add("hide");$("#r1").classList.remove("hide")};
+$("#r2").onsubmit=e=>{e.preventDefault();if(tries>=3){$("#e2").textContent="Too many attempts. Go back and request a new code.";sfx.no();return}
+ if($("#pin").value!=="123456"){tries++;sfx.no();buzz([40,40,40]);$("#e2").textContent="That code is wrong. "+(3-tries)+" attempt"+(3-tries===1?"":"s")+" left.";return}
+ sfx.win();tries=0;$("#r2").classList.add("hide");$("#rsub").textContent="Second semester, 2025/2026. Sample data.";
+ $("#r3").classList.remove("hide");$("#r3").innerHTML=`<table><tr><th>Course</th><th>Score</th><th>Grade</th></tr><tr><td>ECO 128</td><td class="mono">68</td><td class="mono">B</td></tr><tr><td>ECO 122</td><td class="mono">74</td><td class="mono">A</td></tr><tr><td>ECO 112</td><td class="mono">61</td><td class="mono">B</td></tr><tr><td>GST 112</td><td class="mono">70</td><td class="mono">A</td></tr></table><button class="btn ghost" id="rout" style="margin-top:18px">Sign out</button>`;
+ $("#rout").onclick=()=>{$("#r3").classList.add("hide");$("#r1").classList.remove("hide");$("#pin").value="";$("#rsub").textContent="Verify who you are, then view your published results."}};
+/* ---------- tabs + init ---------- */
+/* ---------- navigation ---------- */
+function go(t){["home","chat","board","invite","results"].forEach(x=>$("#"+x).classList.toggle("hide",x!==t));$$(".nv,.bnav button").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));if(t==="chat"&&!go.c){go.c=1;typeGreet()}if(t==="home"&&S.built[S.course])renderMap();scrollTo(0,0)}
+$$("[data-tab]").forEach(b=>b.onclick=()=>go(b.dataset.tab));
+/* ---------- milestone map: one generated week per course ---------- */
+const C={
+"ECO 128":{wk:3,theme:"Peak-load pricing and congestion",mats:["Lecture 4: Marginal cost pricing (PDF)","Lecture 5: Peak-load pricing (PDF)","Congestion notes (DOCX)","2023 past questions (PDF)"],nodes:[["Marginal cost recap","lesson"],["Peak vs off-peak","lesson"],["Who pays for capacity","lesson"],["Congestion as an externality","lesson"],["Mistakes review","review"],["Week 3 checkpoint","boss"]]},
+"ECO 122":{wk:3,theme:"Averages and spread",mats:["Lecture 3: Measures of centre (PDF)","Lecture 4: Variance and SD (PDF)","Worked examples (PDF)"],nodes:[["Mean, median, mode","lesson"],["Variance and SD","lesson"],["Normal distribution","lesson"],["Hypothesis errors","lesson"],["Mistakes review","review"],["Week 3 checkpoint","boss"]]}};
+function icon(k){return {check:'<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>',play:'<svg width="30" height="30" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg>',redo:'<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 1 14-5.300M20 12a8 8 0 0 1-14 5.300M18 3v4h-4M6 21v-4h4"/></svg>',lock:'<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10V8a5 5 0 0 1 10 0v2h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zm2 0h6V8a3 3 0 0 0-6 0z"/></svg>',crown:'<svg width="34" height="34" viewBox="0 0 24 24" fill="#f5c451"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/></svg>'}[k]}
+const star=on=>`<svg width="16" height="16" viewBox="0 0 24 24" fill="${on?"#f5c451":"#3a3a40"}"><path d="M12 2l2.9 6.3 6.800.7-5.100 4.600 1.500 6.700L12 17l-6.100 3.300 1.500-6.700L2.300 9l6.800-.7z"/></svg>`;
+function renderMap(){const c=C[S.course],p=S.prog[S.course],n=c.nodes.length,left=7-((new Date().getDay()+6)%7);
+ $("#wkd").textContent="Week "+c.wk;$("#wkdays").textContent=left+" day"+(left>1?"s":"")+" left";$("#wkt").textContent=c.theme;$("#wkb").style.width=(Math.min(p,n)/n*100)+"%";$("#wkp").textContent=Math.min(p,n)+"/"+n;
+ $("#wkm").textContent="Built from "+c.mats.length+" materials";$("#wkl").innerHTML=c.mats.map(m=>"<li>"+m+"</li>").join("");
+ let h="";c.nodes.forEach(([t,k],i)=>{const st=i<p?"done":i===p?"active":"locked",x=Math.round(Math.sin(i*1.1)*70);
+  const ic=st==="done"?icon("check"):st==="locked"?icon("lock"):icon(k==="review"?"redo":k==="boss"?"crown":"play");
+  h+=`<div class="row ${x>0?"flip":""}" style="--x:${x}px"><button class="node ${st} ${k==="boss"?"boss":""}" data-i="${i}" aria-label="${t}, ${st}">${ic}${st==="done"?`<span class="stars">${[0,1,2].map(q=>star(q<(S.stars[S.course][i]||1))).join("")}</span>`:""}${st==="active"?`<span class="mas"><span class="tip">Start</span>${mascot("idle",60)}</span>`:""}</button><div class="lab"><b>${t}</b>${k==="review"?"Fix what you missed":k==="boss"?"10 questions":"5 questions"}</div></div>`});
+ h+=`<div class="nextw">Week ${c.wk+1} unlocks Monday. Dr. Eco builds it from any new materials your lecturers upload.</div>`;
+ h+=`<div class="row" style="--x:0px"><button class="node boss ${S.pass==="sem"?"":"locked"}" data-i="exam" aria-label="Exam Predictor">${S.pass==="sem"?icon("crown"):icon("lock")}</button><div class="lab"><b>Exam Predictor</b>Full mock exam · semester pass</div></div>`;
+ $("#path").innerHTML=h}
+function buildWeek(){const cc=S.course,c=C[cc];if(S.built[cc]){renderMap();return}
+ $("#path").innerHTML=`<div class="gen"><div id="gm" style="display:flex;justify-content:center"></div><b>Dr. Eco is building your week</b><ul id="gs"></ul></div>`;$("#gm").innerHTML=mascot("idle",72);
+ [`Reading ${c.mats.length} materials`,"Finding this week’s topics",`Writing ${c.nodes.length} milestones`,"Preparing quizzes"].forEach((t,i)=>setTimeout(()=>{if(S.course!==cc||!$("#gs"))return;const li=document.createElement("li");li.textContent="✓ "+t;$("#gs").append(li);sfx.tap()},500*(i+1)));
+ setTimeout(()=>{S.built[cc]=1;if(S.course===cc){renderMap();sfx.gem()}},2500)}
+function setCourse(c){S.course=c;$$(".cs").forEach(x=>x.classList.toggle("on",x.dataset.c===c));$("#csel").value=c;buildWeek()}
+$("#csw").onclick=e=>{const b=e.target.closest(".cs");if(!b)return;if(b.dataset.c==="+"){toast("More courses appear as lecturers upload materials");return}if(b.dataset.c!==S.course)setCourse(b.dataset.c)};
+$("#csel").onchange=e=>setCourse(e.target.value);
+function nope(n,m){n.classList.remove("shake");void n.offsetWidth;n.classList.add("shake");tone(120,0,.14,"square",.05);buzz([20,30,20]);toast(m)}
+function runNode(i){const k=C[S.course].nodes[i];startTest(k[1]==="boss"?10:5,{node:i,free:true,title:k[0]})}
+$("#path").onclick=e=>{const n=e.target.closest(".node");if(!n)return;const i=n.dataset.i;
+ if(i==="exam"){if(S.pass==="sem")toast("Exam Predictor arrives in the next build");else{S.plan="sem";$$(".plan").forEach(x=>x.classList.toggle("sel",x.dataset.p==="sem"));$("#pay").textContent="Pay ₦500 with Paystack";openFuel()}return}
+ if(+i>S.prog[S.course]){nope(n,"Finish the previous milestone to unlock this one");return}
+ if(T&&T.live){openDrawer();return}$("#tdr").classList.add("on");$("#tpill").classList.remove("on");runNode(+i)};
+/* ---------- invite ---------- */
+const FR=["Mfon U.","Emem A.","Ubong I.","Nsikak O.","Aniekan B."];
+function renderInv(){$("#ic").textContent=S.inv+"/5";$("#ib").style.width=(S.inv/5*100)+"%";$("#ifr").innerHTML=FR.slice(0,S.inv).map(n=>`<div class="fr"><div class="av">${n.split(" ").map(w=>w[0]).join("")}</div><b style="flex:1">${n}</b><span class="mono" style="color:var(--ok)">+30 ⚡</span></div>`).join("")||'<p style="color:var(--mu);margin:0">No friends yet.</p>'}
+$("#iwa").href="https://wa.me/?text="+encodeURIComponent("I’m studying with Dr. Eco on Fold Book. Join me: https://foldbook.app/join/FOLD-7K2Q");
+$("#icopy").onclick=()=>{try{navigator.clipboard.writeText($("#ilink").textContent).then(()=>toast("Link copied")).catch(()=>toast("Couldn’t copy. Select the link and copy it."))}catch(e){toast("Couldn’t copy. Select the link and copy it.")}};
+$("#isim").onclick=()=>{if(S.inv>=5){toast("You’ve reached 5 friends");return}S.inv++;sfx.gem();buzz(20);if(!S.pass)S.fuel=Math.min(100,S.fuel+30);renderFuel();renderInv();bump("#pFuel");
+ if(S.inv===5){S.pass="48h";setTimeout(()=>{sfx.win();renderFuel();toast("5 friends joined: 48-hour pass unlocked")},500)}else toast(FR[S.inv-1]+" joined. +30 fuel credits")};
+$("#mas").innerHTML=mascot("idle",84);renderFuel();renderBoard();renderInv();buildWeek();
+</script>
+</body>
+</html>

@@ -6,12 +6,20 @@ const path = require("node:path");
 const root = path.join(__dirname, "..");
 const output = path.join(root, "dist");
 const brandDirectory = path.join(root, "assets", "brand");
+const lottieDirectory = path.join(root, "assets", "lottie");
 const brandFiles = fs.readdirSync(brandDirectory, { withFileTypes: true })
   .filter((entry) => entry.isFile())
   .map((entry) => `assets/brand/${entry.name}`);
+const lottieFiles = fs.readdirSync(lottieDirectory, { withFileTypes: true })
+  .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".json"))
+  .map((entry) => `assets/lottie/${entry.name}`);
+const lottieManifest = "assets/lottie/manifest.json";
 const allowedFiles = [
   "index.html",
   ...brandFiles,
+  ...lottieFiles,
+  lottieManifest,
+  "assets/css/design-tokens.css",
   "assets/css/styles.css",
   "assets/js/app.js",
   "data/announcements.csv",
@@ -178,6 +186,7 @@ function serializeForJavaScript(value) {
 function writePublicSite() {
   for (const relativePath of allowedFiles) {
     const source = path.join(root, relativePath);
+    if (relativePath === lottieManifest) continue;
     if (!fs.existsSync(source) || !fs.statSync(source).isFile()) {
       throw new Error(`Required public site file is missing: ${relativePath}`);
     }
@@ -195,9 +204,14 @@ function writePublicSite() {
   for (const relativePath of allowedFiles) {
     const destination = path.join(output, relativePath);
     fs.mkdirSync(path.dirname(destination), { recursive: true });
-    const content = relativePath === "assets/js/app.js"
-      ? sourceApp.replace(lookupMarker, `const RESULT_LOOKUP = ${serializeForJavaScript(resultLookup)};`)
-      : fs.readFileSync(path.join(root, relativePath));
+    let content;
+    if (relativePath === "assets/js/app.js") {
+      content = sourceApp.replace(lookupMarker, `const RESULT_LOOKUP = ${serializeForJavaScript(resultLookup)};`);
+    } else if (relativePath === lottieManifest) {
+      content = `${JSON.stringify(lottieFiles.map((file) => `/${file}`))}\n`;
+    } else {
+      content = fs.readFileSync(path.join(root, relativePath));
+    }
     fs.writeFileSync(destination, content);
   }
 

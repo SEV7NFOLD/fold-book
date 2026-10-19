@@ -12,8 +12,10 @@ const port = Number(process.env.PORT || 4173);
 const files = new Map([
   ["/", "index.html"],
   ["/index.html", "index.html"],
+  ["/assets/css/design-tokens.css", "assets/css/design-tokens.css"],
   ["/assets/css/styles.css", "assets/css/styles.css"],
   ["/assets/js/app.js", "assets/js/app.js"],
+  ["/assets/lottie/manifest.json", "assets/lottie/manifest.json"],
   ["/data/announcements.csv", "data/announcements.csv"],
   ["/data/timetable.csv", "data/timetable.csv"],
 ]);
@@ -23,12 +25,19 @@ for (const entry of fs.readdirSync(brandDirectory, { withFileTypes: true })) {
     files.set(`/assets/brand/${encodeURIComponent(entry.name)}`, path.join("assets", "brand", entry.name));
   }
 }
+const lottieDirectory = path.join(projectRoot, "assets", "lottie");
+for (const entry of fs.readdirSync(lottieDirectory, { withFileTypes: true })) {
+  if (entry.isFile() && entry.name.toLowerCase().endsWith(".json")) {
+    files.set(`/assets/lottie/${encodeURIComponent(entry.name)}`, path.join("assets", "lottie", entry.name));
+  }
+}
 const contentTypes = new Map([
   [".css", "text/css; charset=utf-8"],
   [".csv", "text/csv; charset=utf-8"],
   [".html", "text/html; charset=utf-8"],
   [".jpeg", "image/jpeg"],
   [".js", "text/javascript; charset=utf-8"],
+  [".json", "application/json; charset=utf-8"],
   [".jpg", "image/jpeg"],
   [".png", "image/png"],
   [".svg", "image/svg+xml"],
@@ -47,6 +56,14 @@ const server = http.createServer((request, response) => {
   }
 
   const pathname = new URL(request.url, `http://${host}:${port}`).pathname;
+  if (pathname === "/assets/lottie/manifest.json" && !servingBuiltSite) {
+    const manifest = fs.readdirSync(lottieDirectory, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".json"))
+      .map((entry) => `/assets/lottie/${encodeURIComponent(entry.name)}`);
+    response.writeHead(200, { "Cache-Control": "no-cache", "Content-Type": "application/json; charset=utf-8" });
+    response.end(request.method === "HEAD" ? undefined : JSON.stringify(manifest));
+    return;
+  }
   const relativePath = files.get(pathname);
   if (!relativePath) {
     response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
@@ -72,7 +89,7 @@ const server = http.createServer((request, response) => {
 });
 
 server.listen(port, host, () => {
-  console.log(`Fold Book ${servingBuiltSite ? "production preview" : "development preview"} running at http://${host}:${port}`);
+  console.log(`FoldBook ${servingBuiltSite ? "production preview" : "development preview"} running at http://${host}:${port}`);
 });
 
 server.on("error", (error) => {
