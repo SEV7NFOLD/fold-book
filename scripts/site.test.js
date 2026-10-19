@@ -563,6 +563,7 @@ test("students can look up and view their compiled results in the production app
   const leaderboardRows = [];
   const studyStorage = new Map();
   const audioPlays = [];
+  const windowListeners = Object.create(null);
   class MockAudio {
     constructor(src) {
       this.src = src;
@@ -592,7 +593,9 @@ test("students can look up and view their compiled results in the production app
         vibrate() { return true; },
         clipboard: { async writeText() {} },
       },
-      addEventListener() {},
+      addEventListener(name, listener) {
+        windowListeners[name] = listener;
+      },
       localStorage: {
         getItem(key) {
           return studyStorage.get(key) || null;
@@ -708,6 +711,11 @@ test("students can look up and view their compiled results in the production app
   assert.equal(elements.get("#adminDashboard").hidden, true);
   assert.equal(elements.get("#accessToast").hidden, true);
   assert.equal(elements.get("#chatMessages").children.length, 1);
+  runtime.window.location.hash = "#admin";
+  windowListeners.hashchange();
+  assert.equal(elements.get("#adminDashboard").hidden, true);
+  assert.equal(elements.get("#authView").hidden, false);
+  assert.equal(elements.get("#accessToast").hidden, false);
   elements.get("#navBoard").listeners.click();
   assert.equal(elements.get("#authStatus").textContent, "Access Restricted: SevenFold Authorized Personnel Only");
   assert.equal(elements.get("#accessToast").hidden, false);

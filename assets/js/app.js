@@ -2566,10 +2566,10 @@ if (!restoreAuthSession()) showStage("landingView");
 if (typeof window.addEventListener === "function") {
   window.addEventListener("hashchange", () => {
     const stage = window.location.hash.slice(1);
-    if (stage === "adminDashboard") {
+    if (stage === "admin" || stage === "adminDashboard") {
       if (!S.isAdmin) {
         showAccessRestrictedNotice();
-        showStage("landingView");
+        showStage("authView");
       } else showStage("adminDashboard");
     } else if (stage === "studentApp") {
       if (!currentStudent || S.isAdmin) {
