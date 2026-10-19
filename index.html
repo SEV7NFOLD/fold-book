@@ -120,6 +120,12 @@
           </label>
           <button type="button" class="voice-toggle" id="voiceToggle" aria-pressed="false">🎙️ Voice mode: off</button>
         </div>
+        <div class="chat-routing">
+          <label for="chatRegistration">Matric number for level routing
+            <input id="chatRegistration" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="18" placeholder="e.g. 25/SS/EC/071">
+          </label>
+          <p id="chatLevel" role="status" aria-live="polite">Detected level: 100L</p>
+        </div>
         <div class="chat-fuel"><span>⚡ Fuel</span><div class="fuel-track"><i id="chatFuelBar"></i></div><strong class="mono" id="chatFuelValue">85/100</strong></div>
         <div class="chat-messages" id="chatMessages" aria-live="polite">
           <article class="chat-message assistant-message"><p>Hello! I’m Dr. Eco. Ask me about transportation economics or statistics, or try one of the prompts below.</p><button type="button" class="listen-button">🔊 Listen</button></article>
@@ -135,7 +141,7 @@
           <button type="submit" class="results-submit">Send</button>
           <button type="button" class="results-submit quiz-launch" id="openTest">Test Me 📝</button>
         </form>
-        <p class="chat-disclaimer">Demo study assistant. Replies are prepared course guidance, not live AI or official academic advice.</p>
+        <p class="chat-disclaimer">AI study guidance based on available course materials; verify important details with your lecturer and official course resources.</p>
       </section>
 
       <section id="board" class="leaderboard-section hide" hidden>
@@ -240,6 +246,31 @@
               <h3 id="adminStudentName"></h3>
               <p id="adminStudentRegistration"></p>
               <div class="results-table-wrap"><table class="results-table"><thead><tr><th scope="col">Course</th><th scope="col">Total</th><th scope="col">Grade</th><th scope="col">Remark</th></tr></thead><tbody id="adminStudentCourses"></tbody></table></div>
+            </section>
+            <section id="adminMaterialsTab" class="admin-materials" aria-labelledby="adminMaterialsHeading">
+              <h3 id="adminMaterialsHeading">🧠 Train Dr. Eco on New Course Notes</h3>
+              <p class="admin-materials-intro">Upload lecture notes, outlines, or past questions directly assigned to a specific level and course.</p>
+              <div class="admin-material-fields">
+                <div>
+                  <label for="adminLevelSelect">Target Academic Level</label>
+                  <select id="adminLevelSelect" class="admin-material-control">
+                    <option value="100L">100 Level</option>
+                    <option value="200L">200 Level</option>
+                    <option value="300L">300 Level</option>
+                    <option value="400L">400 Level</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="adminCourseSelect">Assigned Course Code</label>
+                  <select id="adminCourseSelect" class="admin-material-control"></select>
+                </div>
+              </div>
+              <label for="adminMaterialTitle">Lecture / Material Title</label>
+              <input type="text" id="adminMaterialTitle" class="admin-material-control" placeholder="e.g., Lecture 4: Peak-Load Pricing &amp; Congestion">
+              <label for="adminMaterialText">Extracted Course Content / Notes / Past Questions</label>
+              <textarea id="adminMaterialText" class="admin-material-control" rows="6" placeholder="Paste full lecture text, slides content, or marking scheme notes here..."></textarea>
+              <button type="button" id="adminMaterialSubmit" class="results-submit admin-material-submit">🧠 Index Material into Supabase Vector Store</button>
+              <p id="adminMaterialStatus" class="admin-material-status mono" role="status" aria-live="polite"></p>
             </section>
           </section>
           <section class="poster-wrapper" id="poster-wrapper" aria-label="Exportable course result card" hidden>

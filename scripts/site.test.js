@@ -6,6 +6,7 @@ const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const { after, before, test } = require("node:test");
+const drEcoHandler = require("../api/dr-eco.js");
 
 const root = path.join(__dirname, "..");
 const output = path.join(root, "dist");
@@ -53,7 +54,7 @@ before(() => {
 
   server = spawn(process.execPath, [path.join(__dirname, "serve-site.js"), "--built"], {
     cwd: root,
-    env: { ...process.env, PORT: String(port) },
+    env: { ...process.env, GEMINI_API_KEY: "", PORT: String(port) },
     stdio: "ignore",
   });
   return waitForServer().then(async (response) => {
@@ -113,6 +114,13 @@ test("production output keeps the dark branding and compiles student results int
   assert.match(app, /101010/);
   assert.match(app, /Nssien/);
   assert.match(app, /function setCourse/);
+  assert.match(app, /function detectStudentLevel/);
+  assert.match(app, /function updateAdminCourseDropdown/);
+  assert.match(app, /function callGeminiRAG/);
+  assert.match(app, /match_level:\s*level/);
+  assert.match(app, /fetch\("\/api\/dr-eco"/);
+  assert.doesNotMatch(app, /generativelanguage\.googleapis\.com/);
+  assert.match(app, /from\("course_materials"\)\.insert/);
   assert.match(app, /SpeechRecognition/);
   const lottieManifest = JSON.parse(fs.readFileSync(path.join(output, "assets/lottie/manifest.json"), "utf8"));
   assert.ok(lottieManifest.length > 0);
@@ -124,6 +132,13 @@ test("production output keeps the dark branding and compiles student results int
   assert.match(html, /src="\/assets\/brand\/SEV7N%20FOLD%20white%20with%20word%20mark\.png"/);
   assert.match(html, /id="authModal"/);
   assert.match(html, /id="exportCard"/);
+  assert.doesNotMatch(html, /gemini-api-key/);
+  assert.match(html, /id="chatRegistration"/);
+  assert.match(html, /id="chatLevel"/);
+  assert.match(html, /id="adminMaterialsTab"/);
+  assert.match(html, /id="adminLevelSelect"/);
+  assert.match(html, /id="adminCourseSelect"/);
+  assert.match(html, /id="adminMaterialText"/);
   assert.match(html, /CONGRATULATIONS!/);
   assert.match(html, /BUILD STRONGER BRANDS\. CREATE REAL VALUE\./);
   assert.match(html, /STRATEGY <span>•<\/span> DESIGN <span>•<\/span> TECHNOLOGY/);
@@ -139,6 +154,7 @@ test("production output keeps the dark branding and compiles student results int
   const contentSecurityPolicy = vercel.headers[0].headers.find((header) => header.key === "Content-Security-Policy").value;
   assert.match(contentSecurityPolicy, /script-src 'self' https:\/\/cdn\.jsdelivr\.net https:\/\/unpkg\.com/);
   assert.match(contentSecurityPolicy, /connect-src 'self' https:\/\/fdutgltyptcqeyajsnua\.supabase\.co/);
+  assert.doesNotMatch(contentSecurityPolicy, /generativelanguage\.googleapis\.com/);
   assert.match(app, /function normalizeRegistration/);
   assert.match(app, /function gradeForScore/);
   assert.ok(lookupMatch, "The production app contains its compiled results lookup.");
@@ -207,6 +223,11 @@ test("students can look up and view their compiled results in the production app
 
     append(...children) {
       this.children.push(...children);
+    }
+
+    querySelector(selector) {
+      if (selector === "p") return this.children.find((child) => child.tagName === "P");
+      return undefined;
     }
 
     replaceChildren(...children) {
@@ -412,8 +433,10 @@ test("students can look up and view their compiled results in the production app
     getElementById(id) {
       return this.querySelector(`#${id}`);
     },
-    createElement() {
-      return new Element();
+    createElement(tagName) {
+      const element = new Element();
+      element.tagName = tagName.toUpperCase();
+      return element;
     },
     createElementNS() {
       return new Element();
@@ -426,11 +449,13 @@ test("students can look up and view their compiled results in the production app
   const app = fs.readFileSync(path.join(output, "assets/js/app.js"), "utf8")
     .replace(/const SUPABASE_ANON_KEY = .*;/, 'const SUPABASE_ANON_KEY = "header.payload.signature";');
   let insertResponse = { error: null };
-  const insertedOptIns = [];
+  const savedOptIns = [];
+  const ragCalls = [];
+  const geminiRequests = [];
   const studyStorage = new Map();
   const runtime = {
     document,
-    console: { error() {} },
+    console: { error() {}, info() {}, warn() {} },
     window: {
       print() {},
       location: { origin, pathname: "/" },
@@ -452,17 +477,31 @@ test("students can look up and view their compiled results in the production app
             from(table) {
               assert.equal(table, "whatsapp_optins");
               return {
-                async insert(rows) {
-                  insertedOptIns.push(...rows);
+                async upsert(row, options) {
+                  savedOptIns.push({ row, options });
                   return insertResponse;
                 },
               };
+            },
+            async rpc(name, args) {
+              ragCalls.push({ name, args });
+              return { data: [{ content: "Retrieved notes for this course." }], error: null };
             },
           };
         },
       },
     },
-    fetch: async () => ({ ok: true, json: async () => [] }),
+    fetch: async (url, options) => {
+      if (String(url) === "/api/dr-eco") {
+        geminiRequests.push({ url, body: JSON.parse(options.body) });
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ candidates: [{ content: { parts: [{ text: "Gemini RAG response." }] } }] }),
+        };
+      }
+      return { ok: true, json: async () => [] };
+    },
   };
   vm.runInNewContext(app, runtime);
 
@@ -494,8 +533,23 @@ test("students can look up and view their compiled results in the production app
   elements.get("#navChat").listeners.click();
   elements.get("#chatInput").value = "Explain peak-load pricing";
   elements.get("#chatForm").listeners.submit({ preventDefault() {} });
-  assert.match(elements.get("#chatMessages").children.at(-1).children[0].textContent, /Peak-load pricing charges more/);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(elements.get("#chatMessages").children.at(-1).children[0].textContent, "Gemini RAG response.");
+  assert.equal(ragCalls.length, 1);
+  assert.equal(ragCalls[0].name, "match_course_materials");
+  assert.equal(ragCalls[0].args.match_course, "ECO 128");
+  assert.equal(ragCalls[0].args.match_level, "100L");
+  assert.equal(ragCalls[0].args.match_count, 3);
+  assert.equal(geminiRequests[0].url, "/api/dr-eco");
+  assert.match(geminiRequests[0].body.contents[0].parts[0].text, /Retrieved notes for this course/);
   assert.equal(elements.get("#vFuel").textContent, "83/100");
+  elements.get("#chatRegistration").value = "24/SS/EC/071";
+  elements.get("#chatRegistration").listeners.input();
+  assert.equal(elements.get("#chatLevel").textContent, "Detected level: 200L");
+  assert.equal(elements.get("#chatCourse").value, "ECO 211");
+  elements.get("#adminLevelSelect").value = "300L";
+  elements.get("#adminLevelSelect").listeners.change();
+  assert.equal(elements.get("#adminCourseSelect").children[0].value, "ECO 311");
   elements.get("#questionCount").value = "10";
   elements.get("#openTest").listeners.click();
   assert.equal(elements.get("#tdr").hidden, false);
@@ -588,18 +642,24 @@ test("students can look up and view their compiled results in the production app
   whatsappInput.value = "bad-number";
   await optInForm.listeners.submit(submittedEvent);
   assert.equal(elements.get("#authModal").hidden, false);
-  assert.match(elements.get("#whatsapp-status").textContent, /valid WhatsApp number/);
+  assert.match(elements.get("#whatsapp-status").textContent, /valid Nigerian mobile number/);
   assert.equal(elements.get("#poster-wrapper").hidden, true);
   whatsappInput.value = "08012345678";
   await optInForm.listeners.submit(submittedEvent);
   assert.match(elements.get("#whatsapp-status").textContent, /agree to the WhatsApp/);
-  assert.equal(insertedOptIns.length, 0);
+  assert.equal(savedOptIns.length, 0);
   whatsappConsent.checked = true;
   insertResponse = { error: { message: "insert denied" } };
   await optInForm.listeners.submit(submittedEvent);
-  assert.equal(elements.get("#authModal").hidden, false);
-  assert.equal(elements.get("#poster-wrapper").hidden, true);
-  assert.match(elements.get("#whatsapp-status").textContent, /couldn't save your opt-in/);
+  assert.equal(elements.get("#authModal").hidden, true);
+  assert.equal(elements.get("#poster-wrapper").hidden, false);
+  assert.match(elements.get("#results-status").textContent, /card was created, but the WhatsApp reminder opt-in could not be saved/);
+
+  elements.get("#dismiss-card").listeners.click();
+  const retryCardButton = elements.get("#results-table").children[3].children[6].children[0];
+  retryCardButton.listeners.click({ currentTarget: retryCardButton });
+  whatsappInput.value = "08012345678";
+  whatsappConsent.checked = true;
   insertResponse = { error: null };
   await optInForm.listeners.submit(submittedEvent);
   assert.equal(elements.get("#authModal").hidden, true);
@@ -611,13 +671,19 @@ test("students can look up and view their compiled results in the production app
   assert.equal(elements.get("#gradeAsset").src, "/assets/brand/target.png");
   assert.equal(whatsappInput.value, "");
   assert.equal(whatsappConsent.checked, false);
-  assert.deepEqual(JSON.parse(JSON.stringify(insertedOptIns[1])), {
-    reg_number: "25/SS/EC/001",
-    full_name: "Godspower Esther Gift",
-    whatsapp_number: "08012345678",
-    course_code: "ECO 127",
-    grade: "B",
+  assert.equal(savedOptIns.length, 2);
+  assert.deepEqual(JSON.parse(JSON.stringify(savedOptIns[1])), {
+    row: {
+      phone_number: "2348012345678",
+      whatsapp_number: "2348012345678",
+      reg_number: "25/SS/EC/001",
+      full_name: "Godspower Esther Gift",
+      streak_count: 6,
+      opted_in: true,
+    },
+    options: { onConflict: "phone_number" },
   });
+
   elements.get("#dismiss-card").listeners.click();
   assert.equal(elements.get("#poster-wrapper").hidden, true);
 
@@ -674,6 +740,79 @@ test("students can look up and view their compiled results in the production app
   assert.equal(elements.get("#adminPanel").hidden, true);
 });
 
+test("Gemini proxy keeps its key server-side and rejects invalid requests", async () => {
+  const oldApiKey = process.env.GEMINI_API_KEY;
+  const oldFetch = global.fetch;
+  const makeRequest = (overrides = {}) => ({
+    method: "POST",
+    headers: { origin: "https://fold-book.example", host: "fold-book.example" },
+    body: {
+      system_instruction: { parts: [{ text: "Tutor the student." }] },
+      contents: [{ role: "user", parts: [{ text: "Explain demand." }] }],
+    },
+    ...overrides,
+  });
+  const invoke = async (request) => {
+    const response = {
+      headers: {},
+      status: 0,
+      writeHead(status, headers) {
+        this.status = status;
+        Object.assign(this.headers, headers);
+      },
+      setHeader(name, value) {
+        this.headers[name] = value;
+      },
+      end(body) {
+        this.body = body;
+      },
+    };
+    await drEcoHandler(request, response);
+    return { ...response, json: JSON.parse(response.body) };
+  };
+
+  try {
+    delete process.env.GEMINI_API_KEY;
+    const notConfigured = await invoke(makeRequest());
+    assert.equal(notConfigured.status, 503);
+    assert.match(notConfigured.json.error, /GEMINI_API_KEY/);
+
+    const wrongOrigin = await invoke(makeRequest({
+      headers: { origin: "https://attacker.example", host: "fold-book.example" },
+    }));
+    assert.equal(wrongOrigin.status, 403);
+
+    process.env.GEMINI_API_KEY = "server-only-test-key";
+    let upstreamUrl;
+    let upstreamBody;
+    global.fetch = async (url, options) => {
+      upstreamUrl = String(url);
+      upstreamBody = JSON.parse(options.body);
+      return {
+        ok: true,
+        status: 200,
+        async text() {
+          return JSON.stringify({ candidates: [{ content: { parts: [{ text: "Answer." }] } }] });
+        },
+      };
+    };
+    const success = await invoke(makeRequest());
+    assert.equal(success.status, 200);
+    assert.match(upstreamUrl, /gemini-1\.5-flash:generateContent\?key=server-only-test-key/);
+    assert.equal(upstreamBody.contents[0].parts[0].text, "Explain demand.");
+    assert.doesNotMatch(JSON.stringify(success.json), /server-only-test-key/);
+
+    const invalidPayload = await invoke(makeRequest({ body: { contents: [] } }));
+    assert.equal(invalidPayload.status, 400);
+    const oversized = await invoke(makeRequest({ body: "x".repeat(24 * 1024 + 1) }));
+    assert.equal(oversized.status, 413);
+  } finally {
+    global.fetch = oldFetch;
+    if (oldApiKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = oldApiKey;
+  }
+});
+
 test("production preview serves public pages but keeps raw CSV and source files out of the site", async () => {
   for (const relativePath of publicFiles) {
     const requestPath = relativePath.split("/").map((segment) => encodeURIComponent(segment)).join("/");
@@ -697,4 +836,15 @@ test("production preview serves public pages but keeps raw CSV and source files 
   const appText = await compiledApp.text();
   assert.match(appText, /const RESULT_LOOKUP = \{/);
   assert.match(appText, /Godspower Esther Gift/);
+
+  const apiResponse = await fetch(`${origin}/api/dr-eco`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: origin },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: "Tutor." }] },
+      contents: [{ role: "user", parts: [{ text: "Explain demand." }] }],
+    }),
+  });
+  assert.equal(apiResponse.status, 503);
+  assert.match((await apiResponse.json()).error, /GEMINI_API_KEY/);
 });

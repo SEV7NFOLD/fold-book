@@ -730,6 +730,10 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .course-chat-select { grid-area: course; min-width: 0; }
 .course-chat-select select { width: 100%; }
 .chat-header > .voice-toggle { grid-area: voice; white-space: nowrap; }
+.chat-routing { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 15px 0 0; }
+.chat-routing label { display: grid; gap: 5px; color: var(--fb-color-muted); font-size: 12px; }
+.chat-routing input { min-height: 38px; padding: 0 10px; border: 2px solid var(--fb-color-border); border-radius: 10px; background: var(--fb-color-surface-2); color: var(--fb-color-text); }
+.chat-routing p { margin: 0 0 10px; color: var(--fb-color-lime); font: 12px var(--fb-font-mono); }
 .course-chat-select select, .test-controls select { min-height: 38px; border: 2px solid var(--fb-color-border); border-radius: 10px; background: var(--fb-color-surface-2); color: var(--fb-color-text); }
 .voice-toggle, .chat-icon-button { min-height: 40px; border: 1px solid var(--fb-color-border); border-radius: 10px; background: var(--fb-color-surface-2); color: var(--fb-color-text); }
 .voice-toggle[aria-pressed="true"] { border-color: var(--fb-color-purple); background: var(--fb-color-purple); color: #fff; }
@@ -863,6 +867,15 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .results-help { font-size: 12px; }
 .results-status { color: var(--fb-color-lime); }
 .result-panel, .admin-panel { border: 1px solid var(--fb-color-border); border-radius: 16px; background: var(--fb-color-surface); }
+.admin-materials { display: grid; gap: 10px; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--fb-color-border); }
+.admin-materials h3 { margin: 0; font-size: 18px; }
+.admin-materials-intro { margin: 0 0 4px; color: var(--fb-color-muted); font-size: 13px; line-height: 1.6; }
+.admin-material-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.admin-material-fields > div, .admin-materials > label { display: grid; gap: 6px; color: var(--fb-color-text-subtle); font-size: 13px; }
+.admin-material-control { width: 100%; min-height: 42px; padding: 9px 11px; border: 2px solid var(--fb-color-border); border-radius: 10px; background: var(--fb-color-surface-2); color: var(--fb-color-text); font: inherit; }
+textarea.admin-material-control { min-height: 140px; resize: vertical; }
+.admin-material-submit { width: 100%; margin-top: 4px; }
+.admin-material-status { min-height: 20px; margin: 0; color: var(--fb-color-lime); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 .result-panel-heading { padding: 16px; border-color: var(--fb-color-border); }
 .result-panel-heading h3 { font-size: 18px; font-weight: 700; }
 .result-registration, .result-summary { color: var(--fb-color-muted); font-size: 12px; }
@@ -940,6 +953,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   .course-chat-select { width: 100%; }
   .course-chat-select select, .chat-header > .voice-toggle { width: 100%; min-width: 0; }
   .chat-header > .voice-toggle { min-height: 48px; padding: 0 8px; white-space: normal; }
+  .admin-material-fields { grid-template-columns: 1fr; }
   .chat-messages { min-height: 250px; max-height: 45vh; padding: 12px; }
   .chat-message { max-width: 92%; }
   .chat-composer { flex-wrap: wrap; }

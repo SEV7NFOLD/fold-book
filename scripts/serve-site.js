@@ -3,6 +3,7 @@
 const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
+const drEcoHandler = require("../api/dr-eco.js");
 
 const projectRoot = path.join(__dirname, "..");
 const servingBuiltSite = process.argv.includes("--built");
@@ -49,13 +50,18 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 }
 
 const server = http.createServer((request, response) => {
+  const pathname = new URL(request.url, `http://${host}:${port}`).pathname;
+  if (pathname === "/api/dr-eco") {
+    void drEcoHandler(request, response);
+    return;
+  }
+
   if (request.method !== "GET" && request.method !== "HEAD") {
     response.writeHead(405, { Allow: "GET, HEAD", "Content-Type": "text/plain; charset=utf-8" });
     response.end("Method not allowed.");
     return;
   }
 
-  const pathname = new URL(request.url, `http://${host}:${port}`).pathname;
   if (pathname === "/assets/lottie/manifest.json" && !servingBuiltSite) {
     const manifest = fs.readdirSync(lottieDirectory, { withFileTypes: true })
       .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".json"))

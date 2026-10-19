@@ -1,6 +1,54 @@
 "use strict";
 
 const RESULT_LOOKUP = null;
+const UNIUYO_COURSE_CATALOG = {
+  "100L": [
+    { code: "ECO 128", title: "Transportation Economics", units: 3 },
+    { code: "ECO 122", title: "Introductory Statistics II", units: 3 },
+    { code: "ECO 123", title: "Introductory Mathematics II", units: 3 },
+  ],
+  "200L": [
+    { code: "ECO 211", title: "Microeconomic Theory I", units: 3 },
+    { code: "ECO 221", title: "Macroeconomic Theory I", units: 3 },
+  ],
+  "300L": [
+    { code: "ECO 311", title: "Advanced Microeconomics", units: 3 },
+    { code: "ECO 321", title: "Introductory Econometrics", units: 3 },
+  ],
+  "400L": [
+    { code: "ECO 411", title: "Advanced Econometrics", units: 3 },
+    { code: "ECO 421", title: "Applied Economics & Project", units: 6 },
+  ],
+};
+
+function detectStudentLevel(regNo) {
+  const yearMatch = typeof regNo === "string" ? regNo.match(/^(\d{2})\//) : null;
+  if (!yearMatch) return "100L";
+
+  const entryYear = Number.parseInt(yearMatch[1], 10);
+  const currentAcademicYearShort = 26;
+  const yearDiff = currentAcademicYearShort - entryYear;
+  if (yearDiff <= 1) return "100L";
+  if (yearDiff === 2) return "200L";
+  if (yearDiff === 3) return "300L";
+  return "400L";
+}
+
+function coursesForLevel(level) {
+  return UNIUYO_COURSE_CATALOG[level] || UNIUYO_COURSE_CATALOG["100L"];
+}
+
+function updateAdminCourseDropdown() {
+  const levelSelect = document.querySelector("#adminLevelSelect");
+  const courseSelect = document.querySelector("#adminCourseSelect");
+  if (!levelSelect || !courseSelect) return;
+  courseSelect.replaceChildren(...coursesForLevel(levelSelect.value).map((course) => {
+    const option = document.createElement("option");
+    option.value = course.code;
+    option.textContent = `${course.code} - ${course.title}`;
+    return option;
+  }));
+}
 
 const STUDY_MODULES = [
   {
@@ -159,6 +207,31 @@ const DEFAULT_STUDY_PROGRESS = {
 };
 let currentCourse = "ECO 128";
 let activeModules = STUDY_MODULES;
+let currentStudentLevel = "100L";
+let chatCourseCode = "ECO 128";
+
+function updateChatCourseDropdown(preferredCourse = chatCourseCode) {
+  const courseSelect = document.querySelector("#chatCourse");
+  if (!courseSelect) return;
+  const courses = coursesForLevel(currentStudentLevel);
+  courseSelect.replaceChildren(...courses.map((course) => {
+    const option = document.createElement("option");
+    option.value = course.code;
+    option.textContent = course.code;
+    return option;
+  }));
+  chatCourseCode = courses.some((course) => course.code === preferredCourse)
+    ? preferredCourse
+    : courses[0].code;
+  courseSelect.value = chatCourseCode;
+}
+
+function setStudentRegistration(registration) {
+  currentStudentLevel = detectStudentLevel(registration);
+  const levelStatus = document.querySelector("#chatLevel");
+  if (levelStatus) levelStatus.textContent = `Detected level: ${currentStudentLevel}`;
+  updateChatCourseDropdown(chatCourseCode);
+}
 
 function freshStudyProgress() {
   return {
@@ -623,7 +696,6 @@ function setCourse(course) {
   studyProgress.completed = [...studyProgress.courseCompleted[course]];
   document.querySelector("#courseCodeLabel").textContent = `${course} · STUDY PATH`;
   document.querySelector("#courseTitle").textContent = course === "ECO 128" ? "Transportation Economics" : "Statistics";
-  document.querySelector("#chatCourse").value = course;
   for (const button of document.querySelectorAll(".course-choice")) {
     const selected = button.dataset.course === course;
     button.classList.toggle("is-selected", selected);
@@ -639,7 +711,8 @@ function setCourse(course) {
 function syncCourseControls() {
   document.querySelector("#courseCodeLabel").textContent = `${currentCourse} · STUDY PATH`;
   document.querySelector("#courseTitle").textContent = currentCourse === "ECO 128" ? "Transportation Economics" : "Statistics";
-  document.querySelector("#chatCourse").value = currentCourse;
+  chatCourseCode = currentCourse;
+  updateChatCourseDropdown(currentCourse);
   for (const button of document.querySelectorAll(".course-choice")) {
     const selected = button.dataset.course === currentCourse;
     button.classList.toggle("is-selected", selected);
@@ -650,7 +723,10 @@ function syncCourseControls() {
 for (const button of document.querySelectorAll(".course-choice")) {
   button.addEventListener("click", () => setCourse(button.dataset.course));
 }
-document.querySelector("#chatCourse").addEventListener("change", (event) => setCourse(event.currentTarget.value));
+document.querySelector("#chatCourse").addEventListener("change", (event) => {
+  chatCourseCode = event.currentTarget.value;
+  if (MODULES_BY_COURSE[chatCourseCode] && chatCourseCode !== currentCourse) setCourse(chatCourseCode);
+});
 
 const mascotFiles = {
   person: ["person-02-breathing.json"],
@@ -726,21 +802,6 @@ function renderMascot(mood, containerId) {
   });
 }
 
-const CHAT_ANSWERS = {
-  "ECO 128": [
-    { match: /peak.?load|congestion|peak pricing/i, answer: "Peak-load pricing charges more during periods when demand strains available capacity. It can spread trips across time and help travellers face some of the congestion cost they impose." },
-    { match: /derived demand|transport demand/i, answer: "Transport demand is usually derived: people travel because they want to reach work, school, markets, or another activity. The trip is a means to an end." },
-    { match: /externalit|pollution|traffic delay/i, answer: "A negative transport externality is a cost imposed on others, such as congestion delay, noise, or pollution, that is not fully reflected in the traveller's private cost." },
-    { match: /cost|scale/i, answer: "Transport costs include vehicles, labour, fuel, infrastructure, and time. When the same operating cost is spread across more passengers, average cost per passenger may fall." },
-  ],
-  "ECO 122": [
-    { match: /mean|average/i, answer: "The arithmetic mean is the sum of all observations divided by the number of observations. Check the units and watch for extreme values." },
-    { match: /median|mode/i, answer: "The median is the middle value after ordering the data; the mode is the most frequent value. The median is often less sensitive to outliers." },
-    { match: /sample|population/i, answer: "A population is the full group being studied. A sample is the subset observed to draw conclusions about that group." },
-    { match: /range|dispersion|variance|standard deviation/i, answer: "Dispersion describes how spread out observations are. The range is maximum minus minimum; variance and standard deviation use deviations around the mean." },
-  ],
-};
-
 function appendChatMessage(text, kind) {
   const article = document.createElement("article");
   const paragraph = document.createElement("p");
@@ -756,24 +817,60 @@ function appendChatMessage(text, kind) {
   }
   chatMessages.append(article);
   chatMessages.scrollTop = chatMessages.scrollHeight;
+  return article;
 }
 
-function answerFromDrEco(question) {
-  if (/what.?s on this week|this week/i.test(question)) {
-    return `This ${currentCourse} path has ${activeModules.length} short modules. Start with “${activeModules[0].title}” and work through the nodes in order.`;
+async function callGeminiRAG(userMessage, courseCode, level) {
+  let contextText = "";
+  if (supabaseClient) {
+    try {
+      const { data: matchedSegments, error } = await supabaseClient.rpc("match_course_materials", {
+        match_course: courseCode,
+        match_level: level,
+        match_count: 3,
+      });
+      if (error) throw error;
+      if (Array.isArray(matchedSegments)) {
+        contextText = matchedSegments
+          .filter((segment) => segment && typeof segment.content === "string")
+          .map((segment) => segment.content)
+          .join("\n\n")
+          .slice(0, 12000);
+      }
+    } catch (error) {
+      console.warn("Course material retrieval failed; continuing without retrieved notes:", error);
+    }
+  } else {
+    console.warn("Supabase is not configured; Dr. Eco is continuing without retrieved course notes.");
   }
-  if (/generate|quiz|10.?q/i.test(question)) {
-    return "Let’s practise with the built-in quiz. Choose 5, 10, or 20 questions and use the feedback to review each answer.";
+
+  const systemInstruction = `You are Dr. Eco, the official AI Study Buddy for the UNIUYO Department of Economics. Tutor a ${level} student in ${courseCode}. Use the supplied course notes where relevant. If the notes do not cover a point, say so and provide clearly identified general guidance rather than inventing course-specific facts. Include a concise UNIUYO exam or continuous-assessment marking tip when appropriate.`;
+  const prompt = `Level: ${level}\nCourse: ${courseCode}\nUNIUYO course notes:\n${contextText || "(No matching course notes were found.)"}\n\nQuestion: ${userMessage}`;
+  const response = await fetch("/api/dr-eco", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: systemInstruction }] },
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(`Gemini request failed (${response.status}): ${data.error?.message || response.statusText}`);
   }
-  const match = (CHAT_ANSWERS[currentCourse] || []).find((item) => item.match.test(question));
-  return match
-    ? match.answer
-    : `For ${currentCourse}, connect the concept to a clear definition, explain the mechanism, and give a relevant example. Try asking about ${currentCourse === "ECO 128" ? "derived demand, peak-load pricing, or external costs" : "the mean, samples, or dispersion"}.`;
+  const answer = data.candidates?.[0]?.content?.parts
+    ?.map((part) => part.text)
+    .filter((text) => typeof text === "string")
+    .join("\n")
+    .trim();
+  if (!answer) throw new Error("Gemini returned no text for this response.");
+  return answer;
 }
 
-function submitChatQuestion(question) {
+let chatRequestInProgress = false;
+async function submitChatQuestion(question) {
   const cleaned = question.trim();
-  if (!cleaned) return;
+  if (!cleaned || chatRequestInProgress) return;
   const hasDemoPass = studyProgress.demoPassExpiresAt > Date.now();
   if (!hasDemoPass && studyProgress.fuel < 2) {
     document.querySelector("#fuelStatus").textContent = "Your demo fuel is empty. Open the fuel panel to see the pass simulations.";
@@ -781,24 +878,34 @@ function submitChatQuestion(question) {
     return;
   }
   appendChatMessage(cleaned, "user");
+  chatRequestInProgress = true;
   if (!hasDemoPass) studyProgress.fuel = Math.max(0, studyProgress.fuel - 2);
   saveStudyProgress();
   updateFuelDisplay();
-  const answer = answerFromDrEco(cleaned);
-  appendChatMessage(answer, "assistant");
-  sfx.msg();
-  if (/generate|quiz|10.?q/i.test(cleaned)) {
-    testState.index = 0;
-    testState.count = 10;
-    testState.hearts = 3;
-    testDrawer.hidden = false;
-    renderTestQuestion();
+  const responseMessage = appendChatMessage("Checking the course materials…", "assistant");
+  try {
+    const answer = await callGeminiRAG(cleaned, chatCourseCode, currentStudentLevel);
+    responseMessage.querySelector("p").textContent = answer;
+    sfx.msg();
+    if (/generate|quiz|10.?q/i.test(cleaned)) {
+      testState.index = 0;
+      testState.count = 10;
+      testState.hearts = 3;
+      testDrawer.hidden = false;
+      renderTestQuestion();
+    }
+  } catch (error) {
+    console.error("Dr. Eco could not answer the question:", error);
+    responseMessage.querySelector("p").textContent = `Dr. Eco could not respond: ${error.message}`;
+  } finally {
+    chatRequestInProgress = false;
   }
 }
 
 const chatMessages = document.querySelector("#chatMessages");
 document.querySelector("#chatForm").addEventListener("submit", (event) => {
   event.preventDefault();
+  if (chatRequestInProgress) return;
   const input = document.querySelector("#chatInput");
   submitChatQuestion(input.value);
   input.value = "";
@@ -1010,6 +1117,7 @@ if (!SUPABASE_ANON_KEY_VALID) {
 
 const resultsForm = document.querySelector("#lookupForm");
 const registrationInput = document.querySelector("#searchRegNo");
+const chatRegistrationInput = document.querySelector("#chatRegistration");
 const fullNameInput = document.querySelector("#searchFullName");
 const resultsStatus = document.querySelector("#results-status");
 const resultsPanel = document.querySelector("#results-panel");
@@ -1036,8 +1144,69 @@ const cardGrade = document.querySelector("#cardGrade");
 const cardScore = document.querySelector("#cardScore");
 const cardRemark = document.querySelector("#cardRemark");
 const cardAsset = document.querySelector("#gradeAsset");
+const adminLevelSelect = document.querySelector("#adminLevelSelect");
+const adminCourseSelect = document.querySelector("#adminCourseSelect");
+const adminMaterialTitle = document.querySelector("#adminMaterialTitle");
+const adminMaterialText = document.querySelector("#adminMaterialText");
+const adminMaterialStatus = document.querySelector("#adminMaterialStatus");
+const adminMaterialSubmit = document.querySelector("#adminMaterialSubmit");
 let activeCardContext = null;
 let verificationTrigger = null;
+
+async function handleIndexMaterialSubmit() {
+  const level = adminLevelSelect.value;
+  const courseCode = adminCourseSelect.value;
+  const title = adminMaterialTitle.value.trim();
+  const text = adminMaterialText.value.trim();
+
+  if (!title || !text || !coursesForLevel(level).some((course) => course.code === courseCode)) {
+    sfx.no();
+    adminMaterialStatus.textContent = "Choose a valid level and course, and fill in both the title and course content.";
+    return;
+  }
+  if (!supabaseClient) {
+    sfx.no();
+    adminMaterialStatus.textContent = "Supabase is unavailable or misconfigured. Material was not saved.";
+    console.error("Supabase client is unavailable; course material was not indexed.");
+    return;
+  }
+
+  adminMaterialSubmit.disabled = true;
+  adminMaterialStatus.textContent = "Indexing content into the course materials table...";
+  try {
+    const { error } = await supabaseClient.from("course_materials").insert([{
+      level,
+      course_code: courseCode,
+      title,
+      content: text,
+    }]);
+    if (error) throw error;
+
+    sfx.win();
+    adminMaterialStatus.textContent = `Successfully indexed "${title}" under ${level} (${courseCode}).`;
+    adminMaterialTitle.value = "";
+    adminMaterialText.value = "";
+  } catch (error) {
+    sfx.no();
+    console.error("Course material insert failed:", error);
+    adminMaterialStatus.textContent = `Error saving material: ${error.message || "Supabase request failed."}`;
+  } finally {
+    adminMaterialSubmit.disabled = false;
+  }
+}
+
+adminLevelSelect.addEventListener("change", updateAdminCourseDropdown);
+adminMaterialSubmit.addEventListener("click", handleIndexMaterialSubmit);
+updateAdminCourseDropdown();
+chatRegistrationInput.addEventListener("input", () => {
+  registrationInput.value = chatRegistrationInput.value;
+  setStudentRegistration(chatRegistrationInput.value.trim().toUpperCase());
+});
+registrationInput.addEventListener("input", () => {
+  chatRegistrationInput.value = registrationInput.value;
+  setStudentRegistration(registrationInput.value.trim().toUpperCase());
+});
+setStudentRegistration(chatRegistrationInput.value);
 
 function normalizeRegistration(value) {
   const registration = value.trim().toUpperCase().replace(/\s+/g, "");
@@ -1247,14 +1416,46 @@ function renderAdminDirectory(filter = "") {
   resultsStatus.textContent = `${adminResults.children.length} broadsheet record${adminResults.children.length === 1 ? "" : "s"} available in this static preview.`;
 }
 
+function normalizeWhatsAppPhone(phoneNumber) {
+  const digits = phoneNumber.replace(/\D/g, "");
+  const formattedPhone = digits.startsWith("0") ? `234${digits.slice(1)}` : digits;
+  return /^234[789]\d{9}$/.test(formattedPhone) ? formattedPhone : "";
+}
+
+async function saveWhatsAppOptIn(phoneNumber, regNumber, fullName) {
+  if (!phoneNumber) return false;
+
+  try {
+    const formattedPhone = normalizeWhatsAppPhone(phoneNumber);
+    if (!formattedPhone) throw new Error("Enter a valid Nigerian mobile number.");
+    if (!supabaseClient) throw new Error("The opt-in service is unavailable.");
+
+    const { error } = await supabaseClient
+      .from("whatsapp_optins")
+      .upsert({
+        phone_number: formattedPhone,
+        whatsapp_number: formattedPhone,
+        reg_number: regNumber,
+        full_name: fullName,
+        streak_count: studyProgress.streak || 1,
+        opted_in: true,
+      }, { onConflict: "phone_number" });
+    if (error) throw error;
+    console.info("WhatsApp number saved for daily study reminders.");
+    return true;
+  } catch (error) {
+    console.warn("WhatsApp opt-in error:", error.message);
+    return false;
+  }
+}
+
 whatsappForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!activeCardContext) return;
 
   const whatsappNumber = whatsappInput.value.trim();
-  const normalizedNumber = whatsappNumber.replace(/[\s()+.-]/g, "");
-  if (!/^\d{10,15}$/.test(normalizedNumber)) {
-    whatsappStatus.textContent = "Enter a valid WhatsApp number.";
+  if (!normalizeWhatsAppPhone(whatsappNumber)) {
+    whatsappStatus.textContent = "Enter a valid Nigerian mobile number, for example 08012345678.";
     whatsappInput.focus();
     return;
   }
@@ -1264,49 +1465,19 @@ whatsappForm.addEventListener("submit", async (event) => {
     return;
   }
 
-  if (!supabaseClient) {
-    whatsappStatus.textContent = SUPABASE_ANON_KEY_VALID
-      ? "The opt-in service is unavailable. Your result card has not been created; please try again later."
-      : "The opt-in service is misconfigured. Your number was not submitted; please contact support.";
-    console.error("Supabase client is unavailable; WhatsApp opt-in was not submitted.");
-    return;
-  }
-
   const { registration, student, result } = activeCardContext;
-  const courseData = {
-    registration,
-    student,
-    result,
-  };
-  const optInRecord = {
-    reg_number: registration,
-    full_name: student.name,
-    whatsapp_number: whatsappNumber,
-    course_code: result.course,
-    grade: gradeForScore(result.score),
-  };
+  const courseData = { registration, student, result };
   const submitButton = whatsappForm.querySelector('button[type="submit"]');
   const cancelButton = document.querySelector("#cancel-whatsapp");
   const closeButton = document.querySelector("#close-verification");
   submitButton.disabled = true;
   cancelButton.disabled = true;
   closeButton.disabled = true;
-  whatsappStatus.textContent = "Saving your opt-in…";
+  whatsappStatus.textContent = "Saving your reminder opt-in…";
 
+  let optInSaved = false;
   try {
-    const { error } = await supabaseClient
-      .from("whatsapp_optins")
-      .insert([optInRecord]);
-
-    if (error) {
-      console.error("Supabase WhatsApp opt-in insert failed:", error.message);
-      whatsappStatus.textContent = "We couldn't save your opt-in, so the card has not been created. Please try again.";
-      return;
-    }
-  } catch (error) {
-    console.error("WhatsApp opt-in request failed:", error);
-    whatsappStatus.textContent = "We couldn't reach the opt-in service, so the card has not been created. Please try again.";
-    return;
+    optInSaved = await saveWhatsAppOptIn(whatsappNumber, registration, student.name);
   } finally {
     submitButton.disabled = false;
     cancelButton.disabled = false;
@@ -1314,6 +1485,9 @@ whatsappForm.addEventListener("submit", async (event) => {
   }
 
   generateSevenFoldExportCard(courseData);
+  if (!optInSaved) {
+    resultsStatus.textContent = "Your result card was created, but the WhatsApp reminder opt-in could not be saved.";
+  }
 });
 
 document.querySelector("#cancel-whatsapp").addEventListener("click", closeVerification);
@@ -1365,5 +1539,7 @@ resultsForm.addEventListener("submit", (event) => {
     return;
   }
 
+  chatRegistrationInput.value = registration;
+  setStudentRegistration(registration);
   renderResults(registration, matchedStudent);
 });
