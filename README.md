@@ -56,7 +56,7 @@ The build writes a static site to `dist/`. It copies `index.html`, every regular
 
 ## Deploy to Vercel
 
-Import this repository in Vercel and deploy. Vercel automatically detects Node.js functions under the root `api/` directory; [vercel.json](./vercel.json) keeps that detection enabled while building the static site into `dist/` and adding content-type, referrer, permissions, and content-security-policy headers. Do not add a catch-all rewrite to `index.html`: it can mask missing API routes and serve HTML in place of static assets. The Live token endpoint accepts a same-origin `POST` with the course and bounded notes context. Configure `GEMINI_API_KEY` in the Vercel project settings before relying on live Dr. Eco responses.
+Import this repository in Vercel and deploy. Vercel automatically detects Node.js functions under the root `api/` directory; [vercel.json](./vercel.json) keeps that detection enabled while building the static site into `dist/` and adding content-type, referrer, permissions, and content-security-policy headers. The CSP permits the configured Supabase API/realtime host, Gemini Live WebSockets, the required parser CDNs, and local/blob audio and PDF workers. Do not add a catch-all rewrite to `index.html`: it can mask missing API routes and serve HTML in place of static assets. The Live token endpoint accepts a same-origin `POST` with the course and bounded notes context. Configure `GEMINI_API_KEY` for Vercel Production, Preview, and Development as needed, then redeploy; missing credentials return a JSON `503` response.
 
 You can also deploy from the Vercel CLI:
 

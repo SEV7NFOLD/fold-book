@@ -228,7 +228,13 @@ test("production output keeps the dark branding and compiles student results int
   const contentSecurityPolicy = vercel.headers[0].headers.find((header) => header.key === "Content-Security-Policy").value;
   assert.match(contentSecurityPolicy, /script-src 'self' https:\/\/cdn\.jsdelivr\.net https:\/\/unpkg\.com/);
   assert.match(contentSecurityPolicy, /connect-src 'self' https:\/\/fdutgltyptcqeyajsnua\.supabase\.co/);
+  assert.match(contentSecurityPolicy, /connect-src[^;]*https:\/\/cdn\.jsdelivr\.net https:\/\/unpkg\.com/);
+  assert.match(contentSecurityPolicy, /connect-src[^;]*wss:\/\/fdutgltyptcqeyajsnua\.supabase\.co/);
   assert.match(contentSecurityPolicy, /wss:\/\/generativelanguage\.googleapis\.com/);
+  assert.match(contentSecurityPolicy, /media-src 'self' data: blob:/);
+  assert.match(contentSecurityPolicy, /worker-src 'self' blob: https:\/\/cdn\.jsdelivr\.net/);
+  assert.match(html, /id="adminStatus"/);
+  assert.match(app, /Live token endpoint returned a non-JSON response/);
   assert.match(app, /function normalizeRegistration/);
   assert.match(fs.readFileSync(path.join(root, "api/dr-eco.js"), "utf8"), /gemini-3\.5-flash-lite/);
   assert.match(fs.readFileSync(path.join(root, "api/dr-eco.js"), "utf8"), /REQUEST_TIMEOUT_MS = 30000/);

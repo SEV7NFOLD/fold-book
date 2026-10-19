@@ -1343,8 +1343,15 @@ class DrEcoVoiceLive {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ courseCode, level, courseNotes }),
       });
-      const tokenData = await tokenResponse.json();
-      if (!tokenResponse.ok) throw new Error(tokenData.error || "Could not obtain a secure Live API token.");
+      let tokenData;
+      try {
+        tokenData = await tokenResponse.json();
+      } catch {
+        throw new Error(`Live token endpoint returned a non-JSON response (HTTP ${tokenResponse.status}). Check the Vercel API deployment and routing.`);
+      }
+      if (!tokenResponse.ok) {
+        throw new Error(tokenData.error || `Could not obtain a secure Live API token (HTTP ${tokenResponse.status}).`);
+      }
       if (!tokenData.token || !tokenData.model || !tokenData.config) {
         throw new Error("Gemini Live returned an incomplete session configuration.");
       }
@@ -2265,7 +2272,9 @@ function renderAdminDirectory(filter = "") {
   adminStudentDetail.hidden = true;
   resultsPanel.hidden = true;
   posterWrapper.hidden = true;
-  adminStatus.textContent = `${adminResults.children.length} broadsheet record${adminResults.children.length === 1 ? "" : "s"} available in this static preview.`;
+  if (adminStatus) {
+    adminStatus.textContent = `${adminResults.children.length} broadsheet record${adminResults.children.length === 1 ? "" : "s"} available in this static preview.`;
+  }
 }
 
 let selectedBroadsheetFile = null;
