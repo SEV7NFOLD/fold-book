@@ -896,13 +896,16 @@ test("students can look up and view their compiled results in the production app
 
   elements.get("#adminLogout").listeners.click();
   elements.get("#launchApp").listeners.click();
-  elements.get("#authFullName").value = "Nssien";
+  elements.get("#authFullName").value = "Dr Nssien Admin";
   elements.get("#authRegNo").value = "101010";
-  elements.get("#authWhatsapp").value = "08012345678";
+  elements.get("#authWhatsapp").value = "";
   elements.get("#authMarketingConsent").checked = false;
+  const optInCountBeforeAdmin = savedOptIns.length;
   await elements.get("#appAuthForm").listeners.submit(submittedEvent);
   assert.equal(panel.hidden, true);
   assert.equal(elements.get("#adminDashboard").hidden, false);
+  assert.equal(savedOptIns.length, optInCountBeforeAdmin);
+  assert.equal(JSON.parse(studyStorage.get("foldBook.authSession")).role, "admin");
   assert.equal(elements.get("#adminResults").children.length, 114);
   elements.get("#adminSearch").value = "Godspower Esther";
   elements.get("#adminSearch").listeners.input();
@@ -913,6 +916,18 @@ test("students can look up and view their compiled results in the production app
   elements.get("#adminLogout").listeners.click();
   assert.equal(elements.get("#adminDashboard").hidden, true);
   assert.equal(elements.get("#studentApp").hidden, true);
+
+  elements.get("#launchApp").listeners.click();
+  elements.get("#authFullName").value = "Godspower Esther Gift";
+  elements.get("#authRegNo").value = "001";
+  elements.get("#authWhatsapp").value = "08012345678";
+  elements.get("#authMarketingConsent").checked = true;
+  insertResponse = { error: { message: "insert denied" } };
+  await elements.get("#appAuthForm").listeners.submit(submittedEvent);
+  assert.equal(elements.get("#studentApp").hidden, false);
+  assert.equal(elements.get("#home").hidden, false);
+  assert.match(elements.get("#accessToast").textContent, /signed in, but the WhatsApp reminder opt-in could not be saved/i);
+  assert.equal(JSON.parse(studyStorage.get("foldBook.authSession")).role, "student");
 });
 
 test("Gemini proxy keeps its key server-side and rejects invalid requests", async () => {

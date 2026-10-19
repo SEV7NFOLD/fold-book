@@ -191,7 +191,7 @@ let chatCourseCode = "ECO 128";
 let currentStudent = null;
 let isMasterAdmin = false;
 const AUTH_SESSION_KEY = "foldBook.authSession";
-const S = { isAdmin: false, student: null, level: "100L", phoneNumber: "" };
+const S = { isAdmin: false, student: null, user: null, level: "100L", phoneNumber: "" };
 let leaderboardEntries = [];
 let practiceQuestions = [];
 let mockExamQuestions = [];
@@ -575,8 +575,12 @@ function showAccessRestrictedNotice() {
   const notice = "Access Restricted: SevenFold Authorized Personnel Only";
   const authStatus = document.querySelector("#authStatus");
   if (authStatus) authStatus.textContent = notice;
+  showNotice(notice);
+}
+
+function showNotice(message) {
   const toast = document.querySelector("#accessToast");
-  toast.textContent = notice;
+  toast.textContent = message;
   toast.hidden = false;
   window.setTimeout(() => { toast.hidden = true; }, 4000);
 }
@@ -1959,6 +1963,7 @@ function signOut() {
   isMasterAdmin = false;
   S.isAdmin = false;
   S.student = null;
+  S.user = null;
   S.phoneNumber = "";
   window.localStorage.removeItem(AUTH_SESSION_KEY);
   showStage("landingView");
@@ -2011,33 +2016,23 @@ document.querySelector("#launchApp").addEventListener("click", () => {
 document.querySelector("#backToLanding").addEventListener("click", () => showStage("landingView"));
 
 const appAuthForm = document.querySelector("#appAuthForm");
-appAuthForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const name = document.querySelector("#authFullName").value.trim();
-  const rawRegistration = document.querySelector("#authRegNo").value.trim();
-  const phone = document.querySelector("#authWhatsapp").value.trim();
-  const normalizedPhone = normalizeWhatsAppPhone(phone);
-  const consent = document.querySelector("#authMarketingConsent").checked;
+async function handleAuthSubmit(fullName, regNumber, phone) {
+  const name = typeof fullName === "string" ? fullName.trim() : "";
+  const rawRegistration = typeof regNumber === "string" ? regNumber.trim() : "";
+  const rawPhone = typeof phone === "string" ? phone.trim() : "";
   const status = document.querySelector("#authStatus");
   status.textContent = "";
 
-  if (!name || !rawRegistration || !phone) {
-    status.textContent = "Enter your full name, registration number and WhatsApp phone number.";
-    return;
-  }
-  if (!normalizedPhone) {
-    status.textContent = "Enter a valid Nigerian WhatsApp number, for example 08012345678.";
-    return;
-  }
-
-  const normalizedName = normalizeNameTokens(name);
-  if (rawRegistration === "101010" && normalizedName.length === 1
-    && ["nssien", "daniel"].includes(normalizedName[0])) {
+  const loweredName = name.toLowerCase();
+  if (rawRegistration === "101010"
+    && (loweredName.includes("nssien") || loweredName.includes("daniel"))) {
     currentStudent = null;
     isMasterAdmin = true;
     S.isAdmin = true;
-    S.student = { name, registration: "101010" };
-    S.phoneNumber = normalizedPhone;
+    S.level = "400L";
+    S.phoneNumber = "";
+    S.student = { name: "SevenFold Admin", registration: "101010" };
+    S.user = { name: "SevenFold Admin", regNo: "101010", level: "400L" };
     window.localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({
       role: "admin",
       name,
@@ -2045,14 +2040,27 @@ appAuthForm.addEventListener("submit", async (event) => {
     }));
     renderAdminDirectory();
     showStage("adminDashboard");
+    sfx.win();
+    showNotice("Welcome to SevenFold Admin Portal ⚡");
     return;
   }
-  if (!consent) {
+
+  if (!name || !rawRegistration || !rawPhone) {
+    status.textContent = "Enter your full name, registration number and WhatsApp phone number.";
+    return;
+  }
+  const normalizedPhone = normalizeWhatsAppPhone(rawPhone);
+  if (!normalizedPhone) {
+    status.textContent = "Enter a valid Nigerian WhatsApp number, for example 08012345678.";
+    return;
+  }
+  if (!document.querySelector("#authMarketingConsent").checked) {
     status.textContent = "Consent is required to save this number and send study reminders.";
     document.querySelector("#authMarketingConsent").focus();
     return;
   }
 
+  const normalizedName = normalizeNameTokens(name);
   const registration = normalizeRegistration(rawRegistration);
   const student = registration && RESULT_LOOKUP && Object.hasOwn(RESULT_LOOKUP, registration)
     ? RESULT_LOOKUP[registration]
@@ -2068,12 +2076,17 @@ appAuthForm.addEventListener("submit", async (event) => {
   submitButton.disabled = true;
   status.textContent = "Saving your WhatsApp opt-in…";
   try {
-    const saved = await saveWhatsAppOptIn(phone, registration, student.name);
-    if (!saved) throw new Error("The WhatsApp opt-in could not be saved. Check the connection and try again.");
+    const saved = await saveWhatsAppOptIn(normalizedPhone, registration, student.name);
     currentStudent = { name: student.name, registration };
     isMasterAdmin = false;
     S.isAdmin = false;
     S.student = currentStudent;
+    S.user = {
+      name: student.name,
+      regNo: registration,
+      phone: normalizedPhone,
+      level: detectStudentLevel(registration),
+    };
     S.level = detectStudentLevel(registration);
     S.phoneNumber = normalizedPhone;
     currentStudentLevel = S.level;
@@ -2089,12 +2102,27 @@ appAuthForm.addEventListener("submit", async (event) => {
     showStage("studentApp");
     activateTab("home");
     void syncLeaderboardEntry();
+    if (saved) {
+      sfx.ok();
+      showNotice(`Welcome ${student.name.split(" ")[0]}! (${S.level})`);
+    } else {
+      showNotice("You're signed in, but the WhatsApp reminder opt-in could not be saved.");
+    }
   } catch (error) {
     console.error("Student onboarding failed:", error);
     status.textContent = error.message;
   } finally {
     submitButton.disabled = false;
   }
+}
+
+appAuthForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await handleAuthSubmit(
+    document.querySelector("#authFullName").value,
+    document.querySelector("#authRegNo").value,
+    document.querySelector("#authWhatsapp").value,
+  );
 });
 
 function restoreAuthSession() {
@@ -2104,10 +2132,13 @@ function restoreAuthSession() {
     if (!savedSession) return false;
     const session = JSON.parse(savedSession);
     if (session.role === "admin" && session.registration === "101010"
-      && ["nssien", "daniel"].includes(normalizeNameTokens(session.name)[0])) {
+      && typeof session.name === "string"
+      && (session.name.toLowerCase().includes("nssien") || session.name.toLowerCase().includes("daniel"))) {
       isMasterAdmin = true;
       S.isAdmin = true;
-      S.student = { name: session.name, registration: session.registration };
+      S.level = "400L";
+      S.student = { name: "SevenFold Admin", registration: session.registration };
+      S.user = { name: "SevenFold Admin", regNo: "101010", level: "400L" };
       renderAdminDirectory();
       showStage("adminDashboard");
       return true;
@@ -2125,6 +2156,12 @@ function restoreAuthSession() {
     S.student = currentStudent;
     S.level = detectStudentLevel(registration);
     S.phoneNumber = typeof session.phoneNumber === "string" ? session.phoneNumber : "";
+    S.user = {
+      name: student.name,
+      regNo: registration,
+      phone: S.phoneNumber,
+      level: S.level,
+    };
     currentStudentLevel = S.level;
     chatRegistrationInput.value = registration;
     setStudentRegistration(registration);
