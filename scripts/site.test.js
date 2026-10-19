@@ -95,6 +95,13 @@ test("production output keeps the dark branding and compiles student results int
   const vercel = JSON.parse(fs.readFileSync(path.join(root, "vercel.json"), "utf8"));
   const lookupMatch = app.match(/^const RESULT_LOOKUP = (\{.*\});$/m);
 
+  assert.equal(vercel.buildCommand, "npm run build");
+  assert.equal(vercel.outputDirectory, "dist");
+  assert.equal(Object.hasOwn(vercel, "builds"), false);
+  assert.equal(Object.hasOwn(vercel, "rewrites"), false);
+  const liveTokenHandler = fs.readFileSync(path.join(root, "api/gemini/live-token.js"), "utf8");
+  assert.match(liveTokenHandler, /module\.exports\s*=\s*async function/);
+  assert.match(liveTokenHandler, /request\.method !== "POST"/);
   assert.match(styles, /color-scheme:\s*dark\b/);
   assert.match(html, /id="searchRegNo"/);
   assert.match(html, /id="searchFullName"/);
