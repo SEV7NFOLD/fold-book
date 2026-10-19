@@ -813,6 +813,16 @@ test("Gemini proxy keeps its key server-side and rejects invalid requests", asyn
   }
 });
 
+test("WhatsApp worker disables history sync and resets logged-out auth state", () => {
+  const worker = fs.readFileSync(path.join(root, "worker/worker.js"), "utf8");
+  assert.match(worker, /fetchLatestBaileysVersion/);
+  assert.match(worker, /syncFullHistory:\s*false/);
+  assert.match(worker, /browser:\s*\["FoldBook AI",\s*"Chrome",\s*"1\.0\.0"\]/);
+  assert.match(worker, /generateHighQualityLinkPreview:\s*false/);
+  assert.match(worker, /fs\.rmSync\(AUTH_DIRECTORY,\s*\{\s*recursive:\s*true,\s*force:\s*true\s*\}\)/);
+  assert.match(worker, /statusCode === DisconnectReason\.loggedOut \|\| statusCode === 401/);
+});
+
 test("production preview serves public pages but keeps raw CSV and source files out of the site", async () => {
   for (const relativePath of publicFiles) {
     const requestPath = relativePath.split("/").map((segment) => encodeURIComponent(segment)).join("/");

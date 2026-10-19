@@ -1,14 +1,21 @@
 "use strict";
 
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require("@whiskeysockets/baileys");
+const {
+  default: makeWASocket,
+  useMultiFileAuthState,
+  DisconnectReason,
+  fetchLatestBaileysVersion,
+} = require("@whiskeysockets/baileys");
 const { createClient } = require("@supabase/supabase-js");
 const cron = require("node-cron");
 const qrcode = require("qrcode-terminal");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const FOLDBOOK_URL = process.env.FOLDBOOK_URL || "https://foldbook.app";
-const AUTH_DIRECTORY = process.env.WHATSAPP_AUTH_DIRECTORY || "auth_info_baileys";
+const AUTH_DIRECTORY = path.resolve(process.env.WHATSAPP_AUTH_DIRECTORY || "auth_info_baileys");
 const NUDGE_INTERVAL_HOURS = 20;
 const PAGE_SIZE = 500;
 const SEND_DELAY_MS = 3000;
@@ -171,10 +178,16 @@ function scheduleReconnect() {
 async function connectToWhatsApp() {
   if (shuttingDown) return;
   try {
+    const { version } = await fetchLatestBaileysVersion();
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIRECTORY);
     socket = makeWASocket({
+      version,
       auth: state,
       printQRInTerminal: false,
+      browser: ["FoldBook AI", "Chrome", "1.0.0"],
+      syncFullHistory: false,
+      markOnlineOnConnect: true,
+      generateHighQualityLinkPreview: false,
       logger: require("pino")({ level: "silent" }),
     });
     socket.ev.on("creds.update", saveCreds);
@@ -191,7 +204,9 @@ async function connectToWhatsApp() {
     socket.ev.on("connection.update", (update) => {
       const { connection, lastDisconnect, qr } = update;
       if (qr) {
-        console.log("Scan the WhatsApp QR code using the linked-devices flow:");
+        console.log("\n==================================================");
+        console.log("SCAN THIS QR CODE WITH YOUR WHATSAPP BOT PHONE:");
+        console.log("==================================================\n");
         qrcode.generate(qr, { small: true });
       }
       if (connection === "open") {
@@ -201,11 +216,18 @@ async function connectToWhatsApp() {
       } else if (connection === "close") {
         connected = false;
         const statusCode = lastDisconnect?.error?.output?.statusCode;
-        if (statusCode === DisconnectReason.loggedOut) {
-          console.error("WhatsApp logged out. Remove the saved auth state and relink the account.");
-          return;
+        const shouldResetAuth = statusCode === DisconnectReason.loggedOut || statusCode === 401;
+        socket = null;
+        console.warn(`WhatsApp connection closed (status: ${statusCode}).`);
+        if (shouldResetAuth) {
+          try {
+            fs.rmSync(AUTH_DIRECTORY, { recursive: true, force: true });
+            console.warn("Saved WhatsApp auth state removed; a fresh QR scan is required.");
+          } catch (error) {
+            console.error("Could not remove the saved WhatsApp auth state:", error.message);
+            return;
+          }
         }
-        console.warn("WhatsApp connection closed; retrying with backoff.");
         scheduleReconnect();
       }
     });
