@@ -1199,7 +1199,7 @@ async function callGeminiRAG(userMessage, courseCode, level) {
   } catch (error) {
     console.warn("Course material retrieval failed; continuing without retrieved notes:", error);
   }
-  const systemInstruction = `You are Dr. Eco, the official AI Study Buddy for the UNIUYO Department of Economics. Tutor a ${level} student in ${courseCode}. Use the supplied course notes where relevant. If the notes do not cover a point, say so and provide clearly identified general guidance rather than inventing course-specific facts. Include a concise UNIUYO exam or continuous-assessment marking tip when appropriate.`;
+  const systemInstruction = `You are Dr. Eco, a sharp, fun, and warm AI Study Companion for Economics students at the University of Uyo (UNIUYO). You are tutoring a ${level} student in ${courseCode}. Your vibe is energetic, witty, and deeply encouraging, like a brilliant senior student or favorite campus tutor who wants the student to smash their exams with an A. Keep responses punchy, conversational, and structured with clean spacing. Never sound robotic or bureaucratic; use light campus energy where appropriate. Casually include practical UNIUYO marking insights, such as what lecturers value in a strong answer. Ground course-specific claims in the supplied notes. If notes do not cover something, say so and clearly label any general guidance rather than inventing facts.`;
   const prompt = `Level: ${level}\nCourse: ${courseCode}\nUNIUYO course notes:\n${contextText || "(No matching course notes were found.)"}\n\nQuestion: ${userMessage}`;
   const response = await fetch("/api/dr-eco", {
     method: "POST",
@@ -1272,6 +1272,7 @@ let voiceCallActive = false;
 let voiceMicMuted = false;
 let voiceSpeakerEnabled = true;
 let voiceTurnInProgress = false;
+let voiceRecognitionListening = false;
 
 function speakText(text, onEnd = () => {}) {
   if (!voiceSpeakerEnabled || !("speechSynthesis" in window)
@@ -1301,7 +1302,7 @@ function setVoiceCallStatus(message) {
 }
 
 function startVoiceRecognition() {
-  if (!voiceCallActive || voiceMicMuted || voiceTurnInProgress || !voiceRecognition) return;
+  if (!voiceCallActive || voiceMicMuted || voiceTurnInProgress || voiceRecognitionListening || !voiceRecognition) return;
   try {
     voiceRecognition.start();
     setVoiceCallStatus("Listening");
@@ -1332,9 +1333,9 @@ async function handleVoiceTranscript(transcript) {
     document.querySelector("#voiceCaption").textContent = `Dr. Eco: ${answer}`;
     setVoiceCallStatus("Dr. Eco is speaking");
     voiceTurnInProgress = false;
+    startVoiceRecognition();
     speakText(answer, () => {
-      if (voiceCallActive && !voiceMicMuted) startVoiceRecognition();
-      else if (voiceCallActive) setVoiceCallStatus("Microphone muted");
+      if (voiceCallActive && voiceMicMuted) setVoiceCallStatus("Microphone muted");
     });
   } catch (error) {
     console.error("Dr. Eco voice response failed:", error);
@@ -1363,6 +1364,10 @@ function startVoiceCallSession() {
   voiceRecognition.lang = "en-US";
   voiceRecognition.interimResults = true;
   voiceRecognition.continuous = false;
+  voiceRecognition.onstart = () => {
+    voiceRecognitionListening = true;
+    if (!voiceTurnInProgress) setVoiceCallStatus("Listening");
+  };
   voiceRecognition.onresult = (event) => {
     let interimTranscript = "";
     let finalTranscript = "";
@@ -1371,9 +1376,17 @@ function startVoiceCallSession() {
       if (result.isFinal) finalTranscript += result[0].transcript;
       else interimTranscript += result[0].transcript;
     }
-    if (interimTranscript) caption.textContent = `You: ${interimTranscript}`;
+    if (interimTranscript) {
+      caption.textContent = `You: ${interimTranscript}`;
+      if (window.speechSynthesis?.speaking) {
+        window.speechSynthesis.cancel();
+        setVoiceCallStatus("Listening — Dr. Eco paused for you");
+      }
+    }
     if (finalTranscript.trim()) {
       caption.textContent = `You: ${finalTranscript.trim()}`;
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      voiceTurnInProgress = false;
       void handleVoiceTranscript(finalTranscript.trim());
     }
   };
@@ -1389,6 +1402,7 @@ function startVoiceCallSession() {
       : `Voice recognition error: ${event.error}`);
   };
   voiceRecognition.onend = () => {
+    voiceRecognitionListening = false;
     if (voiceCallActive && !voiceMicMuted && !voiceTurnInProgress) {
       window.setTimeout(startVoiceRecognition, 300);
     }
@@ -1403,7 +1417,7 @@ function toggleVoiceCallRoom(open) {
   voiceCallActive = open;
   const toggle = document.querySelector("#voiceToggle");
   toggle.setAttribute("aria-pressed", String(open));
-  toggle.textContent = open ? "🎙️ Voice call: on" : "🎙️ Voice call";
+  toggle.textContent = open ? "📞 End Dr. Eco call" : "📞 Call Dr. Eco";
   if (open) {
     voiceMicMuted = false;
     document.querySelector("#voiceMuteButton").setAttribute("aria-pressed", "false");
@@ -1418,6 +1432,7 @@ function toggleVoiceCallRoom(open) {
     voiceRecognition.stop();
     voiceRecognition = null;
   }
+  voiceRecognitionListening = false;
   if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   voiceTurnInProgress = false;
   setVoiceCallStatus("Call ended");
@@ -1498,7 +1513,7 @@ chatMessages.addEventListener("click", (event) => {
   }
   speakText(text);
 });
-document.querySelector("#voiceToggle").addEventListener("click", (event) => {
+document.querySelector("#voiceToggle").addEventListener("click", () => {
   toggleVoiceCallRoom(!voiceCallActive);
 });
 document.querySelector("#micButton").addEventListener("click", () => document.querySelector("#voiceToggle").click());
@@ -1703,7 +1718,7 @@ renderMascot("person", "chatMascot");
 renderLottieInto(document.querySelector("#streakAnimation"), "streak-flame.json", "🔥", "Daily streak");
 renderInviteProgress();
 chatMessages.replaceChildren();
-appendChatMessage("Hello! I’m Dr. Eco. Ask me about your course, or request practice questions generated from indexed notes.", "assistant");
+appendChatMessage("Hey! I’m Dr. Eco 👋 What are we tackling today? Ask me about your Economics course, or say “quiz me” and I’ll make practice questions from your indexed notes. We’ve got this!", "assistant");
 setNavigationAvailable(false);
 
 const SUPABASE_URL = "https://fdutgltyptcqeyajsnua.supabase.co";
@@ -2383,7 +2398,7 @@ function normalizeWhatsAppPhone(phoneNumber) {
   return /^234[789]\d{9}$/.test(formattedPhone) ? formattedPhone : "";
 }
 
-async function saveWhatsAppOptIn(phoneNumber, regNumber, fullName) {
+async function saveWhatsAppOptIn(phoneNumber, regNumber, fullName, { silent = false } = {}) {
   if (!phoneNumber) return false;
 
   try {
@@ -2410,7 +2425,7 @@ async function saveWhatsAppOptIn(phoneNumber, regNumber, fullName) {
     console.info("WhatsApp number saved for daily study reminders.");
     return true;
   } catch (error) {
-    console.warn("WhatsApp opt-in error:", error.message);
+    if (!silent) console.warn("WhatsApp opt-in error:", error.message);
     return false;
   }
 }
@@ -2714,7 +2729,7 @@ async function handleAuthSubmit(fullName, regNumber, phone) {
     currentStudentLevel = S.level;
     chatRegistrationInput.value = registration;
     setStudentRegistration(registration);
-    const saved = await saveWhatsAppOptIn(normalizedPhone, registration, student.name);
+    void saveWhatsAppOptIn(normalizedPhone, registration, student.name, { silent: true });
     window.localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({
       role: "student",
       name: student.name,
@@ -2729,12 +2744,8 @@ async function handleAuthSubmit(fullName, regNumber, phone) {
     renderProfile();
     activateTab("home");
     void syncLeaderboardEntry();
-    if (saved) {
-      sfx.ok();
-      showNotice(`Welcome ${student.name.split(" ")[0]}! (${S.level})`);
-    } else {
-      showNotice("You're signed in, but the WhatsApp reminder opt-in could not be saved.");
-    }
+    sfx.ok();
+    showNotice(`Welcome ${student.name.split(" ")[0]}! (${S.level})`);
   } catch (error) {
     console.error("Student onboarding failed:", error);
     status.textContent = error.message;

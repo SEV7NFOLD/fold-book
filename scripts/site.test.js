@@ -137,6 +137,7 @@ test("production output keeps the dark branding and compiles student results int
   assert.match(html, /id="leaderboardList"/);
   assert.match(html, /id="sndToggle"/);
   assert.match(html, /id="voiceCallRoom"/);
+  assert.match(html, /id="voiceToggle"[^>]*>📞 Call Dr\. Eco/);
   assert.match(html, /id="voiceCaption"/);
   assert.match(html, /id="voiceMuteButton"/);
   assert.match(html, /id="voiceSpeakerButton"/);
@@ -163,6 +164,9 @@ test("production output keeps the dark branding and compiles student results int
   assert.match(app, /function detectStudentLevel/);
   assert.match(app, /function updateAdminCourseDropdown/);
   assert.match(app, /function callGeminiRAG/);
+  assert.match(app, /sharp, fun, and warm AI Study Companion/);
+  assert.match(app, /We’ve got this!/);
+  assert.match(app, /saveWhatsAppOptIn\(normalizedPhone, registration, student\.name, \{ silent: true \}\)/);
   assert.match(app, /function generateQuestionsFromMaterials/);
   assert.match(app, /const GEMINI_MODEL = "gemini-3\.5-flash-lite"/);
   assert.doesNotMatch(app, /MOCK_EXAM_QUESTIONS|STATISTICS_MOCK_QUESTIONS|LEADERBOARD_PREVIEW/);
@@ -581,6 +585,23 @@ test("students can look up and view their compiled results in the production app
   const studyStorage = new Map();
   const audioPlays = [];
   const windowListeners = Object.create(null);
+  const spokenUtterances = [];
+  let speechCancelCount = 0;
+  const speechSynthesis = {
+    speaking: false,
+    getVoices: () => [{ lang: "en-US", name: "Google English" }],
+    cancel() {
+      speechCancelCount += 1;
+      this.speaking = false;
+    },
+    speak(utterance) {
+      this.speaking = true;
+      spokenUtterances.push(utterance);
+    },
+  };
+  class MockSpeechSynthesisUtterance {
+    constructor(text) { this.text = text; }
+  }
   class MockAudio {
     constructor(src) {
       this.src = src;
@@ -610,6 +631,8 @@ test("students can look up and view their compiled results in the production app
         vibrate() { return true; },
         clipboard: { async writeText() {} },
       },
+      speechSynthesis,
+      SpeechSynthesisUtterance: MockSpeechSynthesisUtterance,
       addEventListener(name, listener) {
         windowListeners[name] = listener;
       },
@@ -728,6 +751,7 @@ test("students can look up and view their compiled results in the production app
   assert.equal(elements.get("#adminDashboard").hidden, true);
   assert.equal(elements.get("#accessToast").hidden, true);
   assert.equal(elements.get("#chatMessages").children.length, 1);
+  assert.match(elements.get("#chatMessages").children[0].children[0].children.map((part) => part.textContent).join(""), /Hey! I’m Dr\. Eco/);
   runtime.window.location.hash = "#admin";
   windowListeners.hashchange();
   assert.equal(elements.get("#adminDashboard").hidden, true);
@@ -807,6 +831,7 @@ test("students can look up and view their compiled results in the production app
   assert.equal(ragCalls[0].args.match_level, "100L");
   assert.equal(ragCalls[0].args.match_count, 3);
   assert.equal(geminiRequests[0].url, "/api/dr-eco");
+  assert.match(geminiRequests[0].body.system_instruction.parts[0].text, /energetic, witty, and deeply encouraging/);
   assert.match(geminiRequests[0].body.contents[0].parts[0].text, /Retrieved notes for this course/);
   assert.equal(elements.get("#vFuel").textContent, "83/100");
   let activeRecognition;
@@ -823,7 +848,22 @@ test("students can look up and view their compiled results in the production app
   await new Promise((resolve) => setImmediate(resolve));
   assert.match(elements.get("#voiceCaption").textContent, /^Dr\. Eco: Gemini \*\*RAG\*\* response\./);
   assert.equal(ragCalls.length, 2);
+  assert.equal(spokenUtterances.at(-1).text, "Gemini RAG response.\nSecond line.");
+  activeRecognition.onresult({
+    resultIndex: 0,
+    results: [Object.assign([{ transcript: "I have a question" }], { isFinal: false })],
+  });
+  assert.equal(speechSynthesis.speaking, false);
+  assert.ok(speechCancelCount > 0);
+  activeRecognition.onresult({
+    resultIndex: 0,
+    results: [Object.assign([{ transcript: "I have a question" }], { isFinal: true })],
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(ragCalls.length, 3);
   elements.get("#voiceEndButton").listeners.click();
+  assert.equal(speechSynthesis.speaking, false);
+  assert.match(elements.get("#voiceCallStatus").textContent, /Call ended/);
   elements.get("#chatRegistration").value = "24/SS/EC/071";
   elements.get("#chatRegistration").listeners.input();
   assert.equal(elements.get("#chatLevel").textContent, "Detected level: 200L");
@@ -1083,7 +1123,7 @@ test("students can look up and view their compiled results in the production app
   await elements.get("#appAuthForm").listeners.submit(submittedEvent);
   assert.equal(elements.get("#studentApp").hidden, false);
   assert.equal(elements.get("#home").hidden, false);
-  assert.match(elements.get("#accessToast").textContent, /signed in, but the WhatsApp reminder opt-in could not be saved/i);
+  assert.match(elements.get("#accessToast").textContent, /Welcome Godspower/i);
   assert.equal(JSON.parse(studyStorage.get("foldBook.authSession")).role, "student");
   elements.get("#studentSignOut").listeners.click();
   assert.equal(elements.get("#authView").hidden, false);
