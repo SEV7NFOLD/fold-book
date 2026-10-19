@@ -1420,6 +1420,17 @@ test("Gemini Live provisions short-lived constrained tokens without exposing the
     assert.match(tokenRequest.liveConnectConstraints.config.systemInstruction.parts[0].text, /derived from the need to travel/);
     assert.doesNotMatch(JSON.stringify(result.json), /server-only-live-test-key/);
 
+    const emptyNotesResult = await invoke(makeRequest({ body: {
+      courseCode: "ECO 128",
+      level: "100L",
+      courseNotes: "",
+    } }));
+    assert.equal(emptyNotesResult.status, 200);
+    assert.equal(emptyNotesResult.json.token, "short-lived-token-value");
+    const emptyNotesInstruction = tokenRequest.liveConnectConstraints.config.systemInstruction.parts[0].text;
+    assert.match(emptyNotesInstruction, /No indexed course notes were available/);
+    assert.match(emptyNotesInstruction, /continue helpfully with general Economics guidance/);
+
     const invalidCourse = await invoke(makeRequest({ body: {
       courseCode: "select *",
       level: "100L",
