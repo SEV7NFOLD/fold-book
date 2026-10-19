@@ -152,7 +152,7 @@ test("production output keeps the dark branding and compiles student results int
     assert.ok(fs.existsSync(path.join(output, "assets", "sfx", soundFile)), `${soundFile} is copied into dist/.`);
   }
   assert.match(app, /101010/);
-  assert.match(app, /Nssien/);
+  assert.match(app, /function isMasterAdminRegistration/);
   assert.match(app, /function setCourse/);
   assert.match(app, /function detectStudentLevel/);
   assert.match(app, /function updateAdminCourseDropdown/);
@@ -989,15 +989,11 @@ test("students can look up and view their compiled results in the production app
 
   elements.get("#adminLogout").listeners.click();
   elements.get("#launchApp").listeners.click();
-  elements.get("#authFullName").value = "Unauthorized User";
+  elements.get("#authFullName").value = "";
   elements.get("#authRegNo").value = "101010";
   elements.get("#authWhatsapp").value = "";
   elements.get("#authMarketingConsent").checked = false;
   const optInCountBeforeAdmin = savedOptIns.length;
-  await elements.get("#appAuthForm").listeners.submit(submittedEvent);
-  assert.equal(elements.get("#adminDashboard").hidden, true);
-  assert.match(elements.get("#authStatus").textContent, /authorized name Nssien or Daniel/);
-  elements.get("#authFullName").value = "Nssien";
   await elements.get("#appAuthForm").listeners.submit(submittedEvent);
   assert.equal(panel.hidden, true);
   assert.equal(elements.get("#adminDashboard").hidden, false);
