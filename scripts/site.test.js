@@ -93,13 +93,25 @@ test("production output keeps the dark branding and compiles student results int
   assert.match(html, /id="results-table"/);
   assert.match(html, /id="navLearn"[^>]+data-tab="home"/);
   assert.match(html, /id="navBoard"[^>]+data-tab="board"/);
-  assert.match(html, /id="navResults"[^>]+data-tab="results"/);
   assert.match(html, /id="navChat"[^>]+data-tab="chat"/);
   assert.match(html, /id="navInvite"[^>]+data-tab="invite"/);
   assert.match(html, /id="mobileLearn"[^>]+data-tab="home"/);
-  assert.match(html, /id="navAdmin"[^>]+data-tab="admin"[^>]+hidden/);
-  assert.match(html, /id="mobileAdmin"[^>]+data-tab="admin"[^>]+hidden/);
-  assert.match(html, /<section class="admin-panel hide sec" id="admin" hidden>/);
+  assert.doesNotMatch(html, /data-tab="results"|data-tab="admin"/);
+  assert.match(html, /<section id="landingView" class="landing-view">/);
+  assert.match(html, /Verify your results instantly, then master your courses with Dr\. Eco\./);
+  assert.match(html, /id="launchApp"[^>]*>Launch FoldBook App →/);
+  assert.match(html, /<section id="authView" class="auth-view" hidden>/);
+  assert.match(html, /id="authFullName"[^>]+required/);
+  assert.match(html, /id="authRegNo"[^>]+required/);
+  assert.match(html, /id="authWhatsapp"[^>]+required/);
+  assert.match(html, /xlsx@0\.18\.5/);
+  assert.match(html, /<div class="shell" id="studentApp" hidden>/);
+  assert.match(html, /<section id="adminDashboard" class="admin-portal" hidden>/);
+  assert.match(html, /SevenFold Admin Portal/);
+  assert.match(html, /data-admin-view="broadsheets"/);
+  assert.match(html, /data-admin-view="catalog"/);
+  assert.match(html, /data-admin-view="indexer"/);
+  assert.match(html, /data-admin-view="students"/);
   assert.doesNotMatch(html, /id="adminPanel"/);
   assert.match(html, /id="home" class="learn-section hide" hidden/);
   assert.match(html, /id="results"[^>]*>/);
@@ -127,6 +139,7 @@ test("production output keeps the dark branding and compiles student results int
   assert.match(app, /function updateAdminCourseDropdown/);
   assert.match(app, /function callGeminiRAG/);
   assert.match(app, /function generateQuestionsFromMaterials/);
+  assert.match(app, /const GEMINI_MODEL = "gemini-3\.5-flash-lite"/);
   assert.doesNotMatch(app, /MOCK_EXAM_QUESTIONS|STATISTICS_MOCK_QUESTIONS|LEADERBOARD_PREVIEW/);
   assert.match(app, /match_level:\s*level/);
   assert.match(app, /fetch\("\/api\/dr-eco"/);
@@ -135,6 +148,8 @@ test("production output keeps the dark branding and compiles student results int
   assert.match(leaderboardSchema, /enable row level security/);
   assert.match(leaderboardSchema, /create table if not exists public\.student_xp/);
   assert.match(leaderboardSchema, /to anon, authenticated/);
+  assert.match(fs.readFileSync(path.join(root, "supabase/admin_dashboard.sql"), "utf8"), /create table if not exists public\.student_results/);
+  assert.match(fs.readFileSync(path.join(root, "supabase/admin_dashboard.sql"), "utf8"), /revoke all on public\.student_results from anon, authenticated/);
   assert.match(app, /from\("course_materials"\)\.insert/);
   assert.match(app, /SpeechRecognition/);
   const lottieManifest = JSON.parse(fs.readFileSync(path.join(output, "assets/lottie/manifest.json"), "utf8"));
@@ -171,7 +186,7 @@ test("production output keeps the dark branding and compiles student results int
   assert.match(contentSecurityPolicy, /connect-src 'self' https:\/\/fdutgltyptcqeyajsnua\.supabase\.co/);
   assert.doesNotMatch(contentSecurityPolicy, /generativelanguage\.googleapis\.com/);
   assert.match(app, /function normalizeRegistration/);
-  assert.match(fs.readFileSync(path.join(root, "api/dr-eco.js"), "utf8"), /gemini-2\.5-flash-lite/);
+  assert.match(fs.readFileSync(path.join(root, "api/dr-eco.js"), "utf8"), /gemini-3\.5-flash-lite/);
   assert.match(fs.readFileSync(path.join(root, "api/dr-eco.js"), "utf8"), /REQUEST_TIMEOUT_MS = 30000/);
   assert.match(app, /function gradeForScore/);
   assert.ok(lookupMatch, "The production app contains its compiled results lookup.");
@@ -282,6 +297,21 @@ test("students can look up and view their compiled results in the production app
 
   const elements = new Map([
     "#lookupForm",
+    "#studentApp",
+    "#studentMobileNav",
+    "#studentHeaderWidgets",
+    "#landingView",
+    "#authView",
+    "#launchApp",
+    "#backToLanding",
+    "#appAuthForm",
+    "#authFullName",
+    "#authRegNo",
+    "#authWhatsapp",
+    "#authMarketingConsent",
+    "#authStatus",
+    "#authSubmit",
+    "#adminDashboard",
     "#home",
     "#chat",
     "#board",
@@ -291,16 +321,10 @@ test("students can look up and view their compiled results in the production app
     "#navLearn",
     "#navBoard",
     "#navInvite",
-    "#navResults",
-    "#navAdmin",
     "#mobileLearn",
     "#mobileBoard",
     "#mobileChat",
     "#mobileInvite",
-    "#mobileResults",
-    "#mobileAdmin",
-    ".side",
-    ".bnav",
     "#learn",
     "#leaderboard",
     "#chatInput",
@@ -342,8 +366,25 @@ test("students can look up and view their compiled results in the production app
     "#yourRank",
     "#yourXp",
     "#leaderboardStatus",
-    "#admin",
+    "#adminView-broadsheets",
+    "#adminView-catalog",
+    "#adminView-indexer",
+    "#adminView-students",
     "#adminStatus",
+    "#broadsheetDropzone",
+    "#broadsheetFile",
+    "#broadsheetStatus",
+    "#importBroadsheet",
+    "#catalogLevel",
+    "#catalogCode",
+    "#catalogTitle",
+    "#catalogUnits",
+    "#saveCatalogCourse",
+    "#catalogStatus",
+    "#catalogCourses",
+    "#loadStudentRecords",
+    "#studentRecordsStatus",
+    "#studentRecords",
     "#adminSearch",
     "#adminResults",
     "#adminStudentDetail",
@@ -415,14 +456,10 @@ test("students can look up and view their compiled results in the production app
     ["#navLearn", "home"],
     ["#navBoard", "board"],
     ["#navInvite", "invite"],
-    ["#navResults", "results"],
-    ["#navAdmin", "admin"],
     ["#mobileLearn", "home"],
     ["#mobileBoard", "board"],
     ["#mobileChat", "chat"],
     ["#mobileInvite", "invite"],
-    ["#mobileResults", "results"],
-    ["#mobileAdmin", "admin"],
   ].map(([selector, tab]) => {
     const element = elements.get(selector);
     element.dataset.tab = tab;
@@ -433,12 +470,28 @@ test("students can look up and view their compiled results in the production app
     choice.dataset.course = course;
     return choice;
   });
+  const adminTabs = ["broadsheets", "catalog", "indexer", "students"].map((view) => {
+    const button = new Element();
+    button.dataset.adminView = view;
+    return button;
+  });
+  const adminPanels = ["broadsheets", "catalog", "indexer", "students"].map((view) => {
+    const panel = elements.get(`#adminView-${view}`);
+    panel.id = `adminView-${view}`;
+    return panel;
+  });
   elements.get("#home").hidden = true;
   elements.get("#chat").hidden = true;
   elements.get("#board").hidden = true;
   elements.get("#invite").hidden = true;
   elements.get("#results").hidden = false;
-  elements.get("#admin").hidden = true;
+  elements.get("#studentApp").hidden = true;
+  elements.get("#studentMobileNav").hidden = true;
+  elements.get("#studentHeaderWidgets").hidden = true;
+  elements.get("#landingView").hidden = false;
+  elements.get("#authView").hidden = true;
+  elements.get("#adminDashboard").hidden = true;
+  elements.get("#accessToast").hidden = true;
   elements.get("#authModal").hidden = true;
   elements.get("#poster-wrapper").hidden = true;
   elements.get("#poster-wrapper").scrollIntoView = () => {};
@@ -454,6 +507,8 @@ test("students can look up and view their compiled results in the production app
     querySelectorAll(selector) {
       if (selector === "[data-tab]") return navTabs;
       if (selector === ".course-choice") return courseChoices;
+      if (selector === "[data-admin-view]") return adminTabs;
+      if (selector === ".admin-view-panel") return adminPanels;
       return [];
     },
     addEventListener() {},
@@ -489,6 +544,7 @@ test("students can look up and view their compiled results in the production app
       location: { origin, pathname: "/", hash: "#admin" },
       crypto: { randomUUID: () => "12345678-1234-4234-8234-123456789abc" },
       setTimeout() { return 1; },
+      scrollTo() {},
       navigator: { vibrate() { return true; } },
       addEventListener() {},
       localStorage: {
@@ -497,6 +553,9 @@ test("students can look up and view their compiled results in the production app
         },
         setItem(key, value) {
           studyStorage.set(key, value);
+        },
+        removeItem(key) {
+          studyStorage.delete(key);
         },
       },
       supabase: {
@@ -511,6 +570,7 @@ test("students can look up and view their compiled results in the production app
                     savedOptIns.push({ row, options });
                     return insertResponse;
                   }
+                  if (table === "course_catalog" || table === "student_results") return { error: null };
                   assert.equal(table, "student_xp");
                   const index = leaderboardRows.findIndex((entry) => entry.id === row.id);
                   if (index === -1) leaderboardRows.push(row);
@@ -518,14 +578,21 @@ test("students can look up and view their compiled results in the production app
                   return { error: null };
                 },
                 select() {
-                  return {
+                  const query = {
+                    eq() { return this; },
                     async order() {
                       return {
-                        data: [...leaderboardRows].sort((left, right) => right.xp - left.xp),
+                        data: table === "student_xp"
+                          ? [...leaderboardRows].sort((left, right) => right.xp - left.xp)
+                          : [],
                         error: null,
                       };
                     },
+                    then(resolve) {
+                      resolve({ data: [], error: null });
+                    },
                   };
+                  return query;
                 },
               };
             },
@@ -589,25 +656,35 @@ test("students can look up and view their compiled results in the production app
   assert.equal(elements.get("#examPredictorStatus").textContent, "LOCKED");
   assert.equal(elements.get("#results").hidden, false);
   assert.equal(elements.get("#home").hidden, true);
-  assert.equal(elements.get("#admin").hidden, true);
-  assert.equal(elements.get("#accessToast").textContent, "Access Restricted: SevenFold Authorized Personnel Only");
+  assert.equal(elements.get("#studentApp").hidden, true);
+  assert.equal(elements.get("#landingView").hidden, false);
+  assert.equal(elements.get("#authView").hidden, true);
+  assert.equal(elements.get("#adminDashboard").hidden, true);
+  assert.equal(elements.get("#accessToast").hidden, true);
   assert.equal(elements.get("#chatMessages").children.length, 1);
   elements.get("#navBoard").listeners.click();
-  assert.equal(elements.get("#results-status").textContent, "Access Restricted: SevenFold Authorized Personnel Only");
+  assert.equal(elements.get("#authStatus").textContent, "Access Restricted: SevenFold Authorized Personnel Only");
   assert.equal(elements.get("#accessToast").hidden, false);
-  const loginForm = elements.get("#lookupForm");
-  elements.get("#searchRegNo").value = "001";
-  elements.get("#searchFullName").value = "Godspower Esther Gift";
-  loginForm.listeners.submit({ preventDefault() {} });
+  elements.get("#launchApp").listeners.click();
+  assert.equal(elements.get("#landingView").hidden, true);
+  assert.equal(elements.get("#authView").hidden, false);
+  elements.get("#authFullName").value = "Godspower Esther Gift";
+  elements.get("#authRegNo").value = "001";
+  elements.get("#authWhatsapp").value = "08012345678";
+  elements.get("#authMarketingConsent").checked = true;
+  await elements.get("#appAuthForm").listeners.submit({ preventDefault() {} });
   await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(elements.get("#adminDashboard").hidden, true);
+  assert.equal(elements.get("#studentApp").hidden, false);
   assert.equal(elements.get("#home").hidden, false);
-  assert.equal(elements.get(".side").hidden, false);
-  assert.equal(elements.get("#navAdmin").hidden, true);
+  assert.equal(elements.get("#studentMobileNav").hidden, false);
+  assert.equal(elements.get("#studentHeaderWidgets").hidden, false);
   assert.equal(elements.get("#leaderboardList").children.length, 1);
   assert.match(elements.get("#leaderboardList").children[0].children[1].textContent, /^Learner-/);
-  elements.get("#navAdmin").listeners.click();
-  assert.equal(elements.get("#admin").hidden, true);
-  assert.equal(elements.get("#results-status").textContent, "Access Restricted: SevenFold Authorized Personnel Only");
+  assert.equal(savedOptIns.length, 1);
+  assert.equal(savedOptIns[0].row.phone_number, "2348012345678");
+  assert.equal(savedOptIns[0].row.reg_number, "25/SS/EC/001");
+  savedOptIns.length = 0;
   await elements.get("#examPredictorButton").listeners.click();
   assert.equal(elements.get("#fuel").hidden, false);
   elements.get("#closeFuel").listeners.click();
@@ -689,9 +766,6 @@ test("students can look up and view their compiled results in the production app
   assert.match(elements.get("#mockExamProgress").textContent, /5 \/ 5/);
   assert.equal(elements.get("#vGems").textContent, "35");
   assert.equal(JSON.parse(studyStorage.get("foldBook.studyProgress")).xp, 125);
-  elements.get("#navResults").listeners.click();
-  assert.equal(elements.get("#results").hidden, false);
-
   const form = elements.get("#lookupForm");
   const registration = elements.get("#searchRegNo");
   const fullName = elements.get("#searchFullName");
@@ -765,6 +839,7 @@ test("students can look up and view their compiled results in the production app
   assert.equal(whatsappInput.value, "");
   assert.equal(whatsappConsent.checked, false);
   assert.equal(savedOptIns.length, 2);
+  assert.match(savedOptIns[1].row.last_activity_at, /^\d{4}-\d{2}-\d{2}T/);
   assert.deepEqual(JSON.parse(JSON.stringify(savedOptIns[1])), {
     row: {
       phone_number: "2348012345678",
@@ -772,6 +847,8 @@ test("students can look up and view their compiled results in the production app
       reg_number: "25/SS/EC/001",
       full_name: "Godspower Esther Gift",
       streak_count: 6,
+      activity_count: 1,
+      last_activity_at: savedOptIns[1].row.last_activity_at,
       opted_in: true,
     },
     options: { onConflict: "phone_number" },
@@ -807,7 +884,7 @@ test("students can look up and view their compiled results in the production app
 
   registration.value = "25/SS/EC/999";
   fullName.value = "Any Valid Name";
-  form.listeners.submit(submittedEvent);
+  await form.listeners.submit(submittedEvent);
   assert.equal(panel.hidden, true);
   assert.equal(status.textContent, "Invalid Registration Number or Full Name combination. Please verify your details.");
 
@@ -817,11 +894,15 @@ test("students can look up and view their compiled results in the production app
   assert.equal(panel.hidden, true);
   assert.equal(status.textContent, "Invalid Registration Number or Full Name combination. Please verify your details.");
 
-  registration.value = "101010";
-  fullName.value = "Nssien";
-  form.listeners.submit(submittedEvent);
+  elements.get("#adminLogout").listeners.click();
+  elements.get("#launchApp").listeners.click();
+  elements.get("#authFullName").value = "Nssien";
+  elements.get("#authRegNo").value = "101010";
+  elements.get("#authWhatsapp").value = "08012345678";
+  elements.get("#authMarketingConsent").checked = false;
+  await elements.get("#appAuthForm").listeners.submit(submittedEvent);
   assert.equal(panel.hidden, true);
-  assert.equal(elements.get("#admin").hidden, false);
+  assert.equal(elements.get("#adminDashboard").hidden, false);
   assert.equal(elements.get("#adminResults").children.length, 114);
   elements.get("#adminSearch").value = "Godspower Esther";
   elements.get("#adminSearch").listeners.input();
@@ -830,8 +911,8 @@ test("students can look up and view their compiled results in the production app
   assert.equal(elements.get("#adminStudentDetail").hidden, false);
   assert.equal(elements.get("#adminStudentName").textContent, "Godspower Esther Gift");
   elements.get("#adminLogout").listeners.click();
-  assert.equal(elements.get("#admin").hidden, true);
-  assert.equal(elements.get(".side").hidden, true);
+  assert.equal(elements.get("#adminDashboard").hidden, true);
+  assert.equal(elements.get("#studentApp").hidden, true);
 });
 
 test("Gemini proxy keeps its key server-side and rejects invalid requests", async () => {
@@ -892,7 +973,7 @@ test("Gemini proxy keeps its key server-side and rejects invalid requests", asyn
     };
     const success = await invoke(makeRequest());
     assert.equal(success.status, 200);
-    assert.match(upstreamUrl, /gemini-2\.5-flash-lite:generateContent\?key=server-only-test-key/);
+    assert.match(upstreamUrl, /gemini-3\.5-flash-lite:generateContent\?key=server-only-test-key/);
     assert.equal(upstreamBody.contents[0].parts[0].text, "Explain demand.");
     assert.doesNotMatch(JSON.stringify(success.json), /server-only-test-key/);
 

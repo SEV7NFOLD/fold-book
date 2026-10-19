@@ -50,6 +50,7 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid 
   background: var(--accent); content: "";
 }
 .sp { flex: 1; }
+.student-header-widgets { display: flex; align-items: center; gap: 9px; }
 .access-toast { position: fixed; z-index: 30; right: 20px; bottom: 24px; max-width: min(420px, calc(100% - 40px)); margin: 0; padding: 13px 17px; border: 1px solid #e5a05e; background: var(--surface); color: var(--text); font-size: 12px; box-shadow: 0 12px 36px rgb(0 0 0 / 35%); }
 .pill {
   display: inline-flex; min-height: 34px; align-items: center; justify-content: center; gap: 7px;
@@ -220,6 +221,37 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid 
 }
 
 .results-section { border-bottom: 1px solid var(--border); background: var(--surface); }
+.landing-view { min-height: calc(100vh - 76px); }
+.landing-hero { width: min(100% - 48px, 1120px); margin: 0 auto; padding: clamp(40px, 8vw, 86px) 0 16px; }
+.landing-hero h1 { max-width: 850px; margin: 13px 0 10px; font-size: clamp(38px, 6vw, 68px); font-weight: 550; letter-spacing: -.065em; line-height: 1.02; }
+.landing-hero > p { max-width: 660px; margin: 0; color: var(--muted); font-size: 14px; line-height: 1.7; }
+.landing-launch { margin-top: 23px; min-height: 50px; padding: 0 20px; font-size: 13px; }
+.auth-view { width: min(100% - 32px, 620px); min-height: calc(100vh - 150px); margin: 0 auto; padding: 35px 0 60px; }
+.auth-screen-card { padding: clamp(22px, 5vw, 42px); border: 1px solid var(--border-light); background: var(--surface); }
+.auth-screen-card h1 { margin: 10px 0 6px; font-size: clamp(26px, 5vw, 38px); }
+.auth-screen-card > p { color: var(--muted); font-size: 13px; line-height: 1.7; }
+.auth-screen-card .form-group { margin-top: 17px; }
+.auth-screen-card input:not([type="checkbox"]) { width: 100%; min-height: 46px; padding: 0 12px; border: 1px solid var(--border-light); background: var(--bg); color: var(--text); font: inherit; }
+.admin-portal { width: min(100% - 40px, 1400px); min-height: calc(100vh - 100px); margin: 0 auto; padding: 28px 0 60px; }
+.admin-portal-header { display: flex; align-items: center; gap: 15px; padding: 0 0 22px; border-bottom: 1px solid var(--border); }
+.admin-portal-header > div { flex: 1; }
+.admin-portal-header h1 { margin: 5px 0 0; font-size: clamp(22px, 4vw, 34px); }
+.admin-authorized-badge { padding: 8px 12px; border: 1px solid rgb(228 239 141 / 35%); color: var(--accent); font-size: 11px; }
+.admin-portal-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 25px; padding-top: 23px; }
+.admin-portal-nav { display: grid; align-content: start; gap: 7px; }
+.admin-nav-button { min-height: 45px; padding: 9px 12px; border: 1px solid transparent; background: transparent; color: var(--muted); font: inherit; text-align: left; cursor: pointer; }
+.admin-nav-button:hover, .admin-nav-button.is-active { border-color: var(--border); background: var(--surface); color: var(--text); }
+.admin-portal-content { min-width: 0; padding: 22px; border: 1px solid var(--border-light); background: var(--surface); }
+.admin-view-panel h2 { margin-top: 0; }
+.admin-view-panel > p { color: var(--muted); font-size: 12px; line-height: 1.7; }
+.broadsheet-dropzone { display: grid; gap: 8px; min-height: 130px; place-content: center; margin: 20px 0 12px; padding: 20px; border: 1px dashed var(--border-light); color: var(--muted); text-align: center; cursor: pointer; }
+.broadsheet-dropzone strong { color: var(--text); }
+.broadsheet-dropzone span { font-size: 11px; }
+.admin-view-panel .admin-search { margin-top: 22px; }
+.admin-view-panel .admin-material-fields { margin: 18px 0; }
+.admin-view-panel .admin-material-fields label { display: grid; gap: 7px; color: var(--muted); font-size: 11px; }
+.admin-view-panel .admin-material-fields input { min-height: 40px; padding: 0 10px; border: 1px solid var(--border-light); background: var(--bg); color: var(--text); font: inherit; }
+.admin-view-panel > .results-submit { margin-top: 10px; }
 .results-shell { width: min(100% - 112px, 1200px); margin: 0 auto; padding: 55px 0 20px; }
 .results-heading { display: flex; align-items: center; justify-content: space-between; gap: 15px; }
 .section-kicker { display: block; color: var(--muted); }
@@ -919,18 +951,29 @@ textarea.admin-material-control { min-height: 140px; resize: vertical; }
   .chat-section, .invite-section { padding-top: 12px; }
   .results-shell { width: calc(100% - 24px); }
   .site-footer { margin-bottom: 8px; }
+  .admin-portal-layout { grid-template-columns: 1fr; gap: 12px; }
+  .admin-portal-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 520px) {
   .top-inner { width: calc(100% - 20px); min-height: 58px; gap: 6px; }
   .top .brand { gap: 6px; font-size: 11px; }
   .brand-logo-img { width: 20px; height: 26px; }
-  .top-inner > .pill { min-height: 32px; gap: 5px; padding: 0 7px; font-size: 11px; }
+  .student-header-widgets > .pill { min-height: 32px; gap: 5px; padding: 0 7px; font-size: 11px; }
   .counter-label { display: none; }
   .fuel-pill { min-width: 0; }
   .fuel-meter { width: 22px; }
   .sound-toggle { min-width: 32px; }
-  .shell { width: calc(100% - 20px); }
+  .student-header-widgets { gap: 4px; }
+  .shell { width: calc(100% - 20px);     .landing-hero { width: calc(100% - 32px); padding-top: 42px; }
+    .landing-hero h1 { font-size: clamp(34px, 10vw, 48px); }
+    .admin-portal { width: calc(100% - 24px); padding-top: 18px; }
+    .admin-portal-header { flex-wrap: wrap; }
+    .admin-portal-header > div { flex-basis: 100%; }
+    .admin-portal-layout { padding-top: 14px; }
+    .admin-portal-nav { grid-template-columns: 1fr 1fr; }
+    .admin-portal-content { padding: 14px; }
+  }
   .course-header-card { padding: 14px; }
   .course-switcher { gap: 8px; margin-bottom: 12px; }
   .course-choice { min-width: 138px; padding: 8px 12px; }

@@ -1,7 +1,8 @@
 "use strict";
 
+const GEMINI_MODEL = "gemini-3.5-flash-lite";
 const RESULT_LOOKUP = null;
-const UNIUYO_COURSE_CATALOG = {
+let UNIUYO_COURSE_CATALOG = {
   "100L": [
     { code: "ECO 128", title: "Transportation Economics", units: 3 },
     { code: "ECO 122", title: "Introductory Statistics II", units: 3 },
@@ -138,7 +139,7 @@ const MODULES_BY_COURSE = { "ECO 128": STUDY_MODULES, "ECO 122": STATISTICS_MODU
 const STUDY_PROGRESS_KEY = "foldBook.studyProgress";
 const LEGACY_STUDY_PROGRESS_KEY = "foldBookV2.studyProgress";
 const navButtons = [...document.querySelectorAll("[data-tab]")];
-const studyPanels = new Map(["home", "chat", "board", "invite", "results", "admin"].map((id) => [id, document.querySelector(`#${id}`)]));
+const studyPanels = new Map(["home", "chat", "board", "invite"].map((id) => [id, document.querySelector(`#${id}`)]));
 const pathTree = document.querySelector("#pathTree");
 const lessonPanel = document.querySelector("#lessonPanel");
 const lessonStep = document.querySelector("#lessonStep");
@@ -189,6 +190,8 @@ let currentStudentLevel = "100L";
 let chatCourseCode = "ECO 128";
 let currentStudent = null;
 let isMasterAdmin = false;
+const AUTH_SESSION_KEY = "foldBook.authSession";
+const S = { isAdmin: false, student: null, level: "100L", phoneNumber: "" };
 let leaderboardEntries = [];
 let practiceQuestions = [];
 let mockExamQuestions = [];
@@ -554,16 +557,24 @@ function renderStudyPath() {
 }
 
 function setNavigationAvailable(available) {
-  document.querySelector(".side").hidden = !available;
-  document.querySelector(".bnav").hidden = !available;
-  for (const button of navButtons.filter((item) => item.dataset.tab === "admin")) {
-    button.hidden = !available || !isMasterAdmin;
-  }
+  document.querySelector("#studentApp").hidden = !available;
+  document.querySelector("#studentMobileNav").hidden = !available;
+  document.querySelector("#studentHeaderWidgets").hidden = !available;
+}
+
+function showStage(stage) {
+  document.querySelector("#landingView").hidden = stage !== "landingView";
+  document.querySelector("#authView").hidden = stage !== "authView";
+  document.querySelector("#adminDashboard").hidden = stage !== "adminDashboard";
+  setNavigationAvailable(stage === "studentApp");
+  window.location.hash = `#${stage}`;
+  if (typeof window.scrollTo === "function") window.scrollTo(0, 0);
 }
 
 function showAccessRestrictedNotice() {
   const notice = "Access Restricted: SevenFold Authorized Personnel Only";
-  document.querySelector("#results-status").textContent = notice;
+  const authStatus = document.querySelector("#authStatus");
+  if (authStatus) authStatus.textContent = notice;
   const toast = document.querySelector("#accessToast");
   toast.textContent = notice;
   toast.hidden = false;
@@ -572,10 +583,8 @@ function showAccessRestrictedNotice() {
 
 function activateTab(tab) {
   const selectedTab = typeof tab === "string" ? tab : tab.dataset.tab;
-  if ((!currentStudent && selectedTab !== "results")
-    || (selectedTab === "admin" && !isMasterAdmin)) {
+  if (!currentStudent || isMasterAdmin || !studyPanels.has(selectedTab)) {
     showAccessRestrictedNotice();
-    if (selectedTab === "admin" && window.location.hash === "#admin") window.location.hash = "#results";
     return false;
   }
   for (const button of navButtons) {
@@ -1273,7 +1282,7 @@ const chatRegistrationInput = document.querySelector("#chatRegistration");
 const fullNameInput = document.querySelector("#searchFullName");
 const resultsStatus = document.querySelector("#results-status");
 const resultsPanel = document.querySelector("#results-panel");
-const adminPanel = document.querySelector("#admin");
+const adminPanel = document.querySelector("#adminDashboard");
 const adminStatus = document.querySelector("#adminStatus");
 const adminSearch = document.querySelector("#adminSearch");
 const adminResults = document.querySelector("#adminResults");
@@ -1517,6 +1526,31 @@ function renderResults(registration, student) {
     : "";
 }
 
+async function lookupImportedStudentResults(registration) {
+  if (!supabaseClient) return null;
+  const { data, error } = await supabaseClient.from("student_results")
+    .select("reg_number, full_name, course_code, course_title, ca, exam, total, grade, remark")
+    .eq("reg_number", registration);
+  if (error) throw error;
+  if (!Array.isArray(data) || data.length === 0) return null;
+  const name = data[0].full_name;
+  if (data.some((row) => row.full_name !== name)) {
+    throw new Error("Imported results have inconsistent student names for this registration.");
+  }
+  return {
+    name,
+    results: data.map((row) => ({
+      course: row.course_code,
+      course_title: row.course_title,
+      ca: row.ca,
+      exam: row.exam,
+      total: row.total,
+      grade: row.grade || gradeForScore(row.total),
+      remark: row.remark || (row.total >= 40 ? "PASS" : "FAIL"),
+    })),
+  };
+}
+
 function showAdminStudent(registration, student) {
   const detailName = document.querySelector("#adminStudentName");
   const detailRegistration = document.querySelector("#adminStudentRegistration");
@@ -1568,6 +1602,270 @@ function renderAdminDirectory(filter = "") {
   adminStatus.textContent = `${adminResults.children.length} broadsheet record${adminResults.children.length === 1 ? "" : "s"} available in this static preview.`;
 }
 
+let selectedBroadsheetFile = null;
+const broadsheetInput = document.querySelector("#broadsheetFile");
+const broadsheetDropzone = document.querySelector("#broadsheetDropzone");
+const broadsheetStatus = document.querySelector("#broadsheetStatus");
+const broadsheetImportButton = document.querySelector("#importBroadsheet");
+
+function setSelectedBroadsheet(file) {
+  if (!file) return;
+  if (!/\.(csv|xlsx|xls)$/i.test(file.name)) {
+    selectedBroadsheetFile = null;
+    broadsheetStatus.textContent = "Choose a CSV, XLSX or XLS broadsheet.";
+    return;
+  }
+  selectedBroadsheetFile = file;
+  broadsheetStatus.textContent = `Selected: ${file.name}`;
+}
+
+broadsheetInput.addEventListener("change", () => setSelectedBroadsheet(broadsheetInput.files?.[0]));
+broadsheetDropzone.addEventListener("dragover", (event) => event.preventDefault());
+broadsheetDropzone.addEventListener("drop", (event) => {
+  event.preventDefault();
+  setSelectedBroadsheet(event.dataTransfer?.files?.[0]);
+});
+
+function normalizeBroadsheetRows(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) throw new Error("The broadsheet contains no score rows.");
+  const aliases = {
+    reg_number: ["reg_number", "registration", "registration_number", "matric", "matric_number", "reg"],
+    full_name: ["full_name", "name", "student_name"],
+    course_code: ["course_code", "course", "code"],
+    course_title: ["course_title", "title"],
+    ca: ["ca", "continuous_assessment"],
+    exam: ["exam", "examination"],
+    total: ["total", "score"],
+    level: ["level", "academic_level"],
+  };
+  return rows.map((rawRow, index) => {
+    const normalized = Object.fromEntries(Object.entries(rawRow).map(([key, value]) => [
+      key.trim().toLowerCase().replace(/[\s-]+/g, "_"),
+      value,
+    ]));
+    const get = (key) => {
+      const match = aliases[key].find((alias) => Object.hasOwn(normalized, alias));
+      return match ? String(normalized[match]).trim() : "";
+    };
+    const regNumber = normalizeRegistration(get("reg_number"));
+    const fullName = get("full_name");
+    const courseCode = get("course_code").toUpperCase();
+    const courseTitle = get("course_title");
+    const rawCa = get("ca");
+    const rawExam = get("exam");
+    const rawTotal = get("total");
+    const ca = Number(rawCa);
+    const exam = Number(rawExam);
+    const total = Number(rawTotal);
+    const level = get("level") || detectStudentLevel(regNumber);
+    if (!regNumber || !fullName || !courseCode || !courseTitle
+      || !rawCa || !rawExam || !rawTotal
+      || !Number.isInteger(ca) || ca < 0 || ca > 30
+      || !Number.isInteger(exam) || exam < 0 || exam > 70
+      || !Number.isInteger(total) || total < 0 || total > 100
+      || !UNIUYO_COURSE_CATALOG[level]) {
+      throw new Error(`Broadsheet row ${index + 2} has missing or invalid student, course or score data.`);
+    }
+    return {
+      reg_number: regNumber,
+      full_name: fullName,
+      course_code: courseCode,
+      course_title: courseTitle,
+      ca,
+      exam,
+      total,
+      grade: gradeForScore(total),
+      remark: total >= 40 ? "PASS" : "FAIL",
+      level,
+    };
+  });
+}
+
+broadsheetImportButton.addEventListener("click", async () => {
+  if (!S.isAdmin) {
+    showAccessRestrictedNotice();
+    return;
+  }
+  if (!selectedBroadsheetFile) {
+    broadsheetStatus.textContent = "Choose a broadsheet file before importing.";
+    return;
+  }
+  if (!window.XLSX) {
+    broadsheetStatus.textContent = "The spreadsheet parser did not load. Refresh the page and try again.";
+    return;
+  }
+  broadsheetImportButton.disabled = true;
+  try {
+    const bytes = await selectedBroadsheetFile.arrayBuffer();
+    const workbook = window.XLSX.read(bytes, { type: "array" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    if (!sheet) throw new Error("The selected file has no worksheet.");
+    const records = normalizeBroadsheetRows(window.XLSX.utils.sheet_to_json(sheet, { defval: "" }));
+    if (!supabaseClient) throw new Error("Supabase is not configured.");
+    const { error } = await supabaseClient.from("student_results")
+      .upsert(records, { onConflict: "reg_number,course_code" });
+    if (error) throw error;
+    broadsheetStatus.textContent = `Imported ${records.length} score records successfully.`;
+    selectedBroadsheetFile = null;
+    broadsheetInput.value = "";
+  } catch (error) {
+    console.error("Broadsheet import failed:", error);
+    broadsheetStatus.textContent = `Import failed: ${error.message || "Supabase request failed."}`;
+  } finally {
+    broadsheetImportButton.disabled = false;
+  }
+});
+
+async function loadCourseCatalog() {
+  const status = document.querySelector("#catalogStatus");
+  const table = document.querySelector("#catalogCourses");
+  if (!supabaseClient) {
+    status.textContent = "Supabase is unavailable; course catalog could not be loaded.";
+    return;
+  }
+  try {
+    const { data, error } = await supabaseClient.from("course_catalog")
+      .select("level, course_code, title, credit_units")
+      .order("level");
+    if (error) throw error;
+    if (Array.isArray(data) && data.length > 0) {
+      UNIUYO_COURSE_CATALOG = Object.fromEntries(["100L", "200L", "300L", "400L"].map((level) => [
+        level,
+        data.filter((course) => course.level === level).map((course) => ({
+          code: course.course_code,
+          title: course.title,
+          units: course.credit_units,
+        })),
+      ]));
+    }
+    table.replaceChildren();
+    for (const level of ["100L", "200L", "300L", "400L"]) {
+      for (const course of coursesForLevel(level)) {
+        const row = document.createElement("tr");
+        [level, course.code, course.title, String(course.units)].forEach((value) => {
+          const cell = document.createElement("td");
+          cell.textContent = value;
+          row.append(cell);
+        });
+        const actionCell = document.createElement("td");
+        const deleteButton = document.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.className = "result-card-button";
+        deleteButton.textContent = "Remove";
+        deleteButton.addEventListener("click", async () => {
+          if (!S.isAdmin) {
+            showAccessRestrictedNotice();
+            return;
+          }
+          try {
+            const { error: deleteError } = await supabaseClient.from("course_catalog")
+              .delete()
+              .eq("level", level)
+              .eq("course_code", course.code);
+            if (deleteError) throw deleteError;
+            UNIUYO_COURSE_CATALOG[level] = UNIUYO_COURSE_CATALOG[level]
+              .filter((item) => item.code !== course.code);
+            await loadCourseCatalog();
+          } catch (deleteError) {
+            console.error("Course catalog delete failed:", deleteError);
+            status.textContent = `Could not remove course: ${deleteError.message || "Supabase request failed."}`;
+          }
+        });
+        actionCell.append(deleteButton);
+        row.append(actionCell);
+        table.append(row);
+      }
+    }
+    updateAdminCourseDropdown();
+    status.textContent = `Loaded ${table.children.length} courses.`;
+  } catch (error) {
+    console.error("Course catalog fetch failed:", error);
+    status.textContent = `Could not load the course catalog: ${error.message || "Supabase request failed."}`;
+  }
+}
+
+document.querySelector("#saveCatalogCourse").addEventListener("click", async () => {
+  const level = document.querySelector("#catalogLevel").value;
+  const code = document.querySelector("#catalogCode").value.trim().toUpperCase();
+  const title = document.querySelector("#catalogTitle").value.trim();
+  const units = Number(document.querySelector("#catalogUnits").value);
+  const status = document.querySelector("#catalogStatus");
+  if (!S.isAdmin) {
+    showAccessRestrictedNotice();
+    return;
+  }
+  if (!UNIUYO_COURSE_CATALOG[level] || !/^[A-Z]{2,5}\s?\d{3,4}$/i.test(code)
+    || !title || !Number.isInteger(units) || units < 1 || units > 12) {
+    status.textContent = "Enter a valid level, course code, title and credit unit count.";
+    return;
+  }
+  if (!supabaseClient) {
+    status.textContent = "Supabase is unavailable; this course was not saved.";
+    return;
+  }
+  try {
+    const { error } = await supabaseClient.from("course_catalog").upsert({
+      level,
+      course_code: code,
+      title,
+      credit_units: units,
+    }, { onConflict: "level,course_code" });
+    if (error) throw error;
+    const courses = UNIUYO_COURSE_CATALOG[level].filter((course) => course.code !== code);
+    courses.push({ code, title, units });
+    UNIUYO_COURSE_CATALOG[level] = courses;
+    document.querySelector("#catalogCode").value = "";
+    document.querySelector("#catalogTitle").value = "";
+    status.textContent = `Saved ${code} under ${level}.`;
+    await loadCourseCatalog();
+  } catch (error) {
+    console.error("Course catalog save failed:", error);
+    status.textContent = `Could not save course: ${error.message || "Supabase request failed."}`;
+  }
+});
+
+async function loadStudentRecords() {
+  const status = document.querySelector("#studentRecordsStatus");
+  const tableBody = document.querySelector("#studentRecords");
+  if (!S.isAdmin) {
+    showAccessRestrictedNotice();
+    return;
+  }
+  if (!supabaseClient) {
+    status.textContent = "Supabase is unavailable; student records could not be loaded.";
+    return;
+  }
+  status.textContent = "Loading consented WhatsApp records…";
+  try {
+    const { data, error } = await supabaseClient.from("whatsapp_optins")
+      .select("full_name, reg_number, phone_number, streak_count, last_nudged_at")
+      .eq("opted_in", true)
+      .order("full_name");
+    if (error) throw error;
+    tableBody.replaceChildren();
+    for (const student of data || []) {
+      const row = document.createElement("tr");
+      [
+        student.full_name,
+        student.reg_number,
+        student.phone_number,
+        String(student.streak_count || 1),
+        student.last_nudged_at ? new Date(student.last_nudged_at).toLocaleString() : "Not yet",
+      ].forEach((value) => {
+        const cell = document.createElement("td");
+        cell.textContent = value || "—";
+        row.append(cell);
+      });
+      tableBody.append(row);
+    }
+    status.textContent = `Loaded ${tableBody.children.length} consented contacts.`;
+  } catch (error) {
+    console.error("Student contact fetch failed:", error);
+    status.textContent = `Could not load student records: ${error.message || "Supabase access denied."}`;
+  }
+}
+document.querySelector("#loadStudentRecords").addEventListener("click", loadStudentRecords);
+
 function normalizeWhatsAppPhone(phoneNumber) {
   const digits = phoneNumber.replace(/\D/g, "");
   const formattedPhone = digits.startsWith("0") ? `234${digits.slice(1)}` : digits;
@@ -1590,6 +1888,8 @@ async function saveWhatsAppOptIn(phoneNumber, regNumber, fullName) {
         reg_number: regNumber,
         full_name: fullName,
         streak_count: studyProgress.streak || 1,
+        activity_count: studyProgress.activityDays.length,
+        last_activity_at: studyProgress.lastStudyDate ? new Date(`${studyProgress.lastStudyDate}T00:00:00`).toISOString() : null,
         opted_in: true,
       }, { onConflict: "phone_number" });
     if (error) throw error;
@@ -1654,34 +1954,23 @@ document.querySelector("#print-card").addEventListener("click", () => window.pri
 document.querySelector("#dismiss-card").addEventListener("click", () => {
   posterWrapper.hidden = true;
 });
-document.querySelector("#adminLogout").addEventListener("click", () => {
-  adminPanel.hidden = true;
-  adminStudentDetail.hidden = true;
+function signOut() {
   currentStudent = null;
   isMasterAdmin = false;
-  setNavigationAvailable(false);
-  resultsStatus.textContent = "Admin view closed. Enter your details to continue.";
-  activateTab("results");
-  registrationInput.focus();
-});
+  S.isAdmin = false;
+  S.student = null;
+  S.phoneNumber = "";
+  window.localStorage.removeItem(AUTH_SESSION_KEY);
+  showStage("landingView");
+}
+
+document.querySelector("#adminLogout").addEventListener("click", signOut);
 adminSearch.addEventListener("input", () => renderAdminDirectory(adminSearch.value));
 
-resultsForm.addEventListener("submit", (event) => {
+resultsForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   resultsStatus.textContent = "";
 
-  const rawRegistration = registrationInput.value.trim();
-  const rawName = fullNameInput.value.trim();
-  const adminName = normalizeNameTokens(rawName);
-  if (rawRegistration === "101010" && adminName.length === 1 && ["nssien", "daniel"].includes(adminName[0])) {
-    currentStudent = { registration: "101010", name: rawName };
-    isMasterAdmin = true;
-    setNavigationAvailable(true);
-    adminPanel.hidden = false;
-    renderAdminDirectory();
-    activateTab("admin");
-    return;
-  }
   const registration = normalizeRegistration(registrationInput.value);
   const inputNameTokens = normalizeNameTokens(fullNameInput.value);
   if (!registration || inputNameTokens.length < 2) {
@@ -1690,9 +1979,18 @@ resultsForm.addEventListener("submit", (event) => {
     return;
   }
 
-  const matchedStudent = RESULT_LOOKUP && Object.hasOwn(RESULT_LOOKUP, registration)
+  let matchedStudent = RESULT_LOOKUP && Object.hasOwn(RESULT_LOOKUP, registration)
     ? RESULT_LOOKUP[registration]
     : null;
+  if (!matchedStudent) {
+    try {
+      matchedStudent = await lookupImportedStudentResults(registration);
+    } catch (error) {
+      console.error("Imported results lookup failed:", error);
+      setResultsMessage(`Could not load imported results: ${error.message || "Supabase request failed."}`);
+      return;
+    }
+  }
   const studentNameTokens = matchedStudent ? normalizeNameTokens(matchedStudent.name) : [];
   const isNameMatch = inputNameTokens.every((token) => studentNameTokens.includes(token));
   if (!matchedStudent || !isNameMatch) {
@@ -1702,18 +2000,178 @@ resultsForm.addEventListener("submit", (event) => {
   }
 
   chatRegistrationInput.value = registration;
-  setStudentRegistration(registration);
   renderResults(registration, matchedStudent);
-  currentStudent = { registration, name: matchedStudent.name };
-  isMasterAdmin = false;
-  setNavigationAvailable(true);
-  activateTab("home");
-  void syncLeaderboardEntry();
 });
 
-if (window.location.hash === "#admin") activateTab("admin");
+document.querySelector("#launchApp").addEventListener("click", () => {
+  document.querySelector("#authStatus").textContent = "";
+  showStage("authView");
+  document.querySelector("#authFullName").focus();
+});
+document.querySelector("#backToLanding").addEventListener("click", () => showStage("landingView"));
+
+const appAuthForm = document.querySelector("#appAuthForm");
+appAuthForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const name = document.querySelector("#authFullName").value.trim();
+  const rawRegistration = document.querySelector("#authRegNo").value.trim();
+  const phone = document.querySelector("#authWhatsapp").value.trim();
+  const normalizedPhone = normalizeWhatsAppPhone(phone);
+  const consent = document.querySelector("#authMarketingConsent").checked;
+  const status = document.querySelector("#authStatus");
+  status.textContent = "";
+
+  if (!name || !rawRegistration || !phone) {
+    status.textContent = "Enter your full name, registration number and WhatsApp phone number.";
+    return;
+  }
+  if (!normalizedPhone) {
+    status.textContent = "Enter a valid Nigerian WhatsApp number, for example 08012345678.";
+    return;
+  }
+
+  const normalizedName = normalizeNameTokens(name);
+  if (rawRegistration === "101010" && normalizedName.length === 1
+    && ["nssien", "daniel"].includes(normalizedName[0])) {
+    currentStudent = null;
+    isMasterAdmin = true;
+    S.isAdmin = true;
+    S.student = { name, registration: "101010" };
+    S.phoneNumber = normalizedPhone;
+    window.localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({
+      role: "admin",
+      name,
+      registration: "101010",
+    }));
+    renderAdminDirectory();
+    showStage("adminDashboard");
+    return;
+  }
+  if (!consent) {
+    status.textContent = "Consent is required to save this number and send study reminders.";
+    document.querySelector("#authMarketingConsent").focus();
+    return;
+  }
+
+  const registration = normalizeRegistration(rawRegistration);
+  const student = registration && RESULT_LOOKUP && Object.hasOwn(RESULT_LOOKUP, registration)
+    ? RESULT_LOOKUP[registration]
+    : null;
+  const nameMatches = student && normalizedName.length > 0
+    && normalizedName.every((token) => normalizeNameTokens(student.name).includes(token));
+  if (!student || !nameMatches) {
+    status.textContent = "Registration number and full name do not match a published student record.";
+    return;
+  }
+
+  const submitButton = document.querySelector("#authSubmit");
+  submitButton.disabled = true;
+  status.textContent = "Saving your WhatsApp opt-in…";
+  try {
+    const saved = await saveWhatsAppOptIn(phone, registration, student.name);
+    if (!saved) throw new Error("The WhatsApp opt-in could not be saved. Check the connection and try again.");
+    currentStudent = { name: student.name, registration };
+    isMasterAdmin = false;
+    S.isAdmin = false;
+    S.student = currentStudent;
+    S.level = detectStudentLevel(registration);
+    S.phoneNumber = normalizedPhone;
+    currentStudentLevel = S.level;
+    chatRegistrationInput.value = registration;
+    setStudentRegistration(registration);
+    window.localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({
+      role: "student",
+      name: student.name,
+      registration,
+      phoneNumber: normalizedPhone,
+      level: S.level,
+    }));
+    showStage("studentApp");
+    activateTab("home");
+    void syncLeaderboardEntry();
+  } catch (error) {
+    console.error("Student onboarding failed:", error);
+    status.textContent = error.message;
+  } finally {
+    submitButton.disabled = false;
+  }
+});
+
+function restoreAuthSession() {
+  let savedSession;
+  try {
+    savedSession = window.localStorage.getItem(AUTH_SESSION_KEY);
+    if (!savedSession) return false;
+    const session = JSON.parse(savedSession);
+    if (session.role === "admin" && session.registration === "101010"
+      && ["nssien", "daniel"].includes(normalizeNameTokens(session.name)[0])) {
+      isMasterAdmin = true;
+      S.isAdmin = true;
+      S.student = { name: session.name, registration: session.registration };
+      renderAdminDirectory();
+      showStage("adminDashboard");
+      return true;
+    }
+    const registration = normalizeRegistration(session.registration || "");
+    const student = registration && RESULT_LOOKUP && Object.hasOwn(RESULT_LOOKUP, registration)
+      ? RESULT_LOOKUP[registration]
+      : null;
+    if (session.role !== "student" || !student
+      || !normalizeNameTokens(student.name).every((token) => normalizeNameTokens(session.name).includes(token))) {
+      window.localStorage.removeItem(AUTH_SESSION_KEY);
+      return false;
+    }
+    currentStudent = { name: student.name, registration };
+    S.student = currentStudent;
+    S.level = detectStudentLevel(registration);
+    S.phoneNumber = typeof session.phoneNumber === "string" ? session.phoneNumber : "";
+    currentStudentLevel = S.level;
+    chatRegistrationInput.value = registration;
+    setStudentRegistration(registration);
+    showStage("studentApp");
+    activateTab("home");
+    void syncLeaderboardEntry();
+    return true;
+  } catch (error) {
+    console.error("Could not restore the FoldBook session:", error);
+    window.localStorage.removeItem(AUTH_SESSION_KEY);
+    return false;
+  }
+}
+
+document.querySelectorAll("[data-admin-view]").forEach((button) => {
+  button.addEventListener("click", () => {
+    if (!S.isAdmin) {
+      showAccessRestrictedNotice();
+      return;
+    }
+    document.querySelectorAll(".admin-view-panel").forEach((panel) => {
+      panel.hidden = panel.id !== `adminView-${button.dataset.adminView}`;
+    });
+    document.querySelectorAll("[data-admin-view]").forEach((item) => {
+      item.classList.toggle("is-active", item === button);
+    });
+    if (button.dataset.adminView === "catalog") void loadCourseCatalog();
+    if (button.dataset.adminView === "students") loadStudentRecords();
+  });
+});
+
+if (!restoreAuthSession()) showStage("landingView");
 if (typeof window.addEventListener === "function") {
   window.addEventListener("hashchange", () => {
-    if (window.location.hash === "#admin") activateTab("admin");
+    const stage = window.location.hash.slice(1);
+    if (stage === "adminDashboard") {
+      if (!S.isAdmin) {
+        showAccessRestrictedNotice();
+        showStage("landingView");
+      } else showStage("adminDashboard");
+    } else if (stage === "studentApp") {
+      if (!currentStudent || S.isAdmin) {
+        showAccessRestrictedNotice();
+        showStage(currentStudent ? "adminDashboard" : "authView");
+      } else showStage("studentApp");
+    } else if (["landingView", "authView"].includes(stage)) {
+      showStage(stage);
+    }
   });
 }
