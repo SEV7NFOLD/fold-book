@@ -141,7 +141,10 @@ test("production output keeps the dark branding and compiles student results int
   assert.match(html, /id="leaderboardList"/);
   assert.match(html, /id="sndToggle"/);
   assert.match(html, /id="voiceCallRoom"/);
-  assert.match(html, /id="voiceToggle"[^>]*>📞 Call Dr\. Eco/);
+  assert.match(html, /id="voiceToggle"[^>]*>📞 Call</);
+  assert.match(html, /id="chatSettingsToggle"[^>]*aria-controls="chatSettingsDrawer"/);
+  assert.match(html, /id="chatSettingsDrawer" hidden/);
+  assert.match(html, /id="chatSettingsClose"/);
   assert.match(html, /id="voiceCaption"/);
   assert.match(html, /id="voiceMuteButton"/);
   assert.match(html, /id="voiceSpeakerButton"/);
@@ -375,6 +378,9 @@ test("students can look up and view their compiled results in the production app
     "#chatPrompts",
     "#chatForm",
     "#voiceToggle",
+    "#chatSettingsToggle",
+    "#chatSettingsClose",
+    "#chatSettingsDrawer",
     "#voiceCallRoom",
     "#voiceCallMascot",
     "#voiceCallStatus",
@@ -548,6 +554,7 @@ test("students can look up and view their compiled results in the production app
   elements.get("#accessToast").hidden = true;
   elements.get("#authModal").hidden = true;
   elements.get("#voiceCallRoom").hidden = true;
+  elements.get("#chatSettingsDrawer").hidden = true;
   elements.get("#poster-wrapper").hidden = true;
   elements.get("#poster-wrapper").scrollIntoView = () => {};
   elements.get("#whatsappForm").querySelector = (selector) => {
@@ -831,6 +838,13 @@ test("students can look up and view their compiled results in the production app
     },
   };
   vm.runInNewContext(app, runtime);
+
+  elements.get("#chatSettingsToggle").listeners.click();
+  assert.equal(elements.get("#chatSettingsDrawer").hidden, false);
+  assert.equal(elements.get("#chatSettingsToggle").getAttribute("aria-expanded"), "true");
+  elements.get("#chatSettingsClose").listeners.click();
+  assert.equal(elements.get("#chatSettingsDrawer").hidden, true);
+  assert.equal(elements.get("#chatSettingsToggle").getAttribute("aria-expanded"), "false");
 
   const tree = elements.get("#pathTree");
   assert.equal(tree.children.length, 5);

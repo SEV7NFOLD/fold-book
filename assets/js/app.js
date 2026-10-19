@@ -882,6 +882,28 @@ document.querySelector("#chatCourse").addEventListener("change", (event) => {
   if (MODULES_BY_COURSE[chatCourseCode] && chatCourseCode !== currentCourse) setCourse(chatCourseCode);
 });
 
+function openChatSettingsDrawer() {
+  const drawer = document.querySelector("#chatSettingsDrawer");
+  if (!drawer) return;
+  drawer.hidden = false;
+  document.querySelector("#chatSettingsToggle").setAttribute("aria-expanded", "true");
+  document.querySelector("#chatSettingsClose").focus();
+}
+
+function closeChatSettingsDrawer() {
+  const drawer = document.querySelector("#chatSettingsDrawer");
+  if (!drawer || drawer.hidden) return;
+  drawer.hidden = true;
+  document.querySelector("#chatSettingsToggle").setAttribute("aria-expanded", "false");
+  document.querySelector("#chatSettingsToggle").focus();
+}
+
+document.querySelector("#chatSettingsToggle").addEventListener("click", () => {
+  if (document.querySelector("#chatSettingsDrawer").hidden) openChatSettingsDrawer();
+  else closeChatSettingsDrawer();
+});
+document.querySelector("#chatSettingsClose").addEventListener("click", closeChatSettingsDrawer);
+
 const mascotFiles = {
   person: ["person-02-breathing.json"],
   idle: ["cat-idle.json"],
@@ -2595,7 +2617,8 @@ document.querySelector("#cancel-whatsapp").addEventListener("click", closeVerifi
 document.querySelector("#close-verification").addEventListener("click", closeVerification);
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
-  if (!document.querySelector("#profileModal").hidden) document.querySelector("#profileModal").hidden = true;
+  if (!document.querySelector("#chatSettingsDrawer").hidden) closeChatSettingsDrawer();
+  else if (!document.querySelector("#profileModal").hidden) document.querySelector("#profileModal").hidden = true;
   else if (!document.querySelector("#voiceCallRoom").hidden) toggleVoiceCallRoom(false);
   else if (!authModal.hidden) closeVerification();
   else if (!testDrawer.hidden) testDrawer.hidden = true;

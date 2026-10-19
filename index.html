@@ -120,22 +120,31 @@
           <div class="chat-profile">
             <div class="chat-mascot" id="chatMascot" aria-hidden="true"></div>
             <div class="chat-title">
-              <div class="chat-profile-heading"><h1>Dr. Eco</h1><span class="chat-availability"><i></i>Study guide</span></div>
-              <p>Economics study assistant <span>·</span> UNIUYO</p>
+              <div class="chat-profile-heading"><h1>Dr. Eco</h1><span class="chat-availability"><i></i>Active</span></div>
+              <p>UNIUYO Economics Tutor</p>
             </div>
           </div>
-          <label class="course-chat-select">Course
+          <div class="chat-header-actions">
+            <button type="button" class="voice-toggle" id="voiceToggle" aria-pressed="false">📞 Call</button>
+            <button type="button" class="chat-settings-toggle" id="chatSettingsToggle" aria-label="Open chat settings" aria-expanded="false" aria-controls="chatSettingsDrawer" title="Chat settings">⚙</button>
+          </div>
+        </div>
+        <div class="chat-settings-drawer" id="chatSettingsDrawer" hidden>
+          <div class="chat-settings-heading">
+            <div><h2>Session settings</h2><p>Course and study context</p></div>
+            <button type="button" class="chat-settings-close" id="chatSettingsClose" aria-label="Close chat settings" title="Close settings">×</button>
+          </div>
+          <label class="course-chat-select">Active course
             <select id="chatCourse" aria-label="Chat course"><option>ECO 128</option><option>ECO 122</option></select>
           </label>
-          <button type="button" class="voice-toggle" id="voiceToggle" aria-pressed="false">📞 Call Dr. Eco</button>
+          <div class="chat-routing">
+            <label for="chatRegistration">Matric number for level routing
+              <input id="chatRegistration" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="18" placeholder="e.g. 25/SS/EC/071" readonly>
+            </label>
+            <p id="chatLevel" role="status" aria-live="polite">Detected level: 100L</p>
+          </div>
+          <div class="chat-fuel"><span>⚡ Fuel</span><div class="fuel-track"><i id="chatFuelBar"></i></div><strong class="mono" id="chatFuelValue">85/100</strong></div>
         </div>
-        <div class="chat-routing">
-          <label for="chatRegistration">Matric number for level routing
-            <input id="chatRegistration" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="18" placeholder="e.g. 25/SS/EC/071" readonly>
-          </label>
-          <p id="chatLevel" role="status" aria-live="polite">Detected level: 100L</p>
-        </div>
-        <div class="chat-fuel"><span>⚡ Fuel</span><div class="fuel-track"><i id="chatFuelBar"></i></div><strong class="mono" id="chatFuelValue">85/100</strong></div>
         <div class="chat-messages" id="chatMessages" aria-live="polite"></div>
         <div class="chat-prompts" id="chatPrompts">
           <button type="button" class="prompt-chip" data-prompt="Explain Peak-Load Pricing">Explain Peak-Load Pricing</button>
