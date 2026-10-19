@@ -1111,3 +1111,22 @@ textarea.admin-material-control { min-height: 140px; resize: vertical; }
   .header-signout::before { content: "🚪"; font-size: 14px; }
   .profile-modal-card { padding: 20px 16px; }
 }
+
+@media (max-width: 768px) {
+  body { overflow-x: hidden; }
+  #studentApp.shell { width: 100%; padding: 12px; }
+  button, .btn, select, input:not([type="checkbox"]) { min-height: 44px; }
+  select, input:not([type="checkbox"]), textarea { font-size: 16px; }
+  #voiceCallRoom {
+    display: flex;
+    height: 100dvh;
+    min-height: 0;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: max(20px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom));
+  }
+  .voice-call-content { width: min(100%, 600px); margin-block: auto; }
+  .voice-call-orbit { width: min(58vw, 260px); }
+  .voice-call-caption { min-height: 74px; padding: 14px 16px; }
+}
