@@ -1105,10 +1105,10 @@ async function extractAdminUploadText(file) {
 
   if (extension === "pdf") {
     const pdfjs = await ensureExternalScript(
-      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js",
+      "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js",
       "pdfjsLib",
     );
-    pdfjs.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    pdfjs.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
     const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
     if (pdf.numPages > 100) throw new Error("PDFs are limited to 100 pages for browser-side extraction.");
     const pages = [];
@@ -1267,147 +1267,265 @@ async function generateQuestionsFromMaterials(count, courseCode, level) {
 }
 
 let chatRequestInProgress = false;
-let voiceRecognition = null;
 let voiceCallActive = false;
-let voiceMicMuted = false;
-let voiceSpeakerEnabled = true;
-let voiceTurnInProgress = false;
-let voiceRecognitionListening = false;
+let voiceMuted = false;
+let voiceSpeakerOn = true;
 
-function speakText(text, onEnd = () => {}) {
-  if (!voiceSpeakerEnabled || !("speechSynthesis" in window)
-    || typeof window.SpeechSynthesisUtterance !== "function") {
-    onEnd();
-    return false;
+class DrEcoVoiceLive {
+  constructor(onStatusChange) {
+    this.onStatusChange = onStatusChange;
+    this.socket = null;
+    this.audioContext = null;
+    this.mediaStream = null;
+    this.processor = null;
+    this.sourceNode = null;
+    this.silentGain = null;
+    this.outputGain = null;
+    this.sources = new Set();
+    this.playhead = 0;
+    this.stopped = true;
+    this.config = null;
   }
-  window.speechSynthesis.cancel();
-  const utterance = new window.SpeechSynthesisUtterance(String(text).replace(/\*\*/g, ""));
-  utterance.rate = 1;
-  utterance.pitch = 1;
-  const voices = window.speechSynthesis.getVoices();
-  const preferredVoice = voices.find((voice) => {
-    const name = voice.name.toLowerCase();
-    return voice.lang.toLowerCase().includes("en")
-      && (name.includes("google") || name.includes("natural") || name.includes("samantha"));
-  });
-  if (preferredVoice) utterance.voice = preferredVoice;
-  utterance.onend = onEnd;
-  utterance.onerror = onEnd;
-  window.speechSynthesis.speak(utterance);
-  return true;
-}
 
-function setVoiceCallStatus(message) {
-  document.querySelector("#voiceCallStatus").textContent = message;
-}
+  setStatus(status, detail = "") {
+    this.onStatusChange(status, detail);
+  }
 
-function startVoiceRecognition() {
-  if (!voiceCallActive || voiceMicMuted || voiceTurnInProgress || voiceRecognitionListening || !voiceRecognition) return;
-  try {
-    voiceRecognition.start();
-    setVoiceCallStatus("Listening");
-  } catch (error) {
-    if (error.name !== "InvalidStateError") {
-      console.warn("Voice recognition could not start:", error);
-      setVoiceCallStatus("Microphone unavailable. Check browser permissions.");
+  async startSession(courseCode, level) {
+    try {
+      this.stopped = false;
+      this.setStatus("CONNECTING", "Getting indexed course notes and a secure call token…");
+      if (!navigator.mediaDevices?.getUserMedia || typeof window.WebSocket !== "function") {
+        throw new Error("Live audio requires microphone access and WebSocket support in a secure browser.");
+      }
+      const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+      if (typeof AudioContextConstructor !== "function") throw new Error("Web Audio is not supported in this browser.");
+      this.audioContext = new AudioContextConstructor();
+      if (this.audioContext.state === "suspended") await this.audioContext.resume();
+      this.mediaStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      let courseNotes = "";
+      try {
+        courseNotes = await retrieveCourseMaterialContext(courseCode, level, 5);
+      } catch (error) {
+        console.warn("Live voice course-note retrieval failed:", error);
+      }
+      const tokenResponse = await fetch("/api/gemini/live-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseCode, level, courseNotes }),
+      });
+      const tokenData = await tokenResponse.json();
+      if (!tokenResponse.ok) throw new Error(tokenData.error || "Could not obtain a secure Live API token.");
+      if (!tokenData.token || !tokenData.model || !tokenData.config) {
+        throw new Error("Gemini Live returned an incomplete session configuration.");
+      }
+      this.config = tokenData;
+      this.outputGain = this.audioContext.createGain();
+      this.outputGain.gain.value = voiceSpeakerOn ? 1 : 0;
+      this.outputGain.connect(this.audioContext.destination);
+      const endpoint = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained";
+      this.socket = new window.WebSocket(`${endpoint}?access_token=${encodeURIComponent(tokenData.token)}`);
+      this.socket.onopen = () => {
+        if (this.stopped) return;
+        const { model, config } = this.config;
+        this.socket.send(JSON.stringify({ setup: { model, ...config } }));
+      };
+      this.socket.onmessage = (event) => this.handleSocketMessage(event);
+      this.socket.onerror = () => {
+        if (!this.stopped) this.setStatus("ERROR", "Gemini Live connection failed. Please try again.");
+      };
+      this.socket.onclose = () => {
+        if (!this.stopped) {
+          this.setStatus("IDLE", "The live session disconnected.");
+          this.stopSession(false);
+        }
+      };
+    } catch (error) {
+      console.error("Could not start Dr. Eco Live:", error);
+      this.setStatus("ERROR", error.message || "Could not start the live call.");
+      this.stopSession();
     }
   }
-}
 
-async function handleVoiceTranscript(transcript) {
-  if (voiceTurnInProgress || !transcript.trim()) return;
-  voiceTurnInProgress = true;
-  if (!consumeStudyFuel(2)) {
-    voiceTurnInProgress = false;
-    setVoiceCallStatus("Not enough fuel to ask Dr. Eco.");
-    return;
-  }
-  appendChatMessage(transcript, "user");
-  document.querySelector("#voiceCaption").textContent = "Dr. Eco is thinking…";
-  setVoiceCallStatus("Thinking");
-  startLoadingSfx();
-  try {
-    const answer = await callGeminiRAG(transcript, chatCourseCode, currentStudentLevel);
-    if (!voiceCallActive) return;
-    appendChatMessage(answer, "assistant");
-    document.querySelector("#voiceCaption").textContent = `Dr. Eco: ${answer}`;
-    setVoiceCallStatus("Dr. Eco is speaking");
-    voiceTurnInProgress = false;
-    startVoiceRecognition();
-    speakText(answer, () => {
-      if (voiceCallActive && voiceMicMuted) setVoiceCallStatus("Microphone muted");
-    });
-  } catch (error) {
-    console.error("Dr. Eco voice response failed:", error);
-    if (!voiceCallActive) return;
-    const message = `Dr. Eco could not respond: ${error.message}`;
-    appendChatMessage(message, "assistant");
-    document.querySelector("#voiceCaption").textContent = message;
-    voiceTurnInProgress = false;
-    setVoiceCallStatus("Response failed");
-    if (voiceCallActive && !voiceMicMuted) startVoiceRecognition();
-  } finally {
-    stopCustomSfx("loading");
-  }
-}
-
-function startVoiceCallSession() {
-  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const caption = document.querySelector("#voiceCaption");
-  if (!Recognition) {
-    caption.textContent = "Voice recognition is not supported in this browser. Try Chrome, or close the call and type your question.";
-    setVoiceCallStatus("Voice recognition unavailable");
-    showNotice("Voice recognition is not supported in this browser. Try Chrome.");
-    return;
-  }
-  voiceRecognition = new Recognition();
-  voiceRecognition.lang = "en-US";
-  voiceRecognition.interimResults = true;
-  voiceRecognition.continuous = false;
-  voiceRecognition.onstart = () => {
-    voiceRecognitionListening = true;
-    if (!voiceTurnInProgress) setVoiceCallStatus("Listening");
-  };
-  voiceRecognition.onresult = (event) => {
-    let interimTranscript = "";
-    let finalTranscript = "";
-    for (let index = event.resultIndex; index < event.results.length; index += 1) {
-      const result = event.results[index];
-      if (result.isFinal) finalTranscript += result[0].transcript;
-      else interimTranscript += result[0].transcript;
+  async handleSocketMessage(event) {
+    try {
+      const message = JSON.parse(event.data instanceof Blob ? await event.data.text() : event.data);
+      if (message.setupComplete) {
+        if (!this.stopped) {
+          this.setStatus("LISTENING", "Connected. Speak naturally; you can interrupt Dr. Eco at any time.");
+          this.startMicStream();
+        }
+        return;
+      }
+      const content = message.serverContent;
+      if (!content) return;
+      if (content.interrupted) {
+        this.stopPlayback();
+        this.setStatus("LISTENING", "Dr. Eco paused. Go ahead—I'm listening.");
+      }
+      if (content.inputTranscription?.text) {
+        document.querySelector("#voiceCaption").textContent = `You: ${content.inputTranscription.text}`;
+      }
+      if (content.outputTranscription?.text) {
+        document.querySelector("#voiceCaption").textContent = `Dr. Eco: ${content.outputTranscription.text}`;
+      }
+      const parts = content.modelTurn?.parts || [];
+      for (const part of parts) {
+        const audio = part.inlineData?.data;
+        if (audio) {
+          this.setStatus("SPEAKING");
+          this.playAudioChunk(audio, part.inlineData.mimeType);
+        }
+        if (part.text) document.querySelector("#voiceCaption").textContent = `Dr. Eco: ${part.text}`;
+      }
+      if (content.turnComplete) this.setStatus("LISTENING");
+    } catch (error) {
+      console.error("Could not process Gemini Live response:", error);
+      this.setStatus("ERROR", "Received an unreadable response from Gemini Live.");
     }
-    if (interimTranscript) {
-      caption.textContent = `You: ${interimTranscript}`;
-      if (window.speechSynthesis?.speaking) {
-        window.speechSynthesis.cancel();
-        setVoiceCallStatus("Listening — Dr. Eco paused for you");
+  }
+
+  startMicStream() {
+    const context = this.audioContext;
+    if (!context || !this.mediaStream || !this.socket || this.stopped) return;
+    this.sourceNode = context.createMediaStreamSource(this.mediaStream);
+    this.processor = context.createScriptProcessor(4096, 1, 1);
+    this.silentGain = context.createGain();
+    this.silentGain.gain.value = 0;
+    this.processor.onaudioprocess = (event) => {
+      if (!this.socket || this.socket.readyState !== window.WebSocket.OPEN || voiceMuted) return;
+      const samples = this.resample(event.inputBuffer.getChannelData(0), context.sampleRate, 16000);
+      if (!samples.length) return;
+      const pcm16 = new Int16Array(samples.length);
+      for (let index = 0; index < samples.length; index += 1) {
+        const sample = Math.max(-1, Math.min(1, samples[index]));
+        pcm16[index] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+      }
+      const bytes = new Uint8Array(pcm16.buffer);
+      let binary = "";
+      for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+        binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + 0x8000, bytes.length)));
+      }
+      this.socket.send(JSON.stringify({
+        realtimeInput: {
+          audio: { mimeType: "audio/pcm;rate=16000", data: btoa(binary) },
+        },
+      }));
+    };
+    this.sourceNode.connect(this.processor);
+    this.processor.connect(this.silentGain);
+    this.silentGain.connect(context.destination);
+  }
+
+  resample(input, inputRate, outputRate) {
+    if (inputRate === outputRate) return input;
+    const ratio = inputRate / outputRate;
+    const outputLength = Math.floor(input.length / ratio);
+    const output = new Float32Array(outputLength);
+    for (let index = 0; index < outputLength; index += 1) {
+      const start = Math.floor(index * ratio);
+      const end = Math.min(Math.floor((index + 1) * ratio), input.length);
+      let total = 0;
+      for (let sample = start; sample < end; sample += 1) total += input[sample];
+      output[index] = total / Math.max(1, end - start);
+    }
+    return output;
+  }
+
+  playAudioChunk(encodedAudio, mimeType = "") {
+    const bytes = Uint8Array.from(atob(encodedAudio), (character) => character.charCodeAt(0));
+    const sampleCount = Math.floor(bytes.byteLength / 2);
+    if (!sampleCount || !this.audioContext || !this.outputGain) return;
+    const view = new DataView(bytes.buffer, bytes.byteOffset, sampleCount * 2);
+    const sampleRate = Number(mimeType.match(/rate=(\d+)/)?.[1] || 24000);
+    const buffer = this.audioContext.createBuffer(1, sampleCount, sampleRate);
+    const channel = buffer.getChannelData(0);
+    for (let index = 0; index < sampleCount; index += 1) channel[index] = view.getInt16(index * 2, true) / 32768;
+    const source = this.audioContext.createBufferSource();
+    source.buffer = buffer;
+    source.connect(this.outputGain);
+    const startAt = Math.max(this.audioContext.currentTime, this.playhead);
+    source.start(startAt);
+    this.playhead = startAt + buffer.duration;
+    source.onended = () => this.sources.delete(source);
+    this.sources.add(source);
+  }
+
+  setMuted(muted) {
+    voiceMuted = muted;
+    if (this.mediaStream) {
+      for (const track of this.mediaStream.getAudioTracks()) track.enabled = !muted;
+    }
+  }
+
+  setSpeakerEnabled(enabled) {
+    voiceSpeakerOn = enabled;
+    if (this.outputGain) this.outputGain.gain.value = enabled ? 1 : 0;
+  }
+
+  stopPlayback() {
+    for (const source of this.sources) {
+      try { source.stop(); } catch (error) {
+        if (error.name !== "InvalidStateError") console.warn("Could not stop a Live audio chunk:", error);
       }
     }
-    if (finalTranscript.trim()) {
-      caption.textContent = `You: ${finalTranscript.trim()}`;
-      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-      voiceTurnInProgress = false;
-      void handleVoiceTranscript(finalTranscript.trim());
+    this.sources.clear();
+    if (this.audioContext) this.playhead = this.audioContext.currentTime;
+  }
+
+  stopSession(closeSocket = true) {
+    if (this.stopped && !this.audioContext && !this.socket) return;
+    this.stopped = true;
+    if (this.processor) {
+      this.processor.onaudioprocess = null;
+      this.processor.disconnect();
     }
-  };
-  voiceRecognition.onerror = (event) => {
-    console.warn("Voice recognition failed:", event.error);
-    if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-      voiceMicMuted = true;
-      document.querySelector("#voiceMuteButton").setAttribute("aria-pressed", "true");
-      document.querySelector("#voiceMuteButton").textContent = "🔇 Unmute mic";
+    if (this.sourceNode) this.sourceNode.disconnect();
+    if (this.silentGain) this.silentGain.disconnect();
+    if (this.mediaStream) this.mediaStream.getTracks().forEach((track) => track.stop());
+    this.stopPlayback();
+    if (this.socket) {
+      this.socket.onclose = null;
+      this.socket.onerror = null;
+      this.socket.onmessage = null;
+      if (closeSocket && this.socket.readyState < window.WebSocket.CLOSING) this.socket.close();
     }
-    setVoiceCallStatus(event.error === "not-allowed"
-      ? "Microphone permission was denied."
-      : `Voice recognition error: ${event.error}`);
+    if (this.audioContext && this.audioContext.state !== "closed") void this.audioContext.close();
+    this.processor = null;
+    this.sourceNode = null;
+    this.silentGain = null;
+    this.mediaStream = null;
+    this.outputGain = null;
+    this.audioContext = null;
+    this.socket = null;
+    this.playhead = 0;
+  }
+}
+
+let drEcoVoice = null;
+function setVoiceCallStatus(status, detail = "") {
+  const statusLabel = document.querySelector("#voiceCallStatus");
+  const caption = document.querySelector("#voiceCaption");
+  const mascot = document.querySelector("#voiceCallMascot");
+  const statusLabels = {
+    CONNECTING: "Connecting…",
+    LISTENING: "Listening",
+    SPEAKING: "Dr. Eco is speaking",
+    ERROR: "Call error",
+    IDLE: "Disconnected",
   };
-  voiceRecognition.onend = () => {
-    voiceRecognitionListening = false;
-    if (voiceCallActive && !voiceMicMuted && !voiceTurnInProgress) {
-      window.setTimeout(startVoiceRecognition, 300);
-    }
-  };
-  startVoiceRecognition();
+  statusLabel.textContent = detail || statusLabels[status] || status;
+  if (status === "SPEAKING") renderLottieInto(mascot, "heart-eyes.json", "🔊", "Dr. Eco speaking");
+  else if (status === "LISTENING") renderLottieInto(mascot, "person-02-breathing.json", "🎙️", "Dr. Eco listening");
+  else if (status === "CONNECTING") renderLottieInto(mascot, "typing-indicator.json", "…", "Connecting to Dr. Eco");
+  if (status === "LISTENING" && !caption.textContent) caption.textContent = "Dr. Eco is listening…";
 }
 
 function toggleVoiceCallRoom(open) {
@@ -1419,39 +1537,48 @@ function toggleVoiceCallRoom(open) {
   toggle.setAttribute("aria-pressed", String(open));
   toggle.textContent = open ? "📞 End Dr. Eco call" : "📞 Call Dr. Eco";
   if (open) {
-    voiceMicMuted = false;
+    voiceMuted = false;
     document.querySelector("#voiceMuteButton").setAttribute("aria-pressed", "false");
     document.querySelector("#voiceMuteButton").textContent = "🎙️ Mute mic";
-    renderLottieInto(document.querySelector("#voiceCallMascot"), "person-02-breathing.json", "✦", "Dr. Eco in a live voice call");
-    startVoiceCallSession();
+    document.querySelector("#voiceCaption").textContent = "Connecting to Dr. Eco…";
+    drEcoVoice = new DrEcoVoiceLive(setVoiceCallStatus);
+    void drEcoVoice.startSession(chatCourseCode, currentStudentLevel);
     document.querySelector("#voiceEndButton").focus();
     return;
   }
-  if (voiceRecognition) {
-    voiceRecognition.onend = null;
-    voiceRecognition.stop();
-    voiceRecognition = null;
-  }
-  voiceRecognitionListening = false;
-  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-  voiceTurnInProgress = false;
-  setVoiceCallStatus("Call ended");
+  if (drEcoVoice) drEcoVoice.stopSession();
+  drEcoVoice = null;
+  setVoiceCallStatus("IDLE", "Call ended");
+}
+
+function speakText(text) {
+  if (!voiceSpeakerOn || !("speechSynthesis" in window)
+    || typeof window.SpeechSynthesisUtterance !== "function") return;
+  window.speechSynthesis.cancel();
+  const utterance = new window.SpeechSynthesisUtterance(String(text).replace(/\*\*/g, ""));
+  utterance.rate = 1;
+  utterance.pitch = 1;
+  const voice = window.speechSynthesis.getVoices().find((item) => {
+    const name = item.name.toLowerCase();
+    return item.lang.toLowerCase().includes("en")
+      && (name.includes("google") || name.includes("natural") || name.includes("samantha"));
+  });
+  if (voice) utterance.voice = voice;
+  window.speechSynthesis.speak(utterance);
 }
 
 document.querySelector("#voiceMuteButton").addEventListener("click", (event) => {
-  voiceMicMuted = !voiceMicMuted;
-  event.currentTarget.setAttribute("aria-pressed", String(voiceMicMuted));
-  event.currentTarget.textContent = voiceMicMuted ? "🔇 Unmute mic" : "🎙️ Mute mic";
-  if (voiceMicMuted) {
-    if (voiceRecognition) voiceRecognition.stop();
-    setVoiceCallStatus("Microphone muted");
-  } else startVoiceRecognition();
+  voiceMuted = !voiceMuted;
+  if (drEcoVoice) drEcoVoice.setMuted(voiceMuted);
+  event.currentTarget.setAttribute("aria-pressed", String(voiceMuted));
+  event.currentTarget.textContent = voiceMuted ? "🔇 Unmute mic" : "🎙️ Mute mic";
+  if (voiceCallActive) setVoiceCallStatus(voiceMuted ? "IDLE" : "LISTENING", voiceMuted ? "Microphone muted" : "Listening");
 });
 document.querySelector("#voiceSpeakerButton").addEventListener("click", (event) => {
-  voiceSpeakerEnabled = !voiceSpeakerEnabled;
-  event.currentTarget.setAttribute("aria-pressed", String(voiceSpeakerEnabled));
-  event.currentTarget.textContent = voiceSpeakerEnabled ? "🔊 Speaker on" : "🔇 Speaker off";
-  if (!voiceSpeakerEnabled && "speechSynthesis" in window) window.speechSynthesis.cancel();
+  voiceSpeakerOn = !voiceSpeakerOn;
+  if (drEcoVoice) drEcoVoice.setSpeakerEnabled(voiceSpeakerOn);
+  event.currentTarget.setAttribute("aria-pressed", String(voiceSpeakerOn));
+  event.currentTarget.textContent = voiceSpeakerOn ? "🔊 Speaker on" : "🔇 Speaker off";
 });
 document.querySelector("#voiceEndButton").addEventListener("click", () => toggleVoiceCallRoom(false));
 
@@ -1507,10 +1634,6 @@ document.querySelector("#chatPrompts").addEventListener("click", (event) => {
 chatMessages.addEventListener("click", (event) => {
   if (!event.target.closest(".listen-button")) return;
   const text = event.target.closest(".chat-message").querySelector("p").textContent;
-  if (!("speechSynthesis" in window) || typeof window.SpeechSynthesisUtterance !== "function") {
-    appendChatMessage("Text-to-speech is not supported by this browser.", "assistant");
-    return;
-  }
   speakText(text);
 });
 document.querySelector("#voiceToggle").addEventListener("click", () => {

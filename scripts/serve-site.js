@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
 const drEcoHandler = require("../api/dr-eco.js");
+const geminiLiveTokenHandler = require("../api/gemini/live-token.js");
 
 const projectRoot = path.join(__dirname, "..");
 const servingBuiltSite = process.argv.includes("--built");
@@ -60,6 +61,10 @@ const server = http.createServer((request, response) => {
   const pathname = new URL(request.url, `http://${host}:${port}`).pathname;
   if (pathname === "/api/dr-eco") {
     void drEcoHandler(request, response);
+    return;
+  }
+  if (pathname === "/api/gemini/live-token") {
+    void geminiLiveTokenHandler(request, response);
     return;
   }
 

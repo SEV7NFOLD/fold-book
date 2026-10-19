@@ -7,6 +7,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { after, before, test } = require("node:test");
 const drEcoHandler = require("../api/dr-eco.js");
+const geminiLiveTokenHandler = require("../api/gemini/live-token.js");
 
 const root = path.join(__dirname, "..");
 const output = path.join(root, "dist");
@@ -213,10 +214,13 @@ test("production output keeps the dark branding and compiles student results int
   const contentSecurityPolicy = vercel.headers[0].headers.find((header) => header.key === "Content-Security-Policy").value;
   assert.match(contentSecurityPolicy, /script-src 'self' https:\/\/cdn\.jsdelivr\.net https:\/\/unpkg\.com/);
   assert.match(contentSecurityPolicy, /connect-src 'self' https:\/\/fdutgltyptcqeyajsnua\.supabase\.co/);
+  assert.match(contentSecurityPolicy, /wss:\/\/generativelanguage\.googleapis\.com/);
   assert.doesNotMatch(contentSecurityPolicy, /generativelanguage\.googleapis\.com/);
   assert.match(app, /function normalizeRegistration/);
   assert.match(fs.readFileSync(path.join(root, "api/dr-eco.js"), "utf8"), /gemini-3\.5-flash-lite/);
   assert.match(fs.readFileSync(path.join(root, "api/dr-eco.js"), "utf8"), /REQUEST_TIMEOUT_MS = 30000/);
+  assert.match(app, /fetch\("\/api\/gemini\/live-token"/);
+  assert.match(fs.readFileSync(path.join(root, "api/gemini/live-token.js"), "utf8"), /liveConnectConstraints/);
   assert.match(app, /function gradeForScore/);
   assert.ok(lookupMatch, "The production app contains its compiled results lookup.");
 
@@ -617,9 +621,81 @@ test("students can look up and view their compiled results in the production app
 
     pause() {}
   }
+  let liveSocket;
+  let liveAudioContext;
+  const liveMediaTracks = [];
+  const liveAudioSources = [];
+  const liveTokenRequests = [];
+  class MockWebSocket {
+    static OPEN = 1;
+    static CLOSING = 2;
+    constructor(url) {
+      this.url = url;
+      this.readyState = 0;
+      this.sent = [];
+      liveSocket = this;
+    }
+    send(data) { this.sent.push(JSON.parse(data)); }
+    close() {
+      this.readyState = 3;
+      if (this.onclose) this.onclose();
+    }
+  }
+  class MockAudioContext {
+    constructor() {
+      this.state = "running";
+      this.sampleRate = 48000;
+      this.currentTime = 0;
+      this.destination = {};
+      this.closed = false;
+      this.processors = [];
+      this.gains = [];
+      liveAudioContext = this;
+    }
+    async resume() {}
+    createGain() {
+      const gain = { gain: { value: 1 }, connect() {}, disconnect() {} };
+      this.gains.push(gain);
+      return gain;
+    }
+    createMediaStreamSource() { return { connect() {}, disconnect() {} }; }
+    createScriptProcessor() {
+      const processor = { onaudioprocess: null, connect() {}, disconnect() {} };
+      this.processors.push(processor);
+      return processor;
+    }
+    createBuffer(_channels, length, sampleRate) {
+      const samples = new Float32Array(length);
+      return {
+        duration: length / sampleRate,
+        getChannelData() { return samples; },
+      };
+    }
+    createBufferSource() {
+      const source = {
+        buffer: null,
+        connect() {},
+        start() {},
+        stop() { this.stopped = true; },
+      };
+      liveAudioSources.push(source);
+      return source;
+    }
+    async close() { this.state = "closed"; this.closed = true; }
+  }
+  const mediaDevices = {
+    async getUserMedia() {
+      const track = { enabled: true, stopped: false, stop() { this.stopped = true; } };
+      liveMediaTracks.push(track);
+      return { getTracks: () => [track], getAudioTracks: () => [track] };
+    },
+  };
   const runtime = {
     document,
     Audio: MockAudio,
+    navigator: { mediaDevices },
+    atob,
+    btoa,
     console: { error() {}, info() {}, warn() {} },
     window: {
       print() {},
@@ -630,7 +706,10 @@ test("students can look up and view their compiled results in the production app
       navigator: {
         vibrate() { return true; },
         clipboard: { async writeText() {} },
+        mediaDevices,
       },
+      WebSocket: MockWebSocket,
+      AudioContext: MockAudioContext,
       speechSynthesis,
       SpeechSynthesisUtterance: MockSpeechSynthesisUtterance,
       addEventListener(name, listener) {
@@ -694,6 +773,23 @@ test("students can look up and view their compiled results in the production app
       },
     },
     fetch: async (url, options) => {
+      if (String(url) === "/api/gemini/live-token") {
+        const body = JSON.parse(options.body);
+        liveTokenRequests.push(body);
+        return {
+          ok: true,
+          json: async () => ({
+            token: "short-lived-constrained-token",
+            model: "models/gemini-3.8-live",
+            config: {
+              responseModalities: ["AUDIO"],
+              inputAudioTranscription: {},
+              outputAudioTranscription: {},
+              systemInstruction: { parts: [{ text: "Dr. Eco persona and course notes." }] },
+            },
+          }),
+        };
+      }
       if (String(url) === "/api/dr-eco") {
         geminiRequests.push({ url, body: JSON.parse(options.body) });
         if (geminiRequests.at(-1).body.system_instruction.parts[0].text.includes("Generate accurate course practice questions")) {
@@ -810,10 +906,47 @@ test("students can look up and view their compiled results in the production app
   elements.get("#navLearn").listeners.click();
   elements.get("#navChat").listeners.click();
   elements.get("#voiceToggle").listeners.click();
+  await new Promise((resolve) => setImmediate(resolve));
   assert.equal(elements.get("#voiceCallRoom").hidden, false);
-  assert.match(elements.get("#voiceCallStatus").textContent, /recognition unavailable/i);
+  assert.equal(liveTokenRequests.length, 1);
+  assert.equal(liveTokenRequests[0].courseCode, "ECO 128");
+  assert.match(liveTokenRequests[0].courseNotes, /Retrieved notes for this course/);
+  assert.match(liveSocket.url, /access_token=short-lived-constrained-token/);
+  liveSocket.readyState = MockWebSocket.OPEN;
+  liveSocket.onopen();
+  assert.equal(liveSocket.sent[0].setup.model, "models/gemini-3.8-live");
+  assert.equal(liveSocket.sent[0].setup.responseModalities[0], "AUDIO");
+  liveSocket.onmessage({ data: JSON.stringify({ setupComplete: {} }) });
+  const micProcessor = liveAudioContext.processors[0];
+  micProcessor.onaudioprocess({
+    inputBuffer: { getChannelData: () => new Float32Array(4800).fill(0.25) },
+  });
+  assert.equal(liveSocket.sent[1].realtimeInput.audio.mimeType, "audio/pcm;rate=16000");
+  const encodedAudio = btoa(String.fromCharCode(0, 0, 0, 0));
+  liveSocket.onmessage({ data: JSON.stringify({
+    serverContent: {
+      inputTranscription: { text: "What is demand?" },
+      outputTranscription: { text: "Demand is willingness and ability." },
+      modelTurn: { parts: [{ inlineData: { mimeType: "audio/pcm;rate=24000", data: encodedAudio } }] },
+    },
+  }) });
+  assert.equal(elements.get("#voiceCaption").textContent, "Dr. Eco: Demand is willingness and ability.");
+  assert.match(elements.get("#voiceCallStatus").textContent, /speaking/i);
+  const liveSourceCount = liveAudioSources.length;
+  liveSocket.onmessage({ data: JSON.stringify({ serverContent: { interrupted: true } }) });
+  assert.ok(liveAudioSources.slice(0, liveSourceCount).every((source) => source.stopped));
+  assert.match(elements.get("#voiceCallStatus").textContent, /paused/i);
+  elements.get("#voiceMuteButton").listeners.click({ currentTarget: elements.get("#voiceMuteButton") });
+  assert.equal(liveMediaTracks[0].enabled, false);
+  elements.get("#voiceMuteButton").listeners.click({ currentTarget: elements.get("#voiceMuteButton") });
+  assert.equal(liveMediaTracks[0].enabled, true);
+  elements.get("#voiceSpeakerButton").listeners.click({ currentTarget: elements.get("#voiceSpeakerButton") });
+  assert.equal(liveAudioContext.gains[0].gain.value, 0);
   elements.get("#voiceEndButton").listeners.click();
   assert.equal(elements.get("#voiceCallRoom").hidden, true);
+  assert.equal(liveMediaTracks[0].stopped, true);
+  assert.equal(liveSocket.readyState, 3);
+  assert.equal(liveAudioContext.closed, true);
   elements.get("#chatInput").value = "Explain peak-load pricing";
   elements.get("#chatForm").listeners.submit({ preventDefault() {} });
   await new Promise((resolve) => setImmediate(resolve));
@@ -825,7 +958,7 @@ test("students can look up and view their compiled results in the production app
     ["BR", ""],
     ["SPAN", "Second line."],
   ]);
-  assert.equal(ragCalls.length, 1);
+  assert.equal(ragCalls.length, 2);
   assert.equal(ragCalls[0].name, "match_course_materials");
   assert.equal(ragCalls[0].args.match_course, "ECO 128");
   assert.equal(ragCalls[0].args.match_level, "100L");
@@ -834,36 +967,6 @@ test("students can look up and view their compiled results in the production app
   assert.match(geminiRequests[0].body.system_instruction.parts[0].text, /energetic, witty, and deeply encouraging/);
   assert.match(geminiRequests[0].body.contents[0].parts[0].text, /Retrieved notes for this course/);
   assert.equal(elements.get("#vFuel").textContent, "83/100");
-  let activeRecognition;
-  runtime.window.SpeechRecognition = class CapturedRecognition {
-    constructor() { activeRecognition = this; }
-    start() {}
-    stop() {}
-  };
-  elements.get("#voiceToggle").listeners.click();
-  activeRecognition.onresult({
-    resultIndex: 0,
-    results: [Object.assign([{ transcript: "Explain trade" }], { isFinal: true })],
-  });
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.match(elements.get("#voiceCaption").textContent, /^Dr\. Eco: Gemini \*\*RAG\*\* response\./);
-  assert.equal(ragCalls.length, 2);
-  assert.equal(spokenUtterances.at(-1).text, "Gemini RAG response.\nSecond line.");
-  activeRecognition.onresult({
-    resultIndex: 0,
-    results: [Object.assign([{ transcript: "I have a question" }], { isFinal: false })],
-  });
-  assert.equal(speechSynthesis.speaking, false);
-  assert.ok(speechCancelCount > 0);
-  activeRecognition.onresult({
-    resultIndex: 0,
-    results: [Object.assign([{ transcript: "I have a question" }], { isFinal: true })],
-  });
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(ragCalls.length, 3);
-  elements.get("#voiceEndButton").listeners.click();
-  assert.equal(speechSynthesis.speaking, false);
-  assert.match(elements.get("#voiceCallStatus").textContent, /Call ended/);
   elements.get("#chatRegistration").value = "24/SS/EC/071";
   elements.get("#chatRegistration").listeners.input();
   assert.equal(elements.get("#chatLevel").textContent, "Detected level: 200L");
@@ -1207,6 +1310,91 @@ test("Gemini proxy keeps its key server-side and rejects invalid requests", asyn
     global.fetch = oldFetch;
     if (oldApiKey === undefined) delete process.env.GEMINI_API_KEY;
     else process.env.GEMINI_API_KEY = oldApiKey;
+  }
+});
+
+test("Gemini Live provisions short-lived constrained tokens without exposing the API key", async () => {
+  const oldApiKey = process.env.GEMINI_API_KEY;
+  const oldModel = process.env.GEMINI_LIVE_MODEL;
+  const oldFetch = global.fetch;
+  const makeRequest = (overrides = {}) => ({
+    method: "POST",
+    headers: { origin: "https://fold-book.example", host: "fold-book.example" },
+    body: {
+      courseCode: "ECO 128",
+      level: "100L",
+      courseNotes: "Transport demand is derived from the need to travel.",
+    },
+    ...overrides,
+  });
+  const invoke = async (request) => {
+    const response = {
+      headers: {},
+      status: 0,
+      writeHead(status, headers) {
+        this.status = status;
+        Object.assign(this.headers, headers);
+      },
+      setHeader(name, value) {
+        this.headers[name] = value;
+      },
+      end(body) {
+        this.body = body;
+      },
+    };
+    await geminiLiveTokenHandler(request, response);
+    return { ...response, json: JSON.parse(response.body) };
+  };
+
+  try {
+    delete process.env.GEMINI_API_KEY;
+    const notConfigured = await invoke(makeRequest());
+    assert.equal(notConfigured.status, 503);
+
+    process.env.GEMINI_API_KEY = "server-only-live-test-key";
+    delete process.env.GEMINI_LIVE_MODEL;
+    const wrongOrigin = await invoke(makeRequest({
+      headers: { origin: "https://attacker.example", host: "fold-book.example" },
+    }));
+    assert.equal(wrongOrigin.status, 403);
+
+    let upstreamUrl;
+    let upstreamHeaders;
+    let tokenRequest;
+    global.fetch = async (url, options) => {
+      upstreamUrl = String(url);
+      upstreamHeaders = options.headers;
+      tokenRequest = JSON.parse(options.body);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ name: "short-lived-token-value" }),
+      };
+    };
+    const result = await invoke(makeRequest());
+    assert.equal(result.status, 200);
+    assert.equal(result.json.token, "short-lived-token-value");
+    assert.equal(result.json.model, "models/gemini-3.8-live");
+    assert.equal(upstreamUrl, "https://generativelanguage.googleapis.com/v1beta/auth_tokens");
+    assert.equal(upstreamHeaders["x-goog-api-key"], "server-only-live-test-key");
+    assert.equal(tokenRequest.uses, 1);
+    assert.equal(tokenRequest.liveConnectConstraints.model, "models/gemini-3.8-live");
+    assert.equal(tokenRequest.liveConnectConstraints.config.responseModalities[0], "AUDIO");
+    assert.match(tokenRequest.liveConnectConstraints.config.systemInstruction.parts[0].text, /derived from the need to travel/);
+    assert.doesNotMatch(JSON.stringify(result.json), /server-only-live-test-key/);
+
+    const invalidCourse = await invoke(makeRequest({ body: {
+      courseCode: "select *",
+      level: "100L",
+      courseNotes: "",
+    } }));
+    assert.equal(invalidCourse.status, 400);
+  } finally {
+    global.fetch = oldFetch;
+    if (oldApiKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = oldApiKey;
+    if (oldModel === undefined) delete process.env.GEMINI_LIVE_MODEL;
+    else process.env.GEMINI_LIVE_MODEL = oldModel;
   }
 });
 
