@@ -815,12 +815,22 @@ test("Gemini proxy keeps its key server-side and rejects invalid requests", asyn
 
 test("WhatsApp worker disables history sync and resets logged-out auth state", () => {
   const worker = fs.readFileSync(path.join(root, "worker/worker.js"), "utf8");
+  const entrypoint = fs.readFileSync(path.join(root, "worker.js"), "utf8");
   assert.match(worker, /fetchLatestBaileysVersion/);
   assert.match(worker, /syncFullHistory:\s*false/);
-  assert.match(worker, /browser:\s*\["FoldBook AI",\s*"Chrome",\s*"1\.0\.0"\]/);
+  assert.match(worker, /browser:\s*\["Ubuntu",\s*"Chrome",\s*"110\.0\.5563\.56"\]/);
   assert.match(worker, /generateHighQualityLinkPreview:\s*false/);
+  assert.match(worker, /const BOT_PHONE_NUMBER = process\.env\.BOT_PHONE_NUMBER/);
+  assert.match(worker, /requestPairingCode\(phoneNumber\)/);
+  assert.match(worker, /YOUR WHATSAPP PAIRING CODE IS/);
+  assert.match(worker, /!state\.creds\.registered/);
+  assert.match(worker, /BOT_PHONE_NUMBER must be a Nigerian WhatsApp number/);
   assert.match(worker, /fs\.rmSync\(AUTH_DIRECTORY,\s*\{\s*recursive:\s*true,\s*force:\s*true\s*\}\)/);
   assert.match(worker, /statusCode === DisconnectReason\.loggedOut \|\| statusCode === 401/);
+  assert.match(entrypoint, /http\.createServer/);
+  assert.match(entrypoint, /process\.env\.PORT \|\| 10000/);
+  assert.match(entrypoint, /FoldBook WhatsApp Worker Active/);
+  assert.match(entrypoint, /listen\(PORT,\s*"0\.0\.0\.0"/);
 });
 
 test("production preview serves public pages but keeps raw CSV and source files out of the site", async () => {

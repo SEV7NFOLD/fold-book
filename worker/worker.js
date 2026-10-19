@@ -16,6 +16,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const FOLDBOOK_URL = process.env.FOLDBOOK_URL || "https://foldbook.app";
 const AUTH_DIRECTORY = path.resolve(process.env.WHATSAPP_AUTH_DIRECTORY || "auth_info_baileys");
+const BOT_PHONE_NUMBER = process.env.BOT_PHONE_NUMBER || "";
 const NUDGE_INTERVAL_HOURS = 20;
 const PAGE_SIZE = 500;
 const SEND_DELAY_MS = 3000;
@@ -28,6 +29,7 @@ const supabase = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
 let socket;
 let connected = false;
 let reconnectTimer;
+let pairingCodeTimer;
 let reconnectDelayMs = 5000;
 let dispatchInProgress = false;
 let shuttingDown = false;
@@ -40,6 +42,9 @@ function validateConfiguration() {
     new URL(FOLDBOOK_URL);
   } catch {
     throw new Error("FOLDBOOK_URL must be an absolute URL.");
+  }
+  if (BOT_PHONE_NUMBER && !/^234[789]\d{9}$/.test(BOT_PHONE_NUMBER.replace(/\D/g, ""))) {
+    throw new Error("BOT_PHONE_NUMBER must be a Nigerian WhatsApp number in international format, e.g. 2348012345678.");
   }
 }
 
@@ -180,18 +185,19 @@ async function connectToWhatsApp() {
   try {
     const { version } = await fetchLatestBaileysVersion();
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIRECTORY);
-    socket = makeWASocket({
+    const activeSocket = makeWASocket({
       version,
       auth: state,
       printQRInTerminal: false,
-      browser: ["FoldBook AI", "Chrome", "1.0.0"],
+      browser: ["Ubuntu", "Chrome", "110.0.5563.56"],
       syncFullHistory: false,
       markOnlineOnConnect: true,
       generateHighQualityLinkPreview: false,
       logger: require("pino")({ level: "silent" }),
     });
-    socket.ev.on("creds.update", saveCreds);
-    socket.ev.on("messages.upsert", async ({ messages, type }) => {
+    socket = activeSocket;
+    activeSocket.ev.on("creds.update", saveCreds);
+    activeSocket.ev.on("messages.upsert", async ({ messages, type }) => {
       if (type !== "notify") return;
       for (const message of messages) {
         try {
@@ -201,9 +207,28 @@ async function connectToWhatsApp() {
         }
       }
     });
-    socket.ev.on("connection.update", (update) => {
+    if (BOT_PHONE_NUMBER && !state.creds.registered) {
+      pairingCodeTimer = setTimeout(async () => {
+        pairingCodeTimer = null;
+        if (shuttingDown || socket !== activeSocket) return;
+        try {
+          if (typeof activeSocket.requestPairingCode !== "function") {
+            throw new Error("This Baileys version does not support pairing codes.");
+          }
+          const phoneNumber = BOT_PHONE_NUMBER.replace(/\D/g, "");
+          const pairingCode = await activeSocket.requestPairingCode(phoneNumber);
+          console.log("\n==================================================");
+          console.log(`YOUR WHATSAPP PAIRING CODE IS: ${pairingCode}`);
+          console.log("==================================================\n");
+          console.warn("Treat this pairing code as a password; do not share or publish worker logs.");
+        } catch (error) {
+          console.error("Could not request a WhatsApp pairing code:", error.message);
+        }
+      }, 4000);
+    }
+    activeSocket.ev.on("connection.update", (update) => {
       const { connection, lastDisconnect, qr } = update;
-      if (qr) {
+      if (qr && !BOT_PHONE_NUMBER) {
         console.log("\n==================================================");
         console.log("SCAN THIS QR CODE WITH YOUR WHATSAPP BOT PHONE:");
         console.log("==================================================\n");
@@ -217,7 +242,11 @@ async function connectToWhatsApp() {
         connected = false;
         const statusCode = lastDisconnect?.error?.output?.statusCode;
         const shouldResetAuth = statusCode === DisconnectReason.loggedOut || statusCode === 401;
-        socket = null;
+        if (pairingCodeTimer) {
+          clearTimeout(pairingCodeTimer);
+          pairingCodeTimer = null;
+        }
+        if (socket === activeSocket) socket = null;
         console.warn(`WhatsApp connection closed (status: ${statusCode}).`);
         if (shouldResetAuth) {
           try {
@@ -244,6 +273,7 @@ async function shutdown(signal) {
   console.log(`Stopping worker after ${signal}.`);
   cronTask.stop();
   if (reconnectTimer) clearTimeout(reconnectTimer);
+  if (pairingCodeTimer) clearTimeout(pairingCodeTimer);
   connected = false;
   if (socket) socket.end(undefined);
 }
