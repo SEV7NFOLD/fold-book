@@ -1,7 +1,7 @@
 "use strict";
 
-const LIVE_MODEL = process.env.GEMINI_LIVE_MODEL || "gemini-3.8-live";
-const MAX_REQUEST_BYTES = 16 * 1024;
+const LIVE_MODEL = process.env.GEMINI_LIVE_MODEL || "gemini-2.5-flash-native-audio-preview-12-2025";
+const MAX_REQUEST_BYTES = 64 * 1024;
 const MAX_NOTES_LENGTH = 12000;
 
 function sendJson(response, status, body) {

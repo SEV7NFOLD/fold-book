@@ -8,6 +8,9 @@ const path = require("node:path");
 const { after, before, test } = require("node:test");
 const drEcoHandler = require("../api/dr-eco.js");
 const geminiLiveTokenHandler = require("../api/gemini/live-token.js");
+const adminSessionHandler = require("../api/admin/session.js");
+const adminCourseMaterialsHandler = require("../api/admin/course-materials.js");
+const { createAdminSession } = require("../lib/admin-auth.js");
 
 const root = path.join(__dirname, "..");
 const output = path.join(root, "dist");
@@ -173,15 +176,16 @@ test("production output keeps the dark branding and compiles student results int
   assert.doesNotMatch(app, /MOCK_EXAM_QUESTIONS|STATISTICS_MOCK_QUESTIONS|LEADERBOARD_PREVIEW/);
   assert.match(app, /match_level:\s*level/);
   assert.match(app, /fetch\("\/api\/dr-eco"/);
-  assert.doesNotMatch(app, /generativelanguage\.googleapis\.com/);
+  assert.doesNotMatch(app, /generativelanguage\.googleapis\.com\/v1beta\/models\/.*:generateContent/);
   assert.match(app, /from\("student_xp"\)\.upsert/);
   assert.match(leaderboardSchema, /enable row level security/);
   assert.match(leaderboardSchema, /create table if not exists public\.student_xp/);
   assert.match(leaderboardSchema, /to anon, authenticated/);
   assert.match(fs.readFileSync(path.join(root, "supabase/admin_dashboard.sql"), "utf8"), /create table if not exists public\.student_results/);
   assert.match(fs.readFileSync(path.join(root, "supabase/admin_dashboard.sql"), "utf8"), /revoke all on public\.student_results from anon, authenticated/);
-  assert.match(app, /from\("course_materials"\)\.insert/);
-  assert.match(app, /SpeechRecognition/);
+  assert.match(app, /fetch\("\/api\/admin\/course-materials"/);
+  assert.match(app, /class DrEcoVoiceLive/);
+  assert.match(app, /realtimeInput:\s*\{/);
   const lottieManifest = JSON.parse(fs.readFileSync(path.join(output, "assets/lottie/manifest.json"), "utf8"));
   assert.ok(lottieManifest.length > 0);
   assert.ok(lottieManifest.every((file) => fs.existsSync(path.join(output, file.slice(1)))));
@@ -215,7 +219,6 @@ test("production output keeps the dark branding and compiles student results int
   assert.match(contentSecurityPolicy, /script-src 'self' https:\/\/cdn\.jsdelivr\.net https:\/\/unpkg\.com/);
   assert.match(contentSecurityPolicy, /connect-src 'self' https:\/\/fdutgltyptcqeyajsnua\.supabase\.co/);
   assert.match(contentSecurityPolicy, /wss:\/\/generativelanguage\.googleapis\.com/);
-  assert.doesNotMatch(contentSecurityPolicy, /generativelanguage\.googleapis\.com/);
   assert.match(app, /function normalizeRegistration/);
   assert.match(fs.readFileSync(path.join(root, "api/dr-eco.js"), "utf8"), /gemini-3\.5-flash-lite/);
   assert.match(fs.readFileSync(path.join(root, "api/dr-eco.js"), "utf8"), /REQUEST_TIMEOUT_MS = 30000/);
@@ -342,6 +345,8 @@ test("students can look up and view their compiled results in the production app
     "#authRegNo",
     "#authWhatsapp",
     "#authMarketingConsent",
+    "#adminPasscodeGroup",
+    "#adminPasscode",
     "#authStatus",
     "#authSubmit",
     "#adminDashboard",
@@ -780,7 +785,7 @@ test("students can look up and view their compiled results in the production app
           ok: true,
           json: async () => ({
             token: "short-lived-constrained-token",
-            model: "models/gemini-3.8-live",
+            model: "models/gemini-2.5-flash-native-audio-preview-12-2025",
             config: {
               responseModalities: ["AUDIO"],
               inputAudioTranscription: {},
@@ -842,8 +847,8 @@ test("students can look up and view their compiled results in the production app
   assert.equal(elements.get("#results").hidden, false);
   assert.equal(elements.get("#home").hidden, true);
   assert.equal(elements.get("#studentApp").hidden, true);
-  assert.equal(elements.get("#landingView").hidden, false);
-  assert.equal(elements.get("#authView").hidden, true);
+  assert.equal(elements.get("#landingView").hidden, true);
+  assert.equal(elements.get("#authView").hidden, false);
   assert.equal(elements.get("#adminDashboard").hidden, true);
   assert.equal(elements.get("#accessToast").hidden, true);
   assert.equal(elements.get("#chatMessages").children.length, 1);
@@ -852,6 +857,7 @@ test("students can look up and view their compiled results in the production app
   windowListeners.hashchange();
   assert.equal(elements.get("#adminDashboard").hidden, true);
   assert.equal(elements.get("#authView").hidden, false);
+  assert.equal(elements.get("#adminPasscodeGroup").hidden, false);
   assert.equal(elements.get("#accessToast").hidden, false);
   elements.get("#navBoard").listeners.click();
   assert.equal(elements.get("#authStatus").textContent, "Access Restricted: SevenFold Authorized Personnel Only");
@@ -914,9 +920,9 @@ test("students can look up and view their compiled results in the production app
   assert.match(liveSocket.url, /access_token=short-lived-constrained-token/);
   liveSocket.readyState = MockWebSocket.OPEN;
   liveSocket.onopen();
-  assert.equal(liveSocket.sent[0].setup.model, "models/gemini-3.8-live");
+  assert.equal(liveSocket.sent[0].setup.model, "models/gemini-2.5-flash-native-audio-preview-12-2025");
   assert.equal(liveSocket.sent[0].setup.responseModalities[0], "AUDIO");
-  liveSocket.onmessage({ data: JSON.stringify({ setupComplete: {} }) });
+  await liveSocket.onmessage({ data: JSON.stringify({ setupComplete: {} }) });
   const micProcessor = liveAudioContext.processors[0];
   micProcessor.onaudioprocess({
     inputBuffer: { getChannelData: () => new Float32Array(4800).fill(0.25) },
@@ -962,7 +968,8 @@ test("students can look up and view their compiled results in the production app
   assert.equal(ragCalls[0].name, "match_course_materials");
   assert.equal(ragCalls[0].args.match_course, "ECO 128");
   assert.equal(ragCalls[0].args.match_level, "100L");
-  assert.equal(ragCalls[0].args.match_count, 3);
+  assert.equal(ragCalls[0].args.match_count, 5);
+  assert.equal(ragCalls[1].args.match_count, 3);
   assert.equal(geminiRequests[0].url, "/api/dr-eco");
   assert.match(geminiRequests[0].body.system_instruction.parts[0].text, /energetic, witty, and deeply encouraging/);
   assert.match(geminiRequests[0].body.contents[0].parts[0].text, /Retrieved notes for this course/);
@@ -1183,10 +1190,13 @@ test("students can look up and view their compiled results in the production app
   assert.equal(status.textContent, "Invalid Registration Number or Full Name combination. Please verify your details.");
 
   elements.get("#adminLogout").listeners.click();
-  elements.get("#launchApp").listeners.click();
+  runtime.window.location.hash = "#admin";
+  windowListeners.hashchange();
+  assert.equal(elements.get("#adminPasscodeGroup").hidden, false);
   elements.get("#authFullName").value = "";
-  elements.get("#authRegNo").value = "101010";
+  elements.get("#authRegNo").value = "";
   elements.get("#authWhatsapp").value = "";
+  elements.get("#adminPasscode").value = "test-admin-passcode";
   elements.get("#authMarketingConsent").checked = false;
   const optInCountBeforeAdmin = savedOptIns.length;
   await elements.get("#appAuthForm").listeners.submit(submittedEvent);
@@ -1374,11 +1384,11 @@ test("Gemini Live provisions short-lived constrained tokens without exposing the
     const result = await invoke(makeRequest());
     assert.equal(result.status, 200);
     assert.equal(result.json.token, "short-lived-token-value");
-    assert.equal(result.json.model, "models/gemini-3.8-live");
+    assert.equal(result.json.model, "models/gemini-2.5-flash-native-audio-preview-12-2025");
     assert.equal(upstreamUrl, "https://generativelanguage.googleapis.com/v1beta/auth_tokens");
     assert.equal(upstreamHeaders["x-goog-api-key"], "server-only-live-test-key");
     assert.equal(tokenRequest.uses, 1);
-    assert.equal(tokenRequest.liveConnectConstraints.model, "models/gemini-3.8-live");
+    assert.equal(tokenRequest.liveConnectConstraints.model, "models/gemini-2.5-flash-native-audio-preview-12-2025");
     assert.equal(tokenRequest.liveConnectConstraints.config.responseModalities[0], "AUDIO");
     assert.match(tokenRequest.liveConnectConstraints.config.systemInstruction.parts[0].text, /derived from the need to travel/);
     assert.doesNotMatch(JSON.stringify(result.json), /server-only-live-test-key/);
@@ -1395,6 +1405,107 @@ test("Gemini Live provisions short-lived constrained tokens without exposing the
     else process.env.GEMINI_API_KEY = oldApiKey;
     if (oldModel === undefined) delete process.env.GEMINI_LIVE_MODEL;
     else process.env.GEMINI_LIVE_MODEL = oldModel;
+  }
+});
+
+test("admin passcode sessions protect server-side course material indexing", async () => {
+  const oldPasscode = process.env.FOLDBOOK_ADMIN_PASSCODE;
+  const oldSecret = process.env.FOLDBOOK_ADMIN_SESSION_SECRET;
+  const oldSupabaseUrl = process.env.SUPABASE_URL;
+  const oldServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const oldFetch = global.fetch;
+  process.env.FOLDBOOK_ADMIN_PASSCODE = "test-admin-passcode";
+  process.env.FOLDBOOK_ADMIN_SESSION_SECRET = "test-session-secret-that-is-at-least-32-bytes";
+  process.env.SUPABASE_URL = "https://fold-book-test.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "server-only-service-role-test-key";
+
+  const invoke = async (handler, request) => {
+    const response = {
+      headers: {},
+      status: 0,
+      writeHead(status, headers) {
+        this.status = status;
+        Object.assign(this.headers, headers);
+      },
+      setHeader(name, value) {
+        this.headers[name] = value;
+      },
+      end(body) {
+        this.body = body;
+      },
+    };
+    await handler(request, response);
+    return { ...response, json: JSON.parse(response.body) };
+  };
+  const makeRequest = (body, overrides = {}) => ({
+    method: "POST",
+    headers: { origin: "https://fold-book.example", host: "fold-book.example" },
+    body,
+    ...overrides,
+  });
+
+  try {
+    const invalidPasscode = await invoke(adminSessionHandler, makeRequest({ passcode: "wrong" }));
+    assert.equal(invalidPasscode.status, 401);
+
+    const crossOrigin = await invoke(adminSessionHandler, makeRequest({ passcode: "test-admin-passcode" }, {
+      headers: { origin: "https://attacker.example", host: "fold-book.example" },
+    }));
+    assert.equal(crossOrigin.status, 403);
+
+    const login = await invoke(adminSessionHandler, makeRequest({ passcode: "test-admin-passcode" }));
+    assert.equal(login.status, 200);
+    assert.match(login.headers["Set-Cookie"], /HttpOnly/);
+    assert.match(login.headers["Set-Cookie"], /SameSite=Strict/);
+    const cookie = login.headers["Set-Cookie"].split(";")[0];
+
+    const unauthenticated = await invoke(adminCourseMaterialsHandler, makeRequest({
+      level: "100L",
+      courseCode: "ECO 128",
+      title: "Lecture notes",
+      content: "Demand for transport is derived.",
+    }));
+    assert.equal(unauthenticated.status, 401);
+
+    let upstreamUrl;
+    let upstreamOptions;
+    global.fetch = async (url, options) => {
+      upstreamUrl = String(url);
+      upstreamOptions = options;
+      return { ok: true, status: 201 };
+    };
+    const indexed = await invoke(adminCourseMaterialsHandler, makeRequest({
+      level: "200L",
+      courseCode: "ECO 221",
+      title: "Consumer theory",
+      content: "Utility maximization under a budget constraint.",
+    }, { headers: { origin: "https://fold-book.example", host: "fold-book.example", cookie } }));
+    assert.equal(indexed.status, 201);
+    assert.equal(upstreamUrl, "https://fold-book-test.supabase.co/rest/v1/course_materials");
+    assert.equal(upstreamOptions.headers.apikey, "server-only-service-role-test-key");
+    assert.deepEqual(JSON.parse(upstreamOptions.body), {
+      level: "200L",
+      course_code: "ECO 221",
+      title: "Consumer theory",
+      content: "Utility maximization under a budget constraint.",
+    });
+    assert.doesNotMatch(JSON.stringify(indexed.json), /server-only-service-role-test-key/);
+
+    const tamperedCookie = cookie.replace(/.$/, cookie.endsWith("a") ? "b" : "a");
+    const deniedTampered = await invoke(adminCourseMaterialsHandler, makeRequest({}, {
+      headers: { origin: "https://fold-book.example", host: "fold-book.example", cookie: tamperedCookie },
+    }));
+    assert.equal(deniedTampered.status, 401);
+  } finally {
+    global.fetch = oldFetch;
+    if (oldPasscode === undefined) delete process.env.FOLDBOOK_ADMIN_PASSCODE;
+    else process.env.FOLDBOOK_ADMIN_PASSCODE = oldPasscode;
+    if (oldSecret === undefined) delete process.env.FOLDBOOK_ADMIN_SESSION_SECRET;
+    else process.env.FOLDBOOK_ADMIN_SESSION_SECRET = oldSecret;
+    if (oldSupabaseUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = oldSupabaseUrl;
+    if (oldServiceRoleKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = oldServiceRoleKey;
   }
 });
 

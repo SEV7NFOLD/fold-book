@@ -672,7 +672,7 @@ function setNavigationAvailable(available) {
   document.querySelector("#studentHeaderWidgets").hidden = !available;
 }
 
-function showStage(stage) {
+function showStage(stage, updateHash = true) {
   for (const stageName of ["landingView", "authView", "studentApp", "adminDashboard"]) {
     const element = document.querySelector(`#${stageName}`);
     const isVisible = stage === stageName;
@@ -680,7 +680,7 @@ function showStage(stage) {
     element.classList.toggle("hide", !isVisible);
   }
   setNavigationAvailable(stage === "studentApp");
-  window.location.hash = `#${stage}`;
+  if (updateHash) window.location.hash = `#${stage}`;
   if (typeof window.scrollTo === "function") window.scrollTo(0, 0);
 }
 
@@ -1356,7 +1356,9 @@ class DrEcoVoiceLive {
 
   async handleSocketMessage(event) {
     try {
-      const message = JSON.parse(event.data instanceof Blob ? await event.data.text() : event.data);
+      const message = JSON.parse(typeof Blob !== "undefined" && event.data instanceof Blob
+        ? await event.data.text()
+        : event.data);
       if (message.setupComplete) {
         if (!this.stopped) {
           this.setStatus("LISTENING", "Connected. Speak naturally; you can interrupt Dr. Eco at any time.");
@@ -1957,6 +1959,8 @@ const adminMaterialTitle = document.querySelector("#adminMaterialTitle");
 const adminMaterialText = document.querySelector("#adminMaterialText");
 const adminMaterialStatus = document.querySelector("#adminMaterialStatus");
 const adminMaterialSubmit = document.querySelector("#adminMaterialSubmit");
+const adminPasscodeGroup = document.querySelector("#adminPasscodeGroup");
+const adminPasscodeInput = document.querySelector("#adminPasscode");
 let activeCardContext = null;
 let verificationTrigger = null;
 
@@ -1971,24 +1975,17 @@ async function handleIndexMaterialSubmit() {
     adminMaterialStatus.textContent = "Choose a valid level and course, and fill in both the title and course content.";
     return;
   }
-  if (!supabaseClient) {
-    sfx.no();
-    adminMaterialStatus.textContent = "Supabase is unavailable or misconfigured. Material was not saved.";
-    console.error("Supabase client is unavailable; course material was not indexed.");
-    return;
-  }
-
   adminMaterialSubmit.disabled = true;
-  adminMaterialStatus.textContent = "Indexing content into the course materials table...";
+  adminMaterialStatus.textContent = "Indexing content into the course materials table…";
   startLoadingSfx();
   try {
-    const { error } = await supabaseClient.from("course_materials").insert([{
-      level,
-      course_code: courseCode,
-      title,
-      content: text,
-    }]);
-    if (error) throw error;
+    const response = await fetch("/api/admin/course-materials", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ level, courseCode, title, content: text }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Material indexing failed.");
 
     sfx.win();
     adminMaterialStatus.textContent = `Successfully indexed "${title}" under ${level} (${courseCode}).`;
@@ -2616,6 +2613,10 @@ function signOut() {
   S.user = null;
   S.phoneNumber = "";
   window.localStorage.removeItem(AUTH_SESSION_KEY);
+  adminPasscodeInput.value = "";
+  void fetch("/api/admin/session", { method: "DELETE" }).catch((error) => {
+    console.warn("Could not end the admin session on the server:", error);
+  });
   document.querySelector("#profileModal").hidden = true;
   document.querySelector("#authStatus").textContent = "";
   showStage("authView");
@@ -2765,6 +2766,8 @@ resultsForm.addEventListener("submit", async (event) => {
 
 document.querySelector("#launchApp").addEventListener("click", () => {
   document.querySelector("#authStatus").textContent = "";
+  adminPasscodeGroup.hidden = true;
+  adminPasscodeInput.value = "";
   showStage("authView");
   document.querySelector("#authFullName").focus();
 });
@@ -2775,14 +2778,35 @@ function isMasterAdminRegistration(registration) {
   return registration === "101010";
 }
 
-async function handleAuthSubmit(fullName, regNumber, phone) {
+async function handleAuthSubmit(fullName, regNumber, phone, passcode) {
   const name = typeof fullName === "string" ? fullName.trim() : "";
   const rawRegistration = typeof regNumber === "string" ? regNumber.trim() : "";
   const rawPhone = typeof phone === "string" ? phone.trim() : "";
   const status = document.querySelector("#authStatus");
   status.textContent = "";
 
-  if (isMasterAdminRegistration(rawRegistration)) {
+  if (isMasterAdminRegistration(rawRegistration)
+    || window.location.hash === "#admin" || window.location.hash === "#adminDashboard") {
+    const passcodeValue = typeof passcode === "string" ? passcode : "";
+    if (!passcodeValue) {
+      adminPasscodeGroup.hidden = false;
+      status.textContent = "Enter the admin passcode to continue.";
+      adminPasscodeInput.focus();
+      return;
+    }
+    status.textContent = "Verifying admin access…";
+    try {
+      const response = await fetch("/api/admin/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ passcode: passcodeValue }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Admin access could not be verified.");
+    } catch (error) {
+      status.textContent = error.message || "Admin access could not be verified.";
+      return;
+    }
     const adminName = name || "SevenFold Admin";
     currentStudent = null;
     isMasterAdmin = true;
@@ -2883,6 +2907,7 @@ appAuthForm.addEventListener("submit", async (event) => {
     document.querySelector("#authFullName").value,
     document.querySelector("#authRegNo").value,
     document.querySelector("#authWhatsapp").value,
+    adminPasscodeInput.value,
   );
 });
 
@@ -2892,15 +2917,9 @@ function restoreAuthSession() {
     savedSession = window.localStorage.getItem(AUTH_SESSION_KEY);
     if (!savedSession) return false;
     const session = JSON.parse(savedSession);
-    if (session.role === "admin" && isMasterAdminRegistration(session.registration)) {
-      isMasterAdmin = true;
-      S.isAdmin = true;
-      S.level = "400L";
-      S.student = { name: "SevenFold Admin", registration: session.registration };
-      S.user = { name: "SevenFold Admin", regNo: "101010", level: "400L" };
-      renderAdminDirectory();
-      showStage("adminDashboard");
-      return true;
+    if (session.role === "admin") {
+      window.localStorage.removeItem(AUTH_SESSION_KEY);
+      return false;
     }
     const registration = normalizeRegistration(session.registration || "");
     const student = registration && RESULT_LOOKUP && Object.hasOwn(RESULT_LOOKUP, registration)
@@ -2965,14 +2984,21 @@ document.querySelectorAll("[data-admin-view]").forEach((button) => {
   });
 });
 
-if (!restoreAuthSession()) showStage("landingView");
+const initialHash = window.location.hash.slice(1);
+if (!restoreAuthSession()) {
+  if (initialHash === "admin" || initialHash === "adminDashboard") {
+    adminPasscodeGroup.hidden = false;
+    showStage("authView", false);
+  } else showStage("landingView");
+}
 if (typeof window.addEventListener === "function") {
   window.addEventListener("hashchange", () => {
     const stage = window.location.hash.slice(1);
     if (stage === "admin" || stage === "adminDashboard") {
       if (!S.isAdmin) {
         showAccessRestrictedNotice();
-        showStage("authView");
+        adminPasscodeGroup.hidden = stage !== "admin";
+        showStage("authView", stage !== "admin");
       } else showStage("adminDashboard");
     } else if (stage === "studentApp") {
       if (!currentStudent || S.isAdmin) {

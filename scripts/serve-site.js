@@ -5,6 +5,8 @@ const http = require("node:http");
 const path = require("node:path");
 const drEcoHandler = require("../api/dr-eco.js");
 const geminiLiveTokenHandler = require("../api/gemini/live-token.js");
+const adminSessionHandler = require("../api/admin/session.js");
+const adminCourseMaterialsHandler = require("../api/admin/course-materials.js");
 
 const projectRoot = path.join(__dirname, "..");
 const servingBuiltSite = process.argv.includes("--built");
@@ -65,6 +67,14 @@ const server = http.createServer((request, response) => {
   }
   if (pathname === "/api/gemini/live-token") {
     void geminiLiveTokenHandler(request, response);
+    return;
+  }
+  if (pathname === "/api/admin/session") {
+    void adminSessionHandler(request, response);
+    return;
+  }
+  if (pathname === "/api/admin/course-materials") {
+    void adminCourseMaterialsHandler(request, response);
     return;
   }
 
