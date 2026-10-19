@@ -83,6 +83,7 @@ test("production output keeps the dark branding and compiles student results int
   const html = fs.readFileSync(path.join(output, "index.html"), "utf8");
   const styles = fs.readFileSync(path.join(output, "assets/css/styles.css"), "utf8");
   const app = fs.readFileSync(path.join(output, "assets/js/app.js"), "utf8");
+  const leaderboardSchema = fs.readFileSync(path.join(root, "supabase/leaderboard.sql"), "utf8");
   const vercel = JSON.parse(fs.readFileSync(path.join(root, "vercel.json"), "utf8"));
   const lookupMatch = app.match(/^const RESULT_LOOKUP = (\{.*\});$/m);
 
@@ -96,6 +97,14 @@ test("production output keeps the dark branding and compiles student results int
   assert.match(html, /id="navChat"[^>]+data-tab="chat"/);
   assert.match(html, /id="navInvite"[^>]+data-tab="invite"/);
   assert.match(html, /id="mobileLearn"[^>]+data-tab="home"/);
+  assert.match(html, /id="navAdmin"[^>]+data-tab="admin"[^>]+hidden/);
+  assert.match(html, /id="mobileAdmin"[^>]+data-tab="admin"[^>]+hidden/);
+  assert.match(html, /<section class="admin-panel hide sec" id="admin" hidden>/);
+  assert.doesNotMatch(html, /id="adminPanel"/);
+  assert.match(html, /id="home" class="learn-section hide" hidden/);
+  assert.match(html, /id="results"[^>]*>/);
+  assert.match(html, /id="accessToast" role="alert" hidden/);
+  assert.doesNotMatch(html, /Sample rankings for preview only/);
   assert.match(html, /FoldBook/);
   assert.doesNotMatch(html, /Fold Book V2|FOLD BOOK V2/);
   assert.match(html, /@dotlottie\/player-component/);
@@ -117,9 +126,15 @@ test("production output keeps the dark branding and compiles student results int
   assert.match(app, /function detectStudentLevel/);
   assert.match(app, /function updateAdminCourseDropdown/);
   assert.match(app, /function callGeminiRAG/);
+  assert.match(app, /function generateQuestionsFromMaterials/);
+  assert.doesNotMatch(app, /MOCK_EXAM_QUESTIONS|STATISTICS_MOCK_QUESTIONS|LEADERBOARD_PREVIEW/);
   assert.match(app, /match_level:\s*level/);
   assert.match(app, /fetch\("\/api\/dr-eco"/);
   assert.doesNotMatch(app, /generativelanguage\.googleapis\.com/);
+  assert.match(app, /from\("student_xp"\)\.upsert/);
+  assert.match(leaderboardSchema, /enable row level security/);
+  assert.match(leaderboardSchema, /create table if not exists public\.student_xp/);
+  assert.match(leaderboardSchema, /to anon, authenticated/);
   assert.match(app, /from\("course_materials"\)\.insert/);
   assert.match(app, /SpeechRecognition/);
   const lottieManifest = JSON.parse(fs.readFileSync(path.join(output, "assets/lottie/manifest.json"), "utf8"));
@@ -156,6 +171,8 @@ test("production output keeps the dark branding and compiles student results int
   assert.match(contentSecurityPolicy, /connect-src 'self' https:\/\/fdutgltyptcqeyajsnua\.supabase\.co/);
   assert.doesNotMatch(contentSecurityPolicy, /generativelanguage\.googleapis\.com/);
   assert.match(app, /function normalizeRegistration/);
+  assert.match(fs.readFileSync(path.join(root, "api/dr-eco.js"), "utf8"), /gemini-2\.5-flash-lite/);
+  assert.match(fs.readFileSync(path.join(root, "api/dr-eco.js"), "utf8"), /REQUEST_TIMEOUT_MS = 30000/);
   assert.match(app, /function gradeForScore/);
   assert.ok(lookupMatch, "The production app contains its compiled results lookup.");
 
@@ -275,11 +292,15 @@ test("students can look up and view their compiled results in the production app
     "#navBoard",
     "#navInvite",
     "#navResults",
+    "#navAdmin",
     "#mobileLearn",
     "#mobileBoard",
     "#mobileChat",
     "#mobileInvite",
     "#mobileResults",
+    "#mobileAdmin",
+    ".side",
+    ".bnav",
     "#learn",
     "#leaderboard",
     "#chatInput",
@@ -320,7 +341,9 @@ test("students can look up and view their compiled results in the production app
     "#leaderboardPodium",
     "#yourRank",
     "#yourXp",
-    "#adminPanel",
+    "#leaderboardStatus",
+    "#admin",
+    "#adminStatus",
     "#adminSearch",
     "#adminResults",
     "#adminStudentDetail",
@@ -360,6 +383,7 @@ test("students can look up and view their compiled results in the production app
     "#searchRegNo",
     "#searchFullName",
     "#results-status",
+    "#accessToast",
     "#results-panel",
     "#result-name",
     "#result-registration",
@@ -392,11 +416,13 @@ test("students can look up and view their compiled results in the production app
     ["#navBoard", "board"],
     ["#navInvite", "invite"],
     ["#navResults", "results"],
+    ["#navAdmin", "admin"],
     ["#mobileLearn", "home"],
     ["#mobileBoard", "board"],
     ["#mobileChat", "chat"],
     ["#mobileInvite", "invite"],
     ["#mobileResults", "results"],
+    ["#mobileAdmin", "admin"],
   ].map(([selector, tab]) => {
     const element = elements.get(selector);
     element.dataset.tab = tab;
@@ -407,11 +433,12 @@ test("students can look up and view their compiled results in the production app
     choice.dataset.course = course;
     return choice;
   });
-  elements.get("#home").hidden = false;
+  elements.get("#home").hidden = true;
   elements.get("#chat").hidden = true;
   elements.get("#board").hidden = true;
   elements.get("#invite").hidden = true;
-  elements.get("#results").hidden = true;
+  elements.get("#results").hidden = false;
+  elements.get("#admin").hidden = true;
   elements.get("#authModal").hidden = true;
   elements.get("#poster-wrapper").hidden = true;
   elements.get("#poster-wrapper").scrollIntoView = () => {};
@@ -452,15 +479,18 @@ test("students can look up and view their compiled results in the production app
   const savedOptIns = [];
   const ragCalls = [];
   const geminiRequests = [];
+  const leaderboardRows = [];
   const studyStorage = new Map();
   const runtime = {
     document,
     console: { error() {}, info() {}, warn() {} },
     window: {
       print() {},
-      location: { origin, pathname: "/" },
+      location: { origin, pathname: "/", hash: "#admin" },
+      crypto: { randomUUID: () => "12345678-1234-4234-8234-123456789abc" },
       setTimeout() { return 1; },
       navigator: { vibrate() { return true; } },
+      addEventListener() {},
       localStorage: {
         getItem(key) {
           return studyStorage.get(key) || null;
@@ -475,11 +505,27 @@ test("students can look up and view their compiled results in the production app
           assert.equal(key, "header.payload.signature");
           return {
             from(table) {
-              assert.equal(table, "whatsapp_optins");
               return {
                 async upsert(row, options) {
-                  savedOptIns.push({ row, options });
-                  return insertResponse;
+                  if (table === "whatsapp_optins") {
+                    savedOptIns.push({ row, options });
+                    return insertResponse;
+                  }
+                  assert.equal(table, "student_xp");
+                  const index = leaderboardRows.findIndex((entry) => entry.id === row.id);
+                  if (index === -1) leaderboardRows.push(row);
+                  else leaderboardRows[index] = row;
+                  return { error: null };
+                },
+                select() {
+                  return {
+                    async order() {
+                      return {
+                        data: [...leaderboardRows].sort((left, right) => right.xp - left.xp),
+                        error: null,
+                      };
+                    },
+                  };
                 },
               };
             },
@@ -494,6 +540,30 @@ test("students can look up and view their compiled results in the production app
     fetch: async (url, options) => {
       if (String(url) === "/api/dr-eco") {
         geminiRequests.push({ url, body: JSON.parse(options.body) });
+        if (geminiRequests.at(-1).body.system_instruction.parts[0].text.includes("Generate accurate course practice questions")) {
+          const prompt = geminiRequests.at(-1).body.contents[0].parts[0].text;
+          const count = Number(prompt.match(/Create (\d+) varied/)?.[1] || 5);
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              candidates: [{
+                content: {
+                  parts: [{
+                    text: JSON.stringify({
+                      questions: Array.from({ length: count }, (_, index) => ({
+                        prompt: `Generated question ${index + 1}`,
+                        answers: ["Correct answer", "Distractor one", "Distractor two"],
+                        correctAnswer: 0,
+                        lecturerTip: "Use the indexed notes.",
+                      })),
+                    }),
+                  }],
+                },
+              }],
+            }),
+          };
+        }
         return {
           ok: true,
           status: 200,
@@ -517,7 +587,28 @@ test("students can look up and view their compiled results in the production app
   assert.equal(elements.get("#vGems").textContent, "0");
   assert.equal(elements.get("#examPredictorButton").disabled, false);
   assert.equal(elements.get("#examPredictorStatus").textContent, "LOCKED");
-  elements.get("#examPredictorButton").listeners.click();
+  assert.equal(elements.get("#results").hidden, false);
+  assert.equal(elements.get("#home").hidden, true);
+  assert.equal(elements.get("#admin").hidden, true);
+  assert.equal(elements.get("#accessToast").textContent, "Access Restricted: SevenFold Authorized Personnel Only");
+  assert.equal(elements.get("#chatMessages").children.length, 1);
+  elements.get("#navBoard").listeners.click();
+  assert.equal(elements.get("#results-status").textContent, "Access Restricted: SevenFold Authorized Personnel Only");
+  assert.equal(elements.get("#accessToast").hidden, false);
+  const loginForm = elements.get("#lookupForm");
+  elements.get("#searchRegNo").value = "001";
+  elements.get("#searchFullName").value = "Godspower Esther Gift";
+  loginForm.listeners.submit({ preventDefault() {} });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(elements.get("#home").hidden, false);
+  assert.equal(elements.get(".side").hidden, false);
+  assert.equal(elements.get("#navAdmin").hidden, true);
+  assert.equal(elements.get("#leaderboardList").children.length, 1);
+  assert.match(elements.get("#leaderboardList").children[0].children[1].textContent, /^Learner-/);
+  elements.get("#navAdmin").listeners.click();
+  assert.equal(elements.get("#admin").hidden, true);
+  assert.equal(elements.get("#results-status").textContent, "Access Restricted: SevenFold Authorized Personnel Only");
+  await elements.get("#examPredictorButton").listeners.click();
   assert.equal(elements.get("#fuel").hidden, false);
   elements.get("#closeFuel").listeners.click();
   courseChoices[1].listeners.click();
@@ -551,9 +642,10 @@ test("students can look up and view their compiled results in the production app
   elements.get("#adminLevelSelect").listeners.change();
   assert.equal(elements.get("#adminCourseSelect").children[0].value, "ECO 311");
   elements.get("#questionCount").value = "10";
-  elements.get("#openTest").listeners.click();
+  await elements.get("#openTest").listeners.click();
   assert.equal(elements.get("#tdr").hidden, false);
   assert.equal(elements.get("#testProgress").textContent, "1 / 10");
+  assert.match(elements.get("#testQuestion").textContent, /Generated question/);
   elements.get("#testOptions").children[0].listeners.click();
   elements.get("#nextTestQuestion").listeners.click();
   assert.equal(elements.get("#testProgress").textContent, "2 / 10");
@@ -571,6 +663,7 @@ test("students can look up and view their compiled results in the production app
   elements.get("#answerOptions").children[1].listeners.click();
   assert.match(elements.get("#lessonFeedback").textContent, /try another answer/i);
   elements.get("#answerOptions").children[0].listeners.click();
+  await new Promise((resolve) => setImmediate(resolve));
   assert.match(elements.get("#lessonFeedback").textContent, /\+20 XP/);
   assert.equal(elements.get("#cpct").textContent, "20%");
   assert.equal(elements.get("#vGems").textContent, "5");
@@ -587,7 +680,7 @@ test("students can look up and view their compiled results in the production app
   assert.equal(elements.get("#cpct").textContent, "100%");
   assert.equal(elements.get("#examPredictorButton").disabled, false);
   assert.equal(elements.get("#examPredictorStatus").textContent, "MOCK EXAM READY");
-  elements.get("#examPredictorButton").listeners.click();
+  await elements.get("#examPredictorButton").listeners.click();
   assert.equal(elements.get("#examPredictorPanel").hidden, false);
   for (let index = 0; index < 5; index += 1) {
     elements.get("#mockExamOptions").children[0].listeners.click();
@@ -728,7 +821,7 @@ test("students can look up and view their compiled results in the production app
   fullName.value = "Nssien";
   form.listeners.submit(submittedEvent);
   assert.equal(panel.hidden, true);
-  assert.equal(elements.get("#adminPanel").hidden, false);
+  assert.equal(elements.get("#admin").hidden, false);
   assert.equal(elements.get("#adminResults").children.length, 114);
   elements.get("#adminSearch").value = "Godspower Esther";
   elements.get("#adminSearch").listeners.input();
@@ -737,7 +830,8 @@ test("students can look up and view their compiled results in the production app
   assert.equal(elements.get("#adminStudentDetail").hidden, false);
   assert.equal(elements.get("#adminStudentName").textContent, "Godspower Esther Gift");
   elements.get("#adminLogout").listeners.click();
-  assert.equal(elements.get("#adminPanel").hidden, true);
+  assert.equal(elements.get("#admin").hidden, true);
+  assert.equal(elements.get(".side").hidden, true);
 });
 
 test("Gemini proxy keeps its key server-side and rejects invalid requests", async () => {
@@ -798,7 +892,7 @@ test("Gemini proxy keeps its key server-side and rejects invalid requests", asyn
     };
     const success = await invoke(makeRequest());
     assert.equal(success.status, 200);
-    assert.match(upstreamUrl, /gemini-1\.5-flash:generateContent\?key=server-only-test-key/);
+    assert.match(upstreamUrl, /gemini-2\.5-flash-lite:generateContent\?key=server-only-test-key/);
     assert.equal(upstreamBody.contents[0].parts[0].text, "Explain demand.");
     assert.doesNotMatch(JSON.stringify(success.json), /server-only-test-key/);
 

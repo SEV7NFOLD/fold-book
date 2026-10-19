@@ -50,6 +50,7 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid 
   background: var(--accent); content: "";
 }
 .sp { flex: 1; }
+.access-toast { position: fixed; z-index: 30; right: 20px; bottom: 24px; max-width: min(420px, calc(100% - 40px)); margin: 0; padding: 13px 17px; border: 1px solid #e5a05e; background: var(--surface); color: var(--text); font-size: 12px; box-shadow: 0 12px 36px rgb(0 0 0 / 35%); }
 .pill {
   display: inline-flex; min-height: 34px; align-items: center; justify-content: center; gap: 7px;
   padding: 0 11px; border: 1px solid var(--border-light); border-radius: 999px;
@@ -450,9 +451,9 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid 
 .invite-friends { display: flex; gap: 9px; margin: 15px 0; }
 .invite-friend { display: grid; width: 34px; height: 34px; place-items: center; border: 1px dashed var(--border-light); border-radius: 50%; color: var(--dim); }
 .invite-friend.is-joined { border-style: solid; border-color: var(--accent); color: var(--accent); }
-.admin-panel { margin-top: 22px; padding: 18px; border: 1px solid #e5a05e; background: var(--bg); }
+.admin-panel { width: 100%; min-height: 65vh; margin: 0 auto; padding: clamp(18px, 4vw, 34px); border: 1px solid #e5a05e; background: var(--bg); }
 .admin-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.admin-heading h2 { margin: 0; font-size: 16px; }
+.admin-heading h1, .admin-heading h2 { margin: 0; font-size: 20px; }
 .admin-heading p { color: #e5a05e; font-size: 9px; line-height: 1.6; }
 .admin-search { display: grid; gap: 7px; margin: 15px 0; color: var(--muted); font-size: 9px; }
 .admin-search input { min-height: 39px; padding: 0 11px; border: 1px solid var(--border-light); background: var(--surface); color: var(--text); font: inherit; }

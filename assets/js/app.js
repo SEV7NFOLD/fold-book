@@ -137,31 +137,8 @@ const STATISTICS_MODULES = [
 const MODULES_BY_COURSE = { "ECO 128": STUDY_MODULES, "ECO 122": STATISTICS_MODULES };
 const STUDY_PROGRESS_KEY = "foldBook.studyProgress";
 const LEGACY_STUDY_PROGRESS_KEY = "foldBookV2.studyProgress";
-const LEADERBOARD_PREVIEW = [
-  { name: "MarketMaven", xp: 240 },
-  { name: "EconExplorer", xp: 190 },
-  { name: "TransitThinker", xp: 150 },
-  { name: "DemandDriver", xp: 110 },
-];
-const MOCK_EXAM_QUESTIONS = [
-  { prompt: "Transport demand is called derived when it…", answers: ["Arises from a need to reach another activity", "Exists without any travel purpose", "Is fixed by the number of vehicles"], correctAnswer: 0 },
-  { prompt: "Which item is a transport operating cost?", answers: ["Fuel", "A passenger's destination", "A market boundary"], correctAnswer: 0 },
-  { prompt: "Congestion delay imposed on other road users is…", answers: ["A negative external cost", "A private fixed cost", "A fare subsidy"], correctAnswer: 0 },
-  { prompt: "If more passengers share the same operating cost, average cost per passenger can…", answers: ["Fall", "Become a congestion charge", "No longer be measured"], correctAnswer: 0 },
-  { prompt: "A congestion charge can encourage travellers to…", answers: ["Account for some delay costs they impose", "Ignore all travel costs", "Increase peak road demand"], correctAnswer: 0 },
-];
-const STATISTICS_MOCK_QUESTIONS = [
-  { prompt: "A subset selected from a population is called a…", answers: ["Sample", "Census", "Parameter"], correctAnswer: 0 },
-  { prompt: "The arithmetic mean is calculated by dividing the sum by the…", answers: ["Number of observations", "Largest value", "Range"], correctAnswer: 0 },
-  { prompt: "The middle value in ordered data is the…", answers: ["Median", "Mode", "Variance"], correctAnswer: 0 },
-  { prompt: "The maximum minus the minimum is the…", answers: ["Range", "Mean", "Standard error"], correctAnswer: 0 },
-  { prompt: "The probability of an impossible event is…", answers: ["0", "0.5", "1"], correctAnswer: 0 },
-];
-function getMockQuestions() {
-  return currentCourse === "ECO 122" ? STATISTICS_MOCK_QUESTIONS : MOCK_EXAM_QUESTIONS;
-}
 const navButtons = [...document.querySelectorAll("[data-tab]")];
-const studyPanels = new Map(["home", "chat", "board", "invite", "results"].map((id) => [id, document.querySelector(`#${id}`)]));
+const studyPanels = new Map(["home", "chat", "board", "invite", "results", "admin"].map((id) => [id, document.querySelector(`#${id}`)]));
 const pathTree = document.querySelector("#pathTree");
 const lessonPanel = document.querySelector("#lessonPanel");
 const lessonStep = document.querySelector("#lessonStep");
@@ -179,6 +156,7 @@ const fuelValue = document.querySelector("#vFuel");
 const fuelBar = document.querySelector("#fbar");
 const weekTracker = document.querySelector("#weekTracker");
 const leaderboardList = document.querySelector("#leaderboardList");
+const leaderboardStatus = document.querySelector("#leaderboardStatus");
 const closeLessonButton = document.querySelector("#closeLesson");
 const examPredictorButton = document.querySelector("#examPredictorButton");
 const examPredictorStatus = document.querySelector("#examPredictorStatus");
@@ -209,6 +187,11 @@ let currentCourse = "ECO 128";
 let activeModules = STUDY_MODULES;
 let currentStudentLevel = "100L";
 let chatCourseCode = "ECO 128";
+let currentStudent = null;
+let isMasterAdmin = false;
+let leaderboardEntries = [];
+let practiceQuestions = [];
+let mockExamQuestions = [];
 
 function updateChatCourseDropdown(preferredCourse = chatCourseCode) {
   const courseSelect = document.querySelector("#chatCourse");
@@ -395,8 +378,7 @@ function renderWeekTracker() {
 }
 
 function renderLeaderboard() {
-  const entries = [...LEADERBOARD_PREVIEW, { name: "You", xp: studyProgress.xp, isCurrentUser: true }]
-    .sort((left, right) => right.xp - left.xp);
+  const entries = [...leaderboardEntries].sort((left, right) => right.xp - left.xp);
   leaderboardList.replaceChildren();
   entries.forEach((entry, index) => {
     const row = document.createElement("div");
@@ -405,7 +387,7 @@ function renderLeaderboard() {
     const xp = document.createElement("span");
     row.className = `leaderboard-row${entry.isCurrentUser ? " is-current-user" : ""}`;
     rank.className = "leaderboard-rank mono";
-    rank.textContent = String(index + 1).padStart(2, "0");
+    rank.textContent = String(entry.rank || index + 1).padStart(2, "0");
     name.textContent = entry.name;
     xp.className = "leaderboard-xp mono";
     xp.textContent = `${entry.xp} XP`;
@@ -418,7 +400,7 @@ function renderLeaderboard() {
     { entry: entries[1], rank: 2 },
     { entry: entries[0], rank: 1 },
     { entry: entries[2], rank: 3 },
-  ];
+  ].filter(({ entry }) => entry);
   podiumEntries.forEach(({ entry, rank }) => {
     const step = document.createElement("div");
     const avatar = document.createElement("div");
@@ -438,11 +420,13 @@ function renderLeaderboard() {
     step.append(avatar, name, xp, block);
     podium.append(step);
   });
-  const currentRank = entries.findIndex((entry) => entry.isCurrentUser) + 1;
+  const currentEntry = entries.find((entry) => entry.isCurrentUser);
+  const currentRank = currentEntry ? currentEntry.rank || entries.indexOf(currentEntry) + 1 : 0;
   const rankElement = document.querySelector("#yourRank");
   const xpElement = document.querySelector("#yourXp");
-  if (rankElement) rankElement.textContent = `#${currentRank}`;
+  if (rankElement) rankElement.textContent = currentRank > 0 ? `#${currentRank}` : "—";
   if (xpElement) xpElement.textContent = `${studyProgress.xp} XP`;
+  if (leaderboardStatus && !currentStudent) leaderboardStatus.textContent = "Sign in to load the live XP leaderboard.";
 }
 
 function updateFuelDisplay() {
@@ -505,6 +489,7 @@ function showStudyLesson(index) {
         startStudyActivity();
         saveStudyProgress();
         updateStudySummary();
+        void syncLeaderboardEntry();
         renderStudyPath();
         if (studyProgress.soundEnabled) playStudyChime();
         if (typeof window.navigator.vibrate === "function") window.navigator.vibrate([25, 35, 25]);
@@ -568,8 +553,31 @@ function renderStudyPath() {
   });
 }
 
+function setNavigationAvailable(available) {
+  document.querySelector(".side").hidden = !available;
+  document.querySelector(".bnav").hidden = !available;
+  for (const button of navButtons.filter((item) => item.dataset.tab === "admin")) {
+    button.hidden = !available || !isMasterAdmin;
+  }
+}
+
+function showAccessRestrictedNotice() {
+  const notice = "Access Restricted: SevenFold Authorized Personnel Only";
+  document.querySelector("#results-status").textContent = notice;
+  const toast = document.querySelector("#accessToast");
+  toast.textContent = notice;
+  toast.hidden = false;
+  window.setTimeout(() => { toast.hidden = true; }, 4000);
+}
+
 function activateTab(tab) {
-  const selectedTab = tab.dataset.tab;
+  const selectedTab = typeof tab === "string" ? tab : tab.dataset.tab;
+  if ((!currentStudent && selectedTab !== "results")
+    || (selectedTab === "admin" && !isMasterAdmin)) {
+    showAccessRestrictedNotice();
+    if (selectedTab === "admin" && window.location.hash === "#admin") window.location.hash = "#results";
+    return false;
+  }
   for (const button of navButtons) {
     const isSelected = button.dataset.tab === selectedTab;
     button.classList.toggle("on", isSelected);
@@ -582,21 +590,22 @@ function activateTab(tab) {
     panel.classList.toggle("hide", isHidden);
   }
   if (selectedTab === "chat") document.querySelector("#chatInput").focus();
+  return true;
 }
 
 const mockExamState = { questionIndex: 0, score: 0, answered: false };
 
 function renderMockExamQuestion() {
-  const questions = getMockQuestions();
-  const question = questions[mockExamState.questionIndex];
-  mockExamProgress.textContent = `QUESTION ${mockExamState.questionIndex + 1} / ${questions.length}`;
+  const question = mockExamQuestions[mockExamState.questionIndex];
+  if (!question) return;
+  mockExamProgress.textContent = `QUESTION ${mockExamState.questionIndex + 1} / ${mockExamQuestions.length}`;
   mockExamQuestion.textContent = question.prompt;
   mockExamFeedback.textContent = "";
   mockExamFeedback.className = "lesson-feedback";
   mockExamOptions.replaceChildren();
   mockExamState.answered = false;
   mockExamNext.disabled = true;
-  mockExamNext.textContent = mockExamState.questionIndex === questions.length - 1
+  mockExamNext.textContent = mockExamState.questionIndex === mockExamQuestions.length - 1
     ? "Finish mock exam"
     : "Next question";
 
@@ -629,10 +638,9 @@ function renderMockExamQuestion() {
 }
 
 function finishMockExam() {
-  const questions = getMockQuestions();
   const score = mockExamState.score;
-  const estimate = score >= Math.ceil(questions.length * 0.8) ? "Strong grasp" : score >= Math.ceil(questions.length * 0.6) ? "Developing" : "More practice recommended";
-  mockExamProgress.textContent = `PRACTICE SCORE · ${score} / ${questions.length}`;
+  const estimate = score >= Math.ceil(mockExamQuestions.length * 0.8) ? "Strong grasp" : score >= Math.ceil(mockExamQuestions.length * 0.6) ? "Developing" : "More practice recommended";
+  mockExamProgress.textContent = `PRACTICE SCORE · ${score} / ${mockExamQuestions.length}`;
   mockExamTitle.textContent = estimate;
   mockExamQuestion.textContent = "This practice result is for revision guidance only and does not predict or replace an official exam result.";
   mockExamOptions.replaceChildren();
@@ -647,12 +655,13 @@ function finishMockExam() {
     startStudyActivity();
     saveStudyProgress();
     updateStudySummary();
+    void syncLeaderboardEntry();
     mockExamFeedback.textContent = "First mock complete! +25 XP · +10 gems.";
     mockExamFeedback.className = "lesson-feedback is-correct";
   }
 }
 
-examPredictorButton.addEventListener("click", () => {
+examPredictorButton.addEventListener("click", async () => {
   if (studyProgress.completed.length !== activeModules.length) {
     document.querySelector("#fuel").hidden = false;
     return;
@@ -661,12 +670,23 @@ examPredictorButton.addEventListener("click", () => {
   mockExamState.score = 0;
   examPredictorPanel.hidden = false;
   mockExamTitle.textContent = "UNIUYO Practice Mock";
-  renderMockExamQuestion();
+  mockExamProgress.textContent = "GENERATING QUESTIONS FROM COURSE MATERIALS…";
+  mockExamQuestion.textContent = "Loading indexed notes and preparing a practice set.";
+  mockExamOptions.replaceChildren();
+  mockExamNext.disabled = true;
+  try {
+    mockExamQuestions = await generateQuestionsFromMaterials(5, chatCourseCode, currentStudentLevel);
+    renderMockExamQuestion();
+  } catch (error) {
+    console.error("Could not generate the practice mock:", error);
+    mockExamProgress.textContent = "PRACTICE MOCK UNAVAILABLE";
+    mockExamQuestion.textContent = `Could not generate questions: ${error.message}`;
+  }
 });
 
 mockExamNext.addEventListener("click", () => {
   if (!mockExamState.answered) return;
-  if (mockExamState.questionIndex === getMockQuestions().length - 1) {
+  if (mockExamState.questionIndex === mockExamQuestions.length - 1) {
     finishMockExam();
     return;
   }
@@ -820,30 +840,32 @@ function appendChatMessage(text, kind) {
   return article;
 }
 
+async function retrieveCourseMaterialContext(courseCode, level, count = 3) {
+  if (!supabaseClient) throw new Error("Supabase is unavailable; indexed course materials cannot be loaded.");
+  const { data: matchedSegments, error } = await supabaseClient.rpc("match_course_materials", {
+    match_course: courseCode,
+    match_level: level,
+    match_count: count,
+  });
+  if (error) throw error;
+  const context = Array.isArray(matchedSegments)
+    ? matchedSegments
+      .filter((segment) => segment && typeof segment.content === "string")
+      .map((segment) => segment.content)
+      .join("\n\n")
+      .slice(0, 12000)
+    : "";
+  if (!context.trim()) throw new Error(`No indexed materials were found for ${courseCode} (${level}).`);
+  return context;
+}
+
 async function callGeminiRAG(userMessage, courseCode, level) {
   let contextText = "";
-  if (supabaseClient) {
-    try {
-      const { data: matchedSegments, error } = await supabaseClient.rpc("match_course_materials", {
-        match_course: courseCode,
-        match_level: level,
-        match_count: 3,
-      });
-      if (error) throw error;
-      if (Array.isArray(matchedSegments)) {
-        contextText = matchedSegments
-          .filter((segment) => segment && typeof segment.content === "string")
-          .map((segment) => segment.content)
-          .join("\n\n")
-          .slice(0, 12000);
-      }
-    } catch (error) {
-      console.warn("Course material retrieval failed; continuing without retrieved notes:", error);
-    }
-  } else {
-    console.warn("Supabase is not configured; Dr. Eco is continuing without retrieved course notes.");
+  try {
+    contextText = await retrieveCourseMaterialContext(courseCode, level);
+  } catch (error) {
+    console.warn("Course material retrieval failed; continuing without retrieved notes:", error);
   }
-
   const systemInstruction = `You are Dr. Eco, the official AI Study Buddy for the UNIUYO Department of Economics. Tutor a ${level} student in ${courseCode}. Use the supplied course notes where relevant. If the notes do not cover a point, say so and provide clearly identified general guidance rather than inventing course-specific facts. Include a concise UNIUYO exam or continuous-assessment marking tip when appropriate.`;
   const prompt = `Level: ${level}\nCourse: ${courseCode}\nUNIUYO course notes:\n${contextText || "(No matching course notes were found.)"}\n\nQuestion: ${userMessage}`;
   const response = await fetch("/api/dr-eco", {
@@ -867,6 +889,50 @@ async function callGeminiRAG(userMessage, courseCode, level) {
   return answer;
 }
 
+function parseGeneratedQuestions(text, count) {
+  const jsonText = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  const parsed = JSON.parse(jsonText);
+  if (!parsed || !Array.isArray(parsed.questions) || parsed.questions.length < count) {
+    throw new Error(`The AI response did not include all ${count} requested questions.`);
+  }
+  const questions = parsed.questions.slice(0, count);
+  for (const question of questions) {
+    if (typeof question.prompt !== "string" || !question.prompt.trim()
+      || !Array.isArray(question.answers) || question.answers.length < 2
+      || question.answers.some((answer) => typeof answer !== "string" || !answer.trim())
+      || !Number.isInteger(question.correctAnswer)
+      || question.correctAnswer < 0 || question.correctAnswer >= question.answers.length) {
+      throw new Error("The AI returned an invalid question format.");
+    }
+  }
+  return questions;
+}
+
+async function generateQuestionsFromMaterials(count, courseCode, level) {
+  const contextText = await retrieveCourseMaterialContext(courseCode, level, 5);
+  const response = await fetch("/api/dr-eco", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: "Generate accurate course practice questions only from the supplied notes. Return only valid JSON with a top-level questions array. Each item must contain prompt (string), answers (array of 3 or 4 strings), correctAnswer (zero-based integer), and lecturerTip (short string)." }] },
+      contents: [{
+        role: "user",
+        parts: [{ text: `Create ${count} varied multiple-choice questions for ${level} ${courseCode}. Do not invent facts beyond these notes.\n\nIndexed course materials:\n${contextText}` }],
+      }],
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(`Quiz generation failed (${response.status}): ${data.error?.message || response.statusText}`);
+  }
+  const text = data.candidates?.[0]?.content?.parts
+    ?.map((part) => part.text)
+    .filter((part) => typeof part === "string")
+    .join("\n");
+  if (!text) throw new Error("The AI returned no practice questions.");
+  return parseGeneratedQuestions(text, count);
+}
+
 let chatRequestInProgress = false;
 async function submitChatQuestion(question) {
   const cleaned = question.trim();
@@ -888,11 +954,17 @@ async function submitChatQuestion(question) {
     responseMessage.querySelector("p").textContent = answer;
     sfx.msg();
     if (/generate|quiz|10.?q/i.test(cleaned)) {
-      testState.index = 0;
-      testState.count = 10;
-      testState.hearts = 3;
-      testDrawer.hidden = false;
-      renderTestQuestion();
+      try {
+        practiceQuestions = await generateQuestionsFromMaterials(10, chatCourseCode, currentStudentLevel);
+        testState.index = 0;
+        testState.count = practiceQuestions.length;
+        testState.hearts = 3;
+        testDrawer.hidden = false;
+        renderTestQuestion();
+      } catch (quizError) {
+        console.error("Could not generate a course quiz:", quizError);
+        appendChatMessage(`Quiz unavailable: ${quizError.message}`, "assistant");
+      }
     }
   } catch (error) {
     console.error("Dr. Eco could not answer the question:", error);
@@ -972,8 +1044,8 @@ const testState = { index: 0, count: 5, hearts: 3, answered: false };
 const testAnswerDrawer = document.querySelector("#testAnswerDrawer");
 const testFeedbackHeading = document.querySelector("#testFeedbackHeading");
 function renderTestQuestion() {
-  const questions = getMockQuestions();
-  const question = questions[testState.index % questions.length];
+  const question = practiceQuestions[testState.index];
+  if (!question) return;
   document.querySelector("#testProgress").textContent = `${Math.min(testState.index + 1, testState.count)} / ${testState.count}`;
   document.querySelector("#testBar").style.width = `${(testState.index / testState.count) * 100}%`;
   document.querySelector("#testHearts").textContent = "❤️".repeat(testState.hearts) + "🖤".repeat(3 - testState.hearts);
@@ -983,7 +1055,7 @@ function renderTestQuestion() {
   testAnswerDrawer.classList.toggle("on", false);
   testAnswerDrawer.classList.toggle("is-correct", false);
   testAnswerDrawer.classList.toggle("is-wrong", false);
-  document.querySelector("#lecturerTip").textContent = "Read the command word and define the key economic concept before explaining it.";
+  document.querySelector("#lecturerTip").textContent = question.lecturerTip || "Define the key economic concept, then apply it to the question.";
   document.querySelector("#testOptions").replaceChildren();
   testState.answered = false;
   const next = document.querySelector("#nextTestQuestion");
@@ -1020,12 +1092,23 @@ function renderTestQuestion() {
     document.querySelector("#testOptions").append(option);
   });
 }
-document.querySelector("#openTest").addEventListener("click", () => {
+document.querySelector("#openTest").addEventListener("click", async () => {
   testState.index = 0;
-  testState.count = Number(document.querySelector("#questionCount").value);
+  const requestedCount = Number(document.querySelector("#questionCount").value);
+  testState.count = requestedCount;
   testState.hearts = 3;
   testDrawer.hidden = false;
-  renderTestQuestion();
+  document.querySelector("#testQuestion").textContent = "Loading indexed course materials and generating questions…";
+  document.querySelector("#testOptions").replaceChildren();
+  try {
+    practiceQuestions = await generateQuestionsFromMaterials(requestedCount, chatCourseCode, currentStudentLevel);
+    testState.count = practiceQuestions.length;
+    renderTestQuestion();
+  } catch (error) {
+    console.error("Could not generate practice questions:", error);
+    document.querySelector("#testProgress").textContent = "PRACTICE UNAVAILABLE";
+    document.querySelector("#testQuestion").textContent = `Could not generate questions: ${error.message}`;
+  }
 });
 document.querySelector("#closeTest").addEventListener("click", () => { testDrawer.hidden = true; });
 document.querySelector("#questionCount").addEventListener("change", (event) => {
@@ -1036,7 +1119,7 @@ document.querySelector("#nextTestQuestion").addEventListener("click", () => {
   if (testState.hearts === 0 || testState.index + 1 >= testState.count) {
     document.querySelector("#testProgress").textContent = `PRACTICE COMPLETE · ${testState.index + 1} / ${testState.count}`;
     document.querySelector("#testBar").style.width = "100%";
-    document.querySelector("#testQuestion").textContent = testState.hearts === 0 ? "Out of hearts — review the feedback and try again." : "Practice complete. Keep reviewing the course nodes.";
+    document.querySelector("#testQuestion").textContent = testState.hearts === 0 ? "Out of hearts — review the feedback and try again." : "Practice complete. Keep reviewing indexed course materials.";
     document.querySelector("#testOptions").replaceChildren();
     document.querySelector("#testFeedback").textContent = "Practice only; this is not an official exam score.";
     document.querySelector("#nextTestQuestion").disabled = true;
@@ -1103,6 +1186,9 @@ renderStudyPath();
 updateStudySummary();
 renderMascot("person", "chatMascot");
 renderInviteProgress();
+chatMessages.replaceChildren();
+appendChatMessage("Hello! I’m Dr. Eco. Ask me about your course, or request practice questions generated from indexed notes.", "assistant");
+setNavigationAvailable(false);
 
 const SUPABASE_URL = "https://fdutgltyptcqeyajsnua.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZkdXRnbHR5cHRjcWV5YWpzbnVhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIzNTk4NTUsImV4cCI6MjEwNzkzNTg1NX0.wR74d5wS15Ea5O2_3_0BO8RtyZhzV9SuXELDGs-eNCg";
@@ -1115,13 +1201,80 @@ if (!SUPABASE_ANON_KEY_VALID) {
   console.error("The configured Supabase anon key is malformed; opt-in submissions are disabled.");
 }
 
+const LEADERBOARD_CLIENT_ID_KEY = "foldBook.leaderboardClientId";
+function getLeaderboardClientId() {
+  try {
+    const savedId = window.localStorage.getItem(LEADERBOARD_CLIENT_ID_KEY);
+    if (savedId && /^[0-9a-f-]{36}$/i.test(savedId)) return savedId;
+    const clientId = window.crypto && typeof window.crypto.randomUUID === "function"
+      ? window.crypto.randomUUID()
+      : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (character) => {
+        const random = Math.floor(Math.random() * 16);
+        return (character === "x" ? random : (random & 0x3) | 0x8).toString(16);
+      });
+    window.localStorage.setItem(LEADERBOARD_CLIENT_ID_KEY, clientId);
+    return clientId;
+  } catch (error) {
+    console.error("Could not initialize this browser's leaderboard identity:", error);
+    throw new Error("Leaderboard storage is unavailable in this browser.");
+  }
+}
+
+async function syncLeaderboardEntry() {
+  if (!currentStudent || !supabaseClient) {
+    leaderboardStatus.textContent = "Leaderboard unavailable until Supabase is configured and you sign in.";
+    return;
+  }
+  try {
+    const id = getLeaderboardClientId();
+    const { error: upsertError } = await supabaseClient.from("student_xp").upsert({
+      id,
+      display_name: `Learner-${id.slice(-4).toUpperCase()}`,
+      xp: studyProgress.xp,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "id" });
+    if (upsertError) throw upsertError;
+
+    const { data, error } = await supabaseClient
+      .from("student_xp")
+      .select("id, display_name, xp")
+      .order("xp", { ascending: false });
+    if (error) throw error;
+    const sorted = (Array.isArray(data) ? data : [])
+      .filter((entry) => typeof entry.display_name === "string" && Number.isFinite(entry.xp))
+      .sort((left, right) => right.xp - left.xp);
+    const ownRank = sorted.findIndex((entry) => entry.id === id) + 1;
+    leaderboardEntries = sorted.slice(0, 10).map((entry, index) => ({
+      name: entry.display_name,
+      xp: entry.xp,
+      rank: index + 1,
+      isCurrentUser: entry.id === id,
+    }));
+    if (ownRank > 10) {
+      const ownEntry = sorted[ownRank - 1];
+      leaderboardEntries.push({
+        name: ownEntry.display_name,
+        xp: ownEntry.xp,
+        rank: ownRank,
+        isCurrentUser: true,
+      });
+    }
+    leaderboardStatus.textContent = "Live browser-submitted XP rankings. Names are shown as anonymous aliases.";
+    renderLeaderboard();
+  } catch (error) {
+    console.error("Leaderboard sync failed:", error);
+    leaderboardStatus.textContent = `Leaderboard could not be loaded: ${error.message || "Supabase request failed."}`;
+  }
+}
+
 const resultsForm = document.querySelector("#lookupForm");
 const registrationInput = document.querySelector("#searchRegNo");
 const chatRegistrationInput = document.querySelector("#chatRegistration");
 const fullNameInput = document.querySelector("#searchFullName");
 const resultsStatus = document.querySelector("#results-status");
 const resultsPanel = document.querySelector("#results-panel");
-const adminPanel = document.querySelector("#adminPanel");
+const adminPanel = document.querySelector("#admin");
+const adminStatus = document.querySelector("#adminStatus");
 const adminSearch = document.querySelector("#adminSearch");
 const adminResults = document.querySelector("#adminResults");
 const adminStudentDetail = document.querySelector("#adminStudentDetail");
@@ -1412,8 +1565,7 @@ function renderAdminDirectory(filter = "") {
   adminStudentDetail.hidden = true;
   resultsPanel.hidden = true;
   posterWrapper.hidden = true;
-  adminPanel.hidden = false;
-  resultsStatus.textContent = `${adminResults.children.length} broadsheet record${adminResults.children.length === 1 ? "" : "s"} available in this static preview.`;
+  adminStatus.textContent = `${adminResults.children.length} broadsheet record${adminResults.children.length === 1 ? "" : "s"} available in this static preview.`;
 }
 
 function normalizeWhatsAppPhone(phoneNumber) {
@@ -1505,7 +1657,11 @@ document.querySelector("#dismiss-card").addEventListener("click", () => {
 document.querySelector("#adminLogout").addEventListener("click", () => {
   adminPanel.hidden = true;
   adminStudentDetail.hidden = true;
-  resultsStatus.textContent = "Admin view closed.";
+  currentStudent = null;
+  isMasterAdmin = false;
+  setNavigationAvailable(false);
+  resultsStatus.textContent = "Admin view closed. Enter your details to continue.";
+  activateTab("results");
   registrationInput.focus();
 });
 adminSearch.addEventListener("input", () => renderAdminDirectory(adminSearch.value));
@@ -1516,8 +1672,14 @@ resultsForm.addEventListener("submit", (event) => {
 
   const rawRegistration = registrationInput.value.trim();
   const rawName = fullNameInput.value.trim();
-  if (rawRegistration === "101010" && /\b(nssien|daniel)\b/i.test(rawName)) {
+  const adminName = normalizeNameTokens(rawName);
+  if (rawRegistration === "101010" && adminName.length === 1 && ["nssien", "daniel"].includes(adminName[0])) {
+    currentStudent = { registration: "101010", name: rawName };
+    isMasterAdmin = true;
+    setNavigationAvailable(true);
+    adminPanel.hidden = false;
     renderAdminDirectory();
+    activateTab("admin");
     return;
   }
   const registration = normalizeRegistration(registrationInput.value);
@@ -1532,7 +1694,7 @@ resultsForm.addEventListener("submit", (event) => {
     ? RESULT_LOOKUP[registration]
     : null;
   const studentNameTokens = matchedStudent ? normalizeNameTokens(matchedStudent.name) : [];
-  const isNameMatch = inputNameTokens.some((token) => studentNameTokens.includes(token));
+  const isNameMatch = inputNameTokens.every((token) => studentNameTokens.includes(token));
   if (!matchedStudent || !isNameMatch) {
     setResultsMessage("Invalid Registration Number or Full Name combination. Please verify your details.");
     registrationInput.focus();
@@ -1542,4 +1704,16 @@ resultsForm.addEventListener("submit", (event) => {
   chatRegistrationInput.value = registration;
   setStudentRegistration(registration);
   renderResults(registration, matchedStudent);
+  currentStudent = { registration, name: matchedStudent.name };
+  isMasterAdmin = false;
+  setNavigationAvailable(true);
+  activateTab("home");
+  void syncLeaderboardEntry();
 });
+
+if (window.location.hash === "#admin") activateTab("admin");
+if (typeof window.addEventListener === "function") {
+  window.addEventListener("hashchange", () => {
+    if (window.location.hash === "#admin") activateTab("admin");
+  });
+}

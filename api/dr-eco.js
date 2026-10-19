@@ -1,6 +1,7 @@
 "use strict";
 
-const GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+const GEMINI_MODEL = "gemini-2.5-flash-lite";
+const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 const MAX_REQUEST_BYTES = 24 * 1024;
 const REQUEST_TIMEOUT_MS = 30000;
 
