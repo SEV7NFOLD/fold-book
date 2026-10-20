@@ -2372,7 +2372,11 @@ async function prepareStudentMaterial(file) {
     document.querySelector("#studentMaterialTitle").focus({ preventScroll: true });
   } catch (error) {
     if (token !== studentMaterialProcessingToken || pendingStudentMaterialFile !== file) return;
-    showStudentUploadProgress(100, `Could not process this document: ${error.message || "Try another PDF or photo."}`);
+    document.querySelector("#studentUploadProgress").value = 0;
+    document.querySelector("#studentUploadProgressValue").textContent = "—";
+    document.querySelector("#studentUploadProgressTitle").textContent = "Document processing stopped";
+    studentMaterialStatus.textContent = `Could not process this document: ${error.message || "Try a text-based PDF or a clear photo."}`;
+    submit.disabled = true;
   }
 }
 chatMaterialPicker?.addEventListener("change", () => prepareStudentMaterial(chatMaterialPicker.files?.[0]));
@@ -3004,7 +3008,11 @@ async function requestAdminApi(endpoint, payload) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload || {}),
   });
-  const result = await response.json();
+  const responseText = await response.text();
+  let result = {};
+  try { result = responseText ? JSON.parse(responseText) : {}; } catch {
+    throw new Error(`The admin service returned an unreadable response (${response.status}).`);
+  }
   if (!response.ok) throw new Error(result.error || "The admin request failed.");
   return result;
 }
