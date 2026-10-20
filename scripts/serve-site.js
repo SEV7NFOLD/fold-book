@@ -5,14 +5,7 @@ const http = require("node:http");
 const path = require("node:path");
 const drEcoHandler = require("../api/dr-eco.js");
 const geminiLiveTokenHandler = require("../api/gemini/live-token.js");
-const adminSessionHandler = require("../api/admin/session.js");
-const adminCourseMaterialsHandler = require("../api/admin/course-materials.js");
-const adminBroadsheetsHandler = require("../api/admin/broadsheets.js");
-const adminCourseCatalogHandler = require("../api/admin/course-catalog.js");
-const adminStudentRecordsHandler = require("../api/admin/student-records.js");
-const adminMaterialsHandler = require("../api/admin/materials.js");
-const adminStudentMaterialsHandler = require("../api/admin/student-materials.js");
-const adminWhatsAppSettingsHandler = require("../api/admin/whatsapp-settings.js");
+const adminApiRouter = require("../api/admin.js");
 const studentAuthHandler = require("../api/student/auth.js");
 const courseCatalogHandler = require("../api/course-catalog.js");
 const searchCourseMaterialsHandler = require("../api/course-materials/search.js");
@@ -79,36 +72,9 @@ const server = http.createServer((request, response) => {
     void geminiLiveTokenHandler(request, response);
     return;
   }
-  if (pathname === "/api/admin/session") {
-    void adminSessionHandler(request, response);
-    return;
-  }
-  if (pathname === "/api/admin/course-materials") {
-    void adminCourseMaterialsHandler(request, response);
-    return;
-  }
-  if (pathname === "/api/admin/broadsheets") {
-    void adminBroadsheetsHandler(request, response);
-    return;
-  }
-  if (pathname === "/api/admin/course-catalog") {
-    void adminCourseCatalogHandler(request, response);
-    return;
-  }
-  if (pathname === "/api/admin/student-records") {
-    void adminStudentRecordsHandler(request, response);
-    return;
-  }
-  if (pathname === "/api/admin/materials") {
-    void adminMaterialsHandler(request, response);
-    return;
-  }
-  if (pathname === "/api/admin/student-materials") {
-    void adminStudentMaterialsHandler(request, response);
-    return;
-  }
-  if (pathname === "/api/admin/whatsapp-settings") {
-    void adminWhatsAppSettingsHandler(request, response);
+  if (pathname.startsWith("/api/admin/")) {
+    request.query = { route: pathname.slice("/api/admin/".length) };
+    void adminApiRouter(request, response);
     return;
   }
   if (pathname === "/api/student/auth") {

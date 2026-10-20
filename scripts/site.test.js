@@ -8,8 +8,8 @@ const path = require("node:path");
 const { after, before, test } = require("node:test");
 const drEcoHandler = require("../api/dr-eco.js");
 const geminiLiveTokenHandler = require("../api/gemini/live-token.js");
-const adminSessionHandler = require("../api/admin/session.js");
-const adminCourseMaterialsHandler = require("../api/admin/course-materials.js");
+const adminSessionHandler = require("../lib/api-handlers/admin/session.js");
+const adminCourseMaterialsHandler = require("../lib/api-handlers/admin/course-materials.js");
 const { createAdminSession } = require("../lib/admin-auth.js");
 
 const root = path.join(__dirname, "..");
