@@ -230,6 +230,9 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid 
 .auth-screen-card { padding: clamp(22px, 5vw, 42px); border: 1px solid var(--border-light); background: var(--surface); }
 .auth-screen-card h1 { margin: 10px 0 6px; font-size: clamp(26px, 5vw, 38px); }
 .auth-screen-card > p { color: var(--muted); font-size: 13px; line-height: 1.7; }
+.auth-mode-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 18px 0 6px; padding: 5px; background: var(--bg); }
+.auth-mode-button { min-height: 40px; border: 1px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
+.auth-mode-button.is-active { border-color: var(--border-light); background: var(--surface); color: var(--text); }
 .auth-screen-card .form-group { margin-top: 17px; }
 .auth-screen-card input:not([type="checkbox"]) { width: 100%; min-height: 46px; padding: 0 12px; border: 1px solid var(--border-light); background: var(--bg); color: var(--text); font: inherit; }
 .admin-portal { width: min(100% - 40px, 1400px); min-height: calc(100vh - 100px); margin: 0 auto; padding: 28px 0 60px; }

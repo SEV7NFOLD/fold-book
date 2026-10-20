@@ -317,9 +317,13 @@
       <div class="auth-screen-card">
         <span class="section-kicker">STUDENT & ADMIN ACCESS</span>
         <h1>Welcome to FoldBook</h1>
-        <p>Verify your details to open your personalized study workspace.</p>
+        <p>Create your student account once, then log in with your matric number and password.</p>
+        <div class="auth-mode-switch" role="group" aria-label="Student account access">
+          <button type="button" class="auth-mode-button is-active" id="authSignupMode" aria-pressed="true">Create account</button>
+          <button type="button" class="auth-mode-button" id="authLoginMode" aria-pressed="false">Log in</button>
+        </div>
         <form id="appAuthForm" novalidate>
-          <div class="form-group">
+          <div class="form-group" id="authNameGroup">
             <label for="authFullName">Full Name</label>
             <input id="authFullName" name="fullName" type="text" autocomplete="name" required>
           </div>
@@ -327,19 +331,23 @@
             <label for="authRegNo">Registration / Matric Number</label>
             <input id="authRegNo" name="registration" type="text" autocomplete="off" autocapitalize="characters" required>
           </div>
-          <div class="form-group">
+          <div class="form-group" id="authPhoneGroup">
             <label for="authWhatsapp">WhatsApp Phone Number</label>
             <input id="authWhatsapp" name="whatsapp" type="tel" autocomplete="tel" inputmode="tel" placeholder="08012345678" required>
+          </div>
+          <div class="form-group">
+            <label for="authPassword">Password</label>
+            <input id="authPassword" name="password" type="password" autocomplete="new-password" minlength="8" required>
           </div>
           <div class="form-group" id="adminPasscodeGroup" hidden>
             <label for="adminPasscode">Admin Passcode</label>
             <input id="adminPasscode" name="adminPasscode" type="password" autocomplete="current-password">
           </div>
-          <label class="whatsapp-consent"><input type="checkbox" id="authMarketingConsent" required> I agree that FoldBook may save this number and send me study updates and WhatsApp study reminders.</label>
+          <label class="whatsapp-consent" id="authConsentGroup"><input type="checkbox" id="authMarketingConsent" required> I agree that FoldBook may save this number and send me study updates and WhatsApp study reminders.</label>
           <p class="verification-status" id="authStatus" role="status" aria-live="polite"></p>
           <div class="auth-actions">
             <button type="button" class="card-secondary-button" id="backToLanding">Back</button>
-            <button type="submit" class="results-submit" id="authSubmit">Continue</button>
+            <button type="submit" class="results-submit" id="authSubmit">Create account</button>
           </div>
         </form>
       </div>

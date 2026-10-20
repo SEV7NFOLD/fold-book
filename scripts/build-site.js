@@ -198,11 +198,9 @@ function writePublicSite() {
   }
 
   const sourceApp = fs.readFileSync(path.join(root, "assets/js/app.js"), "utf8");
-  const lookupMarker = "const RESULT_LOOKUP = null;";
-  if (sourceApp.split(lookupMarker).length !== 2) {
-    throw new Error("assets/js/app.js must contain exactly one results lookup build marker.");
+  if (!sourceApp.includes("const RESULT_LOOKUP = null;")) {
+    throw new Error("assets/js/app.js must keep the results lookup out of the public application bundle.");
   }
-  const resultLookup = createResultsLookup();
 
   if (fs.existsSync(output)) fs.rmSync(output, { recursive: true, force: true });
 
@@ -211,7 +209,7 @@ function writePublicSite() {
     fs.mkdirSync(path.dirname(destination), { recursive: true });
     let content;
     if (relativePath === "assets/js/app.js") {
-      content = sourceApp.replace(lookupMarker, `const RESULT_LOOKUP = ${serializeForJavaScript(resultLookup)};`);
+      content = sourceApp;
     } else if (relativePath === lottieManifest) {
       content = `${JSON.stringify(lottieFiles.map((file) => `/${file}`))}\n`;
     } else {
@@ -247,8 +245,7 @@ function writePublicSite() {
   }
 
   console.log(`Built ${builtFiles.length} allowlisted public files in dist/.`);
-  console.log(`Compiled ${Object.keys(resultLookup).length} student records into assets/js/app.js.`);
-  console.log("Raw student and results CSVs are excluded from the deployment.");
+  console.log("Student records and results are not compiled into the public deployment.");
 }
 
 try {

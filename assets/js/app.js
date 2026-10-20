@@ -2200,28 +2200,16 @@ function renderResults(registration, student) {
 }
 
 async function lookupImportedStudentResults(registration) {
-  if (!supabaseClient) return null;
-  const { data, error } = await supabaseClient.from("student_results")
-    .select("reg_number, full_name, course_code, course_title, ca, exam, total, grade, remark")
-    .eq("reg_number", registration);
-  if (error) throw error;
-  if (!Array.isArray(data) || data.length === 0) return null;
-  const name = data[0].full_name;
-  if (data.some((row) => row.full_name !== name)) {
-    throw new Error("Imported results have inconsistent student names for this registration.");
-  }
-  return {
-    name,
-    results: data.map((row) => ({
-      course: row.course_code,
-      course_title: row.course_title,
-      ca: row.ca,
-      exam: row.exam,
-      total: row.total,
-      grade: row.grade || gradeForScore(row.total),
-      remark: row.remark || (row.total >= 40 ? "PASS" : "FAIL"),
-    })),
-  };
+  const fullName = fullNameInput.value.trim();
+  const response = await fetch("/api/results/lookup", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ registration, fullName }),
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || "Results lookup failed.");
+  return result.student || null;
 }
 
 function showAdminStudent(registration, student) {
@@ -2247,10 +2235,26 @@ function showAdminStudent(registration, student) {
   adminStudentDetail.hidden = false;
 }
 
+let adminDirectoryLookup = Object.create(null);
+async function loadAdminDirectory(filter = "") {
+  adminStatus.textContent = "Loading compiled broadsheets…";
+  try {
+    const response = await fetch("/api/admin/results", { credentials: "same-origin" });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Admin results could not be loaded.");
+    adminDirectoryLookup = result.students || Object.create(null);
+    renderAdminDirectory(filter);
+  } catch (error) {
+    console.error("Admin broadsheets could not be loaded:", error);
+    adminResults.replaceChildren();
+    adminStatus.textContent = error.message || "Admin results could not be loaded.";
+  }
+}
+
 function renderAdminDirectory(filter = "") {
   const normalizedFilter = filter.trim().toLocaleLowerCase();
   adminResults.replaceChildren();
-  for (const [registration, student] of Object.entries(RESULT_LOOKUP || {})) {
+  for (const [registration, student] of Object.entries(adminDirectoryLookup)) {
     if (normalizedFilter && !`${registration} ${student.name}`.toLocaleLowerCase().includes(normalizedFilter)) continue;
     const row = document.createElement("tr");
     const name = document.createElement("td");
@@ -2273,7 +2277,7 @@ function renderAdminDirectory(filter = "") {
   resultsPanel.hidden = true;
   posterWrapper.hidden = true;
   if (adminStatus) {
-    adminStatus.textContent = `${adminResults.children.length} broadsheet record${adminResults.children.length === 1 ? "" : "s"} available in this static preview.`;
+    adminStatus.textContent = `${adminResults.children.length} broadsheet record${adminResults.children.length === 1 ? "" : "s"} loaded securely.`;
   }
 }
 
@@ -2508,19 +2512,13 @@ async function loadStudentRecords() {
     showAccessRestrictedNotice();
     return;
   }
-  if (!supabaseClient) {
-    status.textContent = "Supabase is unavailable; student records could not be loaded.";
-    return;
-  }
   status.textContent = "Loading consented WhatsApp records…";
   try {
-    const { data, error } = await supabaseClient.from("whatsapp_optins")
-      .select("full_name, reg_number, phone_number, streak_count, last_nudged_at")
-      .eq("opted_in", true)
-      .order("full_name");
-    if (error) throw error;
+    const response = await fetch("/api/admin/student-records", { credentials: "same-origin" });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Supabase access denied.");
     tableBody.replaceChildren();
-    for (const student of data || []) {
+    for (const student of result.students || []) {
       const row = document.createElement("tr");
       [
         student.full_name,
@@ -2648,6 +2646,9 @@ function signOut() {
   adminPasscodeInput.value = "";
   void fetch("/api/admin/session", { method: "DELETE" }).catch((error) => {
     console.warn("Could not end the admin session on the server:", error);
+  });
+  void fetch("/api/student/auth", { method: "DELETE", credentials: "same-origin" }).catch((error) => {
+    console.warn("Could not end the student session on the server:", error);
   });
   document.querySelector("#profileModal").hidden = true;
   document.querySelector("#authStatus").textContent = "";
@@ -2798,6 +2799,7 @@ resultsForm.addEventListener("submit", async (event) => {
 
 document.querySelector("#launchApp").addEventListener("click", () => {
   document.querySelector("#authStatus").textContent = "";
+  setAuthMode("signup");
   adminPasscodeGroup.hidden = true;
   adminPasscodeInput.value = "";
   showStage("authView");
@@ -2806,11 +2808,32 @@ document.querySelector("#launchApp").addEventListener("click", () => {
 document.querySelector("#backToLanding").addEventListener("click", () => showStage("landingView"));
 
 const appAuthForm = document.querySelector("#appAuthForm");
+let authMode = "signup";
+function setAuthMode(mode) {
+  authMode = mode;
+  const signup = mode === "signup";
+  document.querySelector("#authNameGroup").hidden = !signup;
+  document.querySelector("#authPhoneGroup").hidden = !signup;
+  document.querySelector("#authConsentGroup").hidden = !signup;
+  document.querySelector("#authFullName").required = signup;
+  document.querySelector("#authWhatsapp").required = signup;
+  document.querySelector("#authMarketingConsent").required = signup;
+  document.querySelector("#authMarketingConsent").checked = false;
+  document.querySelector("#authPassword").autocomplete = signup ? "new-password" : "current-password";
+  document.querySelector("#authSubmit").textContent = signup ? "Create account" : "Log in";
+  document.querySelector("#authSignupMode").classList.toggle("is-active", signup);
+  document.querySelector("#authSignupMode").setAttribute("aria-pressed", String(signup));
+  document.querySelector("#authLoginMode").classList.toggle("is-active", !signup);
+  document.querySelector("#authLoginMode").setAttribute("aria-pressed", String(!signup));
+  document.querySelector("#authStatus").textContent = "";
+}
+document.querySelector("#authSignupMode").addEventListener("click", () => setAuthMode("signup"));
+document.querySelector("#authLoginMode").addEventListener("click", () => setAuthMode("login"));
 function isMasterAdminRegistration(registration) {
   return registration === "101010";
 }
 
-async function handleAuthSubmit(fullName, regNumber, phone, passcode) {
+async function handleAuthSubmit(fullName, regNumber, phone, passcode, password) {
   const name = typeof fullName === "string" ? fullName.trim() : "";
   const rawRegistration = typeof regNumber === "string" ? regNumber.trim() : "";
   const rawPhone = typeof phone === "string" ? phone.trim() : "";
@@ -2852,44 +2875,51 @@ async function handleAuthSubmit(fullName, regNumber, phone, passcode) {
       name: adminName,
       registration: "101010",
     }));
-    renderAdminDirectory();
     showStage("adminDashboard");
+    void loadAdminDirectory();
     sfx.win();
     showNotice("Welcome to SevenFold Admin Portal ⚡");
     return;
   }
 
-  if (!name || !rawRegistration || !rawPhone) {
-    status.textContent = "Enter your full name, registration number and WhatsApp phone number.";
-    return;
-  }
-  const normalizedPhone = normalizeWhatsAppPhone(rawPhone);
-  if (!normalizedPhone) {
-    status.textContent = "Enter a valid Nigerian WhatsApp number, for example 08012345678.";
-    return;
-  }
-  if (!document.querySelector("#authMarketingConsent").checked) {
-    status.textContent = "Consent is required to save this number and send study reminders.";
-    document.querySelector("#authMarketingConsent").focus();
-    return;
-  }
-
-  const normalizedName = normalizeNameTokens(name);
   const registration = normalizeRegistration(rawRegistration);
-  const student = registration && RESULT_LOOKUP && Object.hasOwn(RESULT_LOOKUP, registration)
-    ? RESULT_LOOKUP[registration]
-    : null;
-  const nameMatches = student && normalizedName.length > 0
-    && normalizedName.every((token) => normalizeNameTokens(student.name).includes(token));
-  if (!student || !nameMatches) {
-    status.textContent = "Registration number and full name do not match a published student record.";
+  if (!registration) {
+    status.textContent = "Enter a valid matric number, for example 25/SS/EC/001.";
+    return;
+  }
+  if (typeof password !== "string" || password.length < 8) {
+    status.textContent = "Use a password with at least 8 characters.";
+    return;
+  }
+  if (authMode === "signup" && !document.querySelector("#authMarketingConsent").checked) {
+    status.textContent = "Please agree to study reminders so we can save your WhatsApp contact.";
+    document.querySelector("#authMarketingConsent").focus();
     return;
   }
 
   const submitButton = document.querySelector("#authSubmit");
   submitButton.disabled = true;
-  status.textContent = "Saving your WhatsApp opt-in…";
+  status.textContent = authMode === "signup" ? "Creating your student account…" : "Logging you in…";
   try {
+    const response = await fetch("/api/student/auth", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mode: authMode,
+        fullName: name,
+        registration,
+        phone: rawPhone,
+        password,
+        consent: document.querySelector("#authMarketingConsent").checked,
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Student sign-in failed.");
+    const student = result.student;
+    if (!student || student.registration !== registration || !student.name) {
+      throw new Error("The server returned an incomplete student account.");
+    }
     currentStudent = { name: student.name, registration };
     isMasterAdmin = false;
     S.isAdmin = false;
@@ -2897,23 +2927,22 @@ async function handleAuthSubmit(fullName, regNumber, phone, passcode) {
     S.user = {
       name: student.name,
       regNo: registration,
-      phone: normalizedPhone,
+      phone: student.phoneNumber || "",
       level: detectStudentLevel(registration),
       avatarUrl: "",
       avatarLottie: "",
       referralCount: studyProgress.referralCount,
     };
     S.level = detectStudentLevel(registration);
-    S.phoneNumber = normalizedPhone;
+    S.phoneNumber = student.phoneNumber || "";
     currentStudentLevel = S.level;
     chatRegistrationInput.value = registration;
     setStudentRegistration(registration);
-    void saveWhatsAppOptIn(normalizedPhone, registration, student.name, { silent: true });
     window.localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({
       role: "student",
       name: student.name,
       registration,
-      phoneNumber: normalizedPhone,
+      phoneNumber: student.phoneNumber || "",
       level: S.level,
       avatarUrl: S.user.avatarUrl,
       avatarLottie: S.user.avatarLottie,
@@ -2924,7 +2953,9 @@ async function handleAuthSubmit(fullName, regNumber, phone, passcode) {
     activateTab("home");
     void syncLeaderboardEntry();
     sfx.ok();
-    showNotice(`Welcome ${student.name.split(" ")[0]}! (${S.level})`);
+    showNotice(authMode === "signup" && !result.contactSaved
+      ? "Your account is ready, but your reminder contact did not save. Please contact your class rep."
+      : `${authMode === "signup" ? "Welcome" : "Welcome back"} ${student.name.split(" ")[0]}! (${S.level})`);
   } catch (error) {
     console.error("Student onboarding failed:", error);
     status.textContent = error.message;
@@ -2940,36 +2971,40 @@ appAuthForm.addEventListener("submit", async (event) => {
     document.querySelector("#authRegNo").value,
     document.querySelector("#authWhatsapp").value,
     adminPasscodeInput.value,
+    document.querySelector("#authPassword").value,
   );
 });
 
-function restoreAuthSession() {
+async function restoreAuthSession() {
   let savedSession;
   try {
     savedSession = window.localStorage.getItem(AUTH_SESSION_KEY);
     if (!savedSession) return false;
-    const session = JSON.parse(savedSession);
-    if (session.role === "admin") {
+    const localSession = JSON.parse(savedSession);
+    if (localSession.role === "admin") {
       window.localStorage.removeItem(AUTH_SESSION_KEY);
       return false;
     }
+    const response = await fetch("/api/student/auth", { credentials: "same-origin" });
+    if (!response.ok) {
+      window.localStorage.removeItem(AUTH_SESSION_KEY);
+      return false;
+    }
+    const serverSession = (await response.json()).student;
+    const session = { ...localSession, ...serverSession };
     const registration = normalizeRegistration(session.registration || "");
-    const student = registration && RESULT_LOOKUP && Object.hasOwn(RESULT_LOOKUP, registration)
-      ? RESULT_LOOKUP[registration]
-      : null;
-    if (session.role !== "student" || !student
-      || !normalizeNameTokens(student.name).every((token) => normalizeNameTokens(session.name).includes(token))) {
+    if (session.role !== "student" || !registration || !session.name) {
       window.localStorage.removeItem(AUTH_SESSION_KEY);
       return false;
     }
-    currentStudent = { name: student.name, registration };
+    currentStudent = { name: session.name, registration };
     S.student = currentStudent;
     S.level = detectStudentLevel(registration);
     S.phoneNumber = typeof session.phoneNumber === "string" ? session.phoneNumber : "";
     S.user = {
-      name: student.name,
+      name: session.name,
       regNo: registration,
-      phone: S.phoneNumber,
+      phone: session.phoneNumber || S.phoneNumber,
       level: S.level,
       avatarUrl: typeof session.avatarUrl === "string"
         && /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(session.avatarUrl)
@@ -3011,18 +3046,21 @@ document.querySelectorAll("[data-admin-view]").forEach((button) => {
     document.querySelectorAll("[data-admin-view]").forEach((item) => {
       item.classList.toggle("is-active", item === button);
     });
+    if (button.dataset.adminView === "broadsheets") void loadAdminDirectory(adminSearch.value);
     if (button.dataset.adminView === "catalog") void loadCourseCatalog();
     if (button.dataset.adminView === "students") loadStudentRecords();
   });
 });
 
 const initialHash = window.location.hash.slice(1);
-if (!restoreAuthSession()) {
-  if (initialHash === "admin" || initialHash === "adminDashboard") {
-    adminPasscodeGroup.hidden = false;
-    showStage("authView", false);
-  } else showStage("landingView");
-}
+(async () => {
+  if (!await restoreAuthSession()) {
+    if (initialHash === "admin" || initialHash === "adminDashboard") {
+      adminPasscodeGroup.hidden = false;
+      showStage("authView", false);
+    } else showStage("landingView");
+  }
+})();
 if (typeof window.addEventListener === "function") {
   window.addEventListener("hashchange", () => {
     const stage = window.location.hash.slice(1);
