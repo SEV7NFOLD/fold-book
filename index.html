@@ -78,22 +78,6 @@
             <div class="course-week-meta"><span class="mono" id="wkd">COURSE PROGRESS</span><span id="wkp">0 / 5 modules</span></div>
           </header>
           <div class="path-tree path" id="pathTree" aria-label="Course learning modules"></div>
-          <section class="lesson-panel" id="lessonPanel" aria-live="polite" hidden>
-            <div class="lesson-panel-heading">
-              <div>
-                <span class="section-kicker" id="lessonStep"></span>
-                <h2 id="lessonTitle"></h2>
-              </div>
-              <button class="card-secondary-button" id="closeLesson" type="button">Close</button>
-            </div>
-            <p class="lesson-body" id="lessonBody"></p>
-            <div class="lesson-activity" id="lessonActivity" hidden></div>
-            <p class="lesson-question" id="lessonQuestion"></p>
-            <div class="answer-options" id="answerOptions"></div>
-            <div class="lesson-feedback-row"><div class="feedback-animation" id="lessonFeedbackAnimation" aria-hidden="true" hidden></div>
-              <p class="lesson-feedback" id="lessonFeedback" role="status"></p>
-            </div>
-          </section>
         </div>
         <aside class="study-sidebar">
           <section class="card">
@@ -121,6 +105,26 @@
             <button class="results-submit" id="mockExamNext" type="button" disabled>Next question</button>
           </section>
         </aside>
+      </section>
+
+      <section class="lesson-page" id="lessonPage" aria-label="Study module" hidden>
+        <div class="lesson-page-shell">
+          <div class="lesson-page-topbar">
+            <button class="card-secondary-button" id="closeLesson" type="button">← Back to my path</button>
+            <span class="section-kicker" id="lessonStep"></span>
+            <span class="lesson-page-course" id="lessonPageCourse"></span>
+          </div>
+          <section class="lesson-panel" id="lessonPanel" aria-live="polite" hidden>
+            <div class="lesson-panel-heading"><h1 id="lessonTitle"></h1></div>
+            <p class="lesson-body" id="lessonBody"></p>
+            <div class="lesson-activity" id="lessonActivity" hidden></div>
+            <p class="lesson-question" id="lessonQuestion"></p>
+            <div class="answer-options" id="answerOptions"></div>
+            <div class="lesson-feedback-row"><div class="feedback-animation" id="lessonFeedbackAnimation" aria-hidden="true" hidden></div>
+              <p class="lesson-feedback" id="lessonFeedback" role="status"></p>
+            </div>
+          </section>
+        </div>
       </section>
 
       <section id="chat" class="chat-section hide" hidden>

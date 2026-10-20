@@ -807,6 +807,22 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .lesson-feedback.is-retry { color: var(--fb-color-red-soft); }
 .lesson-feedback.is-correct { color: var(--fb-color-lime); }
 .lesson-feedback-row { display: flex; min-height: 0; align-items: center; gap: 8px; }
+.lesson-page { position: fixed; z-index: 12; inset: 0; overflow-y: auto; background: var(--fb-color-bg); overscroll-behavior: contain; animation: lesson-page-enter .2s ease both; }
+.lesson-page[hidden] { display: none !important; }
+.lesson-page-shell { width: min(100%, 780px); min-height: 100%; margin: 0 auto; padding: max(18px, env(safe-area-inset-top)) 22px max(30px, env(safe-area-inset-bottom)); }
+.lesson-page-topbar { position: sticky; z-index: 1; top: 0; display: flex; min-height: 54px; align-items: center; justify-content: space-between; gap: 12px; margin: 0 -8px; padding: 8px; background: color-mix(in srgb, var(--fb-color-bg) 92%, transparent); backdrop-filter: blur(12px); }
+.lesson-page-topbar .card-secondary-button { flex: 0 0 auto; min-height: 40px; }
+.lesson-page-topbar .section-kicker { color: var(--fb-color-muted); font: 700 11px var(--fb-font-mono); text-align: center; }
+.lesson-page-course { color: var(--fb-color-lime); font: 700 11px var(--fb-font-mono); text-align: right; }
+.lesson-page .lesson-panel { display: block; margin: 18px 0 0; padding: clamp(12px, 3vw, 24px) 0; border: 0; border-radius: 0; background: transparent; }
+.lesson-page .lesson-panel-heading h1 { margin: 0; font-size: clamp(28px, 6vw, 42px); font-weight: 800; letter-spacing: -.035em; line-height: 1.12; }
+.lesson-page .lesson-body { margin: 22px 0; color: var(--fb-color-text-subtle); font-size: 17px; line-height: 1.75; }
+.lesson-page .lesson-activity { margin: 24px 0; padding: 20px; border: 1px solid var(--fb-color-border); border-radius: 18px; background: var(--fb-color-surface); }
+.lesson-page .lesson-question { margin: 30px 0 18px; color: var(--fb-color-text); font-size: 19px; font-weight: 750; line-height: 1.5; }
+.lesson-page .answer-options { gap: 12px; }
+.lesson-page .answer-option { min-height: 58px; font-size: 16px; }
+.lesson-page .lesson-feedback { font-size: 15px; }
+@keyframes lesson-page-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 .lesson-feedback-row .feedback-animation { width: 44px; height: 44px; flex: 0 0 44px; }
 .lesson-feedback-row .lesson-feedback { flex: 1; }
 

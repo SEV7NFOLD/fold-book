@@ -729,6 +729,8 @@ function renderLessonActivity(module) {
     action.className = "card-secondary-button";
     action.textContent = module.activityType === "live" ? "Start a voice session" : "Open Dr. Eco chat";
     action.addEventListener("click", () => {
+      document.querySelector("#lessonPage").hidden = true;
+      lessonPanel.hidden = true;
       activateTab("chat");
       const input = document.querySelector("#chatInput");
       input.value = module.chatPrompt || `Help me study ${module.title} in ${currentCourse}.`;
@@ -782,7 +784,9 @@ async function startPathPracticeTest() {
 
 function showStudyLesson(index) {
   const module = activeModules[index];
+  if (!module) return;
   lessonStep.textContent = `MODULE ${String(index + 1).padStart(2, "0")} / ${String(activeModules.length).padStart(2, "0")}`;
+  document.querySelector("#lessonPageCourse").textContent = `${currentCourse} · ${courseTitleFor(currentCourse)}`;
   lessonTitle.textContent = module.title;
   document.querySelector("#lessonBody").textContent = module.lesson;
   lessonQuestion.textContent = module.question;
@@ -843,7 +847,11 @@ function showStudyLesson(index) {
     answerOptions.append(option);
   });
   lessonPanel.hidden = false;
-  lessonPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  document.querySelector("#home").hidden = true;
+  const page = document.querySelector("#lessonPage");
+  page.hidden = false;
+  page.scrollTop = 0;
+  document.querySelector("#closeLesson").focus({ preventScroll: true });
 }
 
 function renderStudyPath() {
@@ -1146,7 +1154,10 @@ soundToggle.addEventListener("click", () => {
   updateStudySummary();
 });
 closeLessonButton.addEventListener("click", () => {
+  document.querySelector("#lessonPage").hidden = true;
   lessonPanel.hidden = true;
+  document.querySelector("#home").hidden = false;
+  pathTree.querySelector(".node.active, .node.done")?.focus({ preventScroll: true });
 });
 
 function setCourse(course) {
@@ -1157,6 +1168,7 @@ function setCourse(course) {
   studyProgress.completed = [...(studyProgress.courseCompleted[course] || [])];
   chatCourseCode = course;
   syncCourseControls();
+  document.querySelector("#lessonPage").hidden = true;
   lessonPanel.hidden = true;
   examPredictorPanel.hidden = true;
   saveStudyProgress();
