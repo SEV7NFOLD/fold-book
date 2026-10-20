@@ -2448,6 +2448,10 @@ async function refreshStudentMaterials() {
 }
 
 async function extractStudentMaterialText(file, reportProgress = () => {}) {
+  const studentOcrOptions = (onLog) => ({
+    langPath: "https://tessdata.projectnaptha.com/4.0.0_fast",
+    logger: onLog,
+  });
   if (file.size > 10 * 1024 * 1024) throw new Error("Choose a file smaller than 10 MB.");
   const extension = file.name.toLowerCase().split(".").pop();
   if (file.type === "application/pdf" || extension === "pdf") {
@@ -2467,19 +2471,21 @@ async function extractStudentMaterialText(file, reportProgress = () => {}) {
     }
     let text = pages.join("\n").trim();
     if (text.length < 80) {
-      reportProgress(43, "This looks like a scan. Loading text recognition…");
+      reportProgress(43, "This looks like a scan. Preparing the quick English text reader…");
       const tesseract = await ensureExternalScript("https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js", "Tesseract");
       let scanPage = 0;
       const scanPageLimit = Math.min(pdf.numPages, 5);
       const worker = await withProcessingTimeout(
-        tesseract.createWorker("eng", 1, { logger: (event) => {
+        tesseract.createWorker("eng", 1, studentOcrOptions((event) => {
           if (!event.status) return;
           if (event.status === "recognizing text") {
             reportProgress(64 + Math.round(((scanPage - 1 + (event.progress || 0)) / scanPageLimit) * 30), `Recognizing text on page ${scanPage} of ${scanPageLimit}…`);
+          } else if (event.status === "loading language traineddata") {
+            reportProgress(46 + Math.round((event.progress || 0) * 14), `Preparing the English reader · ${Math.round((event.progress || 0) * 100)}%…`);
           } else {
-            reportProgress(44 + Math.round((event.progress || 0) * 18), `Preparing text recognition · ${event.status}…`);
+            reportProgress(44, `Starting text recognition · ${event.status}…`);
           }
-        } }),
+        })),
         90000,
         "Text recognition setup timed out. Try again on a stronger connection.",
       );
@@ -2508,20 +2514,26 @@ async function extractStudentMaterialText(file, reportProgress = () => {}) {
     const tesseract = await ensureExternalScript("https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js", "Tesseract");
     let recognizingPhoto = false;
     const worker = await withProcessingTimeout(
-      tesseract.createWorker("eng", 1, { logger: (event) => {
+      tesseract.createWorker("eng", 1, studentOcrOptions((event) => {
         if (!event.status) return;
         if (recognizingPhoto && event.status === "recognizing text") {
           reportProgress(58 + Math.round((event.progress || 0) * 38), `Reading your photo · ${Math.round((event.progress || 0) * 100)}%…`);
+        } else if (event.status === "loading language traineddata") {
+          reportProgress(42 + Math.round((event.progress || 0) * 14), `Preparing the English reader · ${Math.round((event.progress || 0) * 100)}%…`);
         } else {
-          reportProgress(28 + Math.round((event.progress || 0) * 28), `Preparing text recognition · ${event.status}…`);
+          reportProgress(40, `Starting text recognition · ${event.status}…`);
         }
-      } }),
+      })),
       90000,
       "Text recognition setup timed out. Try again on a stronger connection.",
     );
     try {
       recognizingPhoto = true;
-      const { data } = await worker.recognize(file);
+      const { data } = await withProcessingTimeout(
+        worker.recognize(file),
+        90000,
+        "Reading this photo timed out. Try a clearer photo or a stronger connection.",
+      );
       if (!data.text.trim()) throw new Error("No readable text was found. Try a clearer, well-lit photo.");
       return data.text.trim().slice(0, 12000);
     } finally { await worker.terminate(); }
