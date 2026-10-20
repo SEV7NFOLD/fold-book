@@ -103,9 +103,13 @@ const lessonFeedback = document.querySelector("#lessonFeedback");
 const lessonFeedbackAnimation = document.querySelector("#lessonFeedbackAnimation");
 const lessonNextQuestion = document.querySelector("#lessonNextQuestion");
 const moduleCompletion = document.querySelector("#moduleCompletion");
+const moduleCelebration = document.querySelector("#moduleCelebration");
+const moduleCelebrationAnimation = document.querySelector("#moduleCelebrationAnimation");
+const moduleCompletionCard = document.querySelector("#moduleCompletionCard");
 const moduleCompletionSummary = document.querySelector("#moduleCompletionSummary");
 const moduleCompletionCanvas = document.querySelector("#moduleCompletionCanvas");
 const exportModuleCompletion = document.querySelector("#exportModuleCompletion");
+let moduleCelebrationToken = 0;
 const courseBar = document.querySelector("#cbar");
 const courseProgressBar = document.querySelector(".bar-bg");
 const coursePercent = document.querySelector("#cpct");
@@ -380,7 +384,7 @@ async function syncLearningProfile(mode = "progress", courseCode = currentCourse
     courseCode,
     courseTitle: courseTitleFor(courseCode),
     completedModuleIds: studyProgress.courseCompleted[courseCode] || [],
-    moduleAttempts: Object.fromEntries((studyProgress.studyPaths[courseCode] || []).map((module) => [module.id, studyProgress.attempts[module.id] || { attempts: 0, correct: 0, wrong: 0, questionResults: [] }]).filter(([, record]) => record.attempts > 0)),
+    moduleAttempts: Object.fromEntries((studyProgress.studyPaths[courseCode] || []).map((module) => [module.id, studyProgress.attempts[module.id] || { attempts: 0, correct: 0, wrong: 0, questionResults: [], questionWrongAttempts: [] }]).filter(([, record]) => record.attempts > 0)),
   };
   if (mode === "path") {
     payload.learnerProfile = studyProgress.learnerProfile || {};
@@ -439,11 +443,14 @@ async function loadSyncedLearningProfile() {
           const localRecord = studyProgress.attempts[moduleId] || {};
           const serverResults = Array.isArray(record.questionResults) ? record.questionResults.slice(0, 15).map((answer) => answer === true) : [];
           const localResults = Array.isArray(localRecord.questionResults) ? localRecord.questionResults : [];
+          const serverWrongAttempts = Array.isArray(record.questionWrongAttempts) ? record.questionWrongAttempts : [];
+          const localWrongAttempts = Array.isArray(localRecord.questionWrongAttempts) ? localRecord.questionWrongAttempts : [];
           studyProgress.attempts[moduleId] = {
             attempts: Math.max(Number(record.attempts) || 0, Number(localRecord.attempts) || 0),
             correct: Math.max(Number(record.correct) || 0, Number(localRecord.correct) || 0),
             wrong: Math.max(Number(record.wrong) || 0, Number(localRecord.wrong) || 0),
             questionResults: Array.from({ length: Math.max(serverResults.length, localResults.length) }, (_, index) => serverResults[index] === true || localResults[index] === true),
+            questionWrongAttempts: Array.from({ length: Math.max(serverWrongAttempts.length, localWrongAttempts.length) }, (_, index) => Math.max(Number(serverWrongAttempts[index]) || 0, Number(localWrongAttempts[index]) || 0)),
           };
         }
       }
@@ -842,6 +849,8 @@ function renderModuleQuestion(module, record, index) {
       record.attempts = (record.attempts || 0) + 1;
       if (answerIndex !== question.correctAnswer) {
         record.wrong = (record.wrong || 0) + 1;
+        record.questionWrongAttempts = Array.isArray(record.questionWrongAttempts) ? record.questionWrongAttempts : [];
+        record.questionWrongAttempts[index] = (record.questionWrongAttempts[index] || 0) + 1;
         studyProgress.attempts[module.id] = record;
         saveStudyProgress();
         void syncLearningProfile("progress", currentCourse);
@@ -889,7 +898,6 @@ function completeStudyModule(module, record) {
     updateStudySummary();
     void syncLeaderboardEntry();
     renderStudyPath();
-    if (typeof window.navigator.vibrate === "function") window.navigator.vibrate([25, 35, 25]);
     lessonFeedback.className = "lesson-feedback is-correct";
     lessonFeedbackAnimation.hidden = false;
     renderLottieInto(lessonFeedbackAnimation, "jump-for-joy.json", "✨", "Module complete", { loop: false });
@@ -921,19 +929,43 @@ function wrapCanvasText(context, text, x, y, maxWidth, lineHeight, maxLines = 4)
 
 async function showModuleCompletionCard(module, record, awardedXp) {
   const total = module.questions?.length || 10;
-  const misses = Math.max(0, Number(record.wrong) || 0);
+  const wrongByQuestion = Array.isArray(record.questionWrongAttempts) ? record.questionWrongAttempts : [];
+  const misses = wrongByQuestion.reduce((sum, count) => sum + (Number(count) || 0), 0);
+  const trackedAccuracy = misses === (Number(record.wrong) || 0);
+  const answered = Array.isArray(record.questionResults) ? record.questionResults : [];
+  const firstTryCorrect = module.questions?.reduce((count, _question, index) => (
+    count + (answered[index] === true && (Number(wrongByQuestion[index]) || 0) === 0 ? 1 : 0)
+  ), 0) || 0;
+  const firstTryPercent = trackedAccuracy && total ? Math.round(firstTryCorrect / total * 100) : null;
   const mainIdea = String(module.lesson || "").replace(/\s+/g, " ").trim().slice(0, 320);
-  const recap = misses
-    ? `You stuck with the tricky parts in ${module.title} and reached full mastery. Remember: ${mainIdea}`
-    : `A strong first pass through ${module.title}. Your key takeaway: ${mainIdea}`;
+  const recap = firstTryPercent === null
+    ? `You mastered all ${total} questions. Your first-try score was not recorded for this earlier run. Remember: ${mainIdea}`
+    : misses
+      ? `You got ${firstTryCorrect} of ${total} right on your first try (${firstTryPercent}%), then stuck with the tricky parts until you mastered ${module.title}. Remember: ${mainIdea}`
+      : `A clean first pass: ${firstTryCorrect} of ${total} correct (${firstTryPercent}%). Your key takeaway from ${module.title}: ${mainIdea}`;
   moduleCompletionSummary.textContent = recap;
   moduleCompletion.hidden = false;
+  const celebrationId = ++moduleCelebrationToken;
+  moduleCelebration.hidden = !awardedXp;
+  moduleCompletionCard.hidden = awardedXp;
   lessonQuestion.hidden = true;
   lessonAssessmentProgress.hidden = true;
   answerOptions.hidden = true;
   lessonNextQuestion.hidden = true;
   document.querySelector(".lesson-feedback-row").hidden = true;
   exportModuleCompletion.disabled = true;
+
+  if (awardedXp) {
+    renderLottieInto(moduleCelebrationAnimation, "level-up.json", "🚀", "Module complete celebration", { loop: false });
+    buzz([55, 45, 65, 80, 100]);
+    if (soundOn) sfx.win();
+    if (!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      await new Promise((resolve) => window.setTimeout(resolve, 3500));
+    }
+    if (celebrationId !== moduleCelebrationToken) return;
+    moduleCelebration.hidden = true;
+    moduleCompletionCard.hidden = false;
+  }
 
   const canvas = moduleCompletionCanvas;
   const context = canvas.getContext("2d");
@@ -1006,10 +1038,13 @@ async function showModuleCompletionCard(module, record, awardedXp) {
   context.fillStyle = "#20251b";
   context.textAlign = "center";
   context.font = "800 54px system-ui, sans-serif";
-  context.fillText(`${total}/${total}`, 835, 568);
+  context.fillText(firstTryPercent === null ? "—" : `${firstTryPercent}%`, 835, 568);
   context.font = "700 17px system-ui, sans-serif";
-  context.fillText("QUESTIONS", 835, 605);
+  context.fillText("FIRST TRY", 835, 605);
   context.textAlign = "left";
+  context.fillStyle = "#66705a";
+  context.font = "700 20px system-ui, sans-serif";
+  context.fillText(`${total}/${total} CHECKPOINTS CLEARED`, 126, 670);
 
   context.fillStyle = "#f0f2e8";
   context.beginPath();
@@ -1059,6 +1094,10 @@ exportModuleCompletion.addEventListener("click", () => {
 async function showStudyLesson(index) {
   const module = activeModules[index];
   if (!module) return;
+  moduleCelebrationToken += 1;
+  moduleCelebration.hidden = true;
+  moduleCelebrationAnimation.replaceChildren();
+  moduleCompletionCard.hidden = true;
   lessonStep.textContent = `MODULE ${String(index + 1).padStart(2, "0")} / ${String(activeModules.length).padStart(2, "0")}`;
   document.querySelector("#lessonPageCourse").textContent = `${currentCourse} · ${courseTitleFor(currentCourse)}`;
   lessonTitle.textContent = module.title;
@@ -1092,6 +1131,10 @@ async function showStudyLesson(index) {
       const questions = await generateQuestionsFromMaterials(questionCount, currentCourse, currentStudentLevel, module);
       module.questions = questions;
       record.questionResults = [];
+      record.questionWrongAttempts = Array.from({ length: questions.length }, () => 0);
+      record.attempts = 0;
+      record.correct = 0;
+      record.wrong = 0;
       if (studyProgress.completed.includes(module.id)) {
         studyProgress.completed = studyProgress.completed.filter((id) => id !== module.id);
         studyProgress.courseCompleted[currentCourse] = [...studyProgress.completed];

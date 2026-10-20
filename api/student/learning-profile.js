@@ -62,6 +62,9 @@ function cleanModuleAttempts(value) {
       correct: Math.max(0, Math.min(1000, Math.floor(Number(record.correct) || 0))),
       wrong: Math.max(0, Math.min(1000, Math.floor(Number(record.wrong) || 0))),
       questionResults: Array.isArray(record.questionResults) ? record.questionResults.slice(0, 15).map((answer) => answer === true) : [],
+      questionWrongAttempts: Array.isArray(record.questionWrongAttempts)
+        ? record.questionWrongAttempts.slice(0, 15).map((attempts) => Math.max(0, Math.min(1000, Math.floor(Number(attempts) || 0))))
+        : [],
     }]];
   }));
 }

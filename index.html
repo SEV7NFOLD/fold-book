@@ -125,10 +125,18 @@
               <p class="lesson-feedback" id="lessonFeedback" role="status"></p>
             </div>
             <section class="module-completion" id="moduleCompletion" aria-labelledby="moduleCompletionHeading" hidden>
-              <h2 id="moduleCompletionHeading">Dr. Eco’s recap</h2>
-              <p id="moduleCompletionSummary" class="module-completion-summary" role="status"></p>
-              <canvas id="moduleCompletionCanvas" width="1080" height="1350" aria-hidden="true"></canvas>
-              <button class="results-submit" id="exportModuleCompletion" type="button">Download my recap card ↓</button>
+              <div class="module-celebration" id="moduleCelebration" aria-live="polite" hidden>
+                <div class="module-celebration-animation" id="moduleCelebrationAnimation" aria-hidden="true"></div>
+                <p class="module-celebration-kicker">MODULE COMPLETE</p>
+                <h2>You did it!</h2>
+                <p>Every question solved. Your next step is ready.</p>
+              </div>
+              <section class="module-completion-card" id="moduleCompletionCard" aria-labelledby="moduleCompletionHeading" hidden>
+                <h2 id="moduleCompletionHeading">Dr. Eco’s recap</h2>
+                <p id="moduleCompletionSummary" class="module-completion-summary" role="status"></p>
+                <canvas id="moduleCompletionCanvas" width="1080" height="1350" aria-hidden="true"></canvas>
+                <button class="results-submit" id="exportModuleCompletion" type="button">Download my recap card ↓</button>
+              </section>
             </section>
             <button class="results-submit" id="lessonNextQuestion" type="button" hidden>Next question →</button>
           </section>
