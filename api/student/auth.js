@@ -220,3 +220,7 @@ module.exports = async function studentAuthHandler(request, response) {
     return sendJson(response, 503, { error: "Could not reach the student database. Please try again shortly." });
   }
 };
+
+module.exports.readSession = readSession;
+module.exports.isSameOriginRequest = isSameOriginRequest;
+module.exports.sendJson = sendJson;

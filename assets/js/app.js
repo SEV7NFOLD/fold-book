@@ -140,7 +140,6 @@ const MODULES_BY_COURSE = { "ECO 128": STUDY_MODULES, "ECO 122": STATISTICS_MODU
 const STUDY_PROGRESS_KEY = "foldBook.studyProgress";
 const LEGACY_STUDY_PROGRESS_KEY = "foldBookV2.studyProgress";
 let activeStudyProgressKey = STUDY_PROGRESS_KEY;
-const STUDENT_MATERIAL_OWNER_KEY = "foldBook.studentMaterialOwner";
 const navButtons = [...document.querySelectorAll("[data-tab]")];
 const studyPanels = new Map(["home", "chat", "board", "invite"].map((id) => [id, document.querySelector(`#${id}`)]));
 const pathTree = document.querySelector("#pathTree");
@@ -1560,60 +1559,24 @@ function learnerAdaptationSummary() {
   return `Preferred pace: ${studyProgress.studyPace}. Topics needing review: ${weak.map(({ module, stats }) => `${module.title} (${Math.round(stats.correct / stats.attempts * 100)}% accuracy)`).join(", ") || "none identified yet"}. Strong topics: ${strengths.map(({ module }) => module.title).join(", ") || "still learning"}. Recent ${chatCourseCode} quiz accuracy: ${quizAccuracy === null ? "no quiz history yet" : `${quizAccuracy}%`}. Questions recently missed: ${weakQuizPrompts.join(" | ") || "none yet"}. Use these signals to choose examples and next practice questions.`;
 }
 
-async function ensureStudentAuth() {
-  if (!supabaseClient) throw new Error("Private uploads need a working Supabase connection.");
-  const currentUser = await currentStudentMaterialOwner();
-  if (currentUser) return currentUser;
-  const { data, error } = await supabaseClient.auth.signInAnonymously();
-  if (error) {
-    const message = String(error.message || "Supabase could not start a private upload session.");
-    const status = Number(error.status || error.statusCode);
-    if (/anonymous.{0,40}(disabled|not enabled)|(disabled|not enabled).{0,40}anonymous/i.test(message)) {
-      throw new Error("Supabase says Anonymous Sign-Ins are disabled for this project. Confirm the setting is enabled in the same project FoldBook uses, then retry.");
-    }
-    if (status === 429 || /rate.?limit|too many requests/i.test(message)) {
-      throw new Error("Supabase is temporarily limiting private upload sign-ins. Wait a while before retrying; repeated attempts can hit this limit.");
-    }
-    if (/captcha/i.test(message)) {
-      throw new Error("Supabase is requiring CAPTCHA for anonymous sign-ins, but FoldBook has no CAPTCHA token configured. Review the Auth Bot and Abuse Protection settings.");
-    }
-    console.error("Supabase private upload sign-in failed:", { status: status || null, code: error.code || null, message });
-    throw new Error(`Private upload sign-in failed${status ? ` (${status})` : ""}: ${message}`);
-  }
-  if (currentStudent?.registration) window.localStorage.setItem(STUDENT_MATERIAL_OWNER_KEY, currentStudent.registration);
-  return data.user;
-}
-
-async function currentStudentMaterialOwner() {
-  if (!supabaseClient) return null;
-  const { data } = await supabaseClient.auth.getSession();
-  const user = data.session?.user;
-  if (!user?.is_anonymous) return null;
-  let ownerRegistration = "";
-  try { ownerRegistration = window.localStorage.getItem(STUDENT_MATERIAL_OWNER_KEY) || ""; } catch { /* session remains private to this browser */ }
-  if (ownerRegistration && currentStudent?.registration && ownerRegistration !== currentStudent.registration) {
-    await supabaseClient.auth.signOut({ scope: "local" });
-    try { window.localStorage.removeItem(STUDENT_MATERIAL_OWNER_KEY); } catch { /* local storage may be blocked */ }
-    return null;
-  }
-  if (!ownerRegistration && currentStudent?.registration) {
-    await supabaseClient.auth.signOut({ scope: "local" });
-    return null;
-  }
-  return user;
+async function requestStudentMaterialsApi(payload, method = "POST") {
+  const response = await fetch("/api/student/materials", {
+    method,
+    credentials: "same-origin",
+    headers: { Accept: "application/json", ...(payload ? { "Content-Type": "application/json" } : {}) },
+    ...(payload ? { body: JSON.stringify(payload) } : {}),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || "Could not reach your private study materials.");
+  return result;
 }
 
 async function loadStudentMaterialContext(courseCode) {
-  if (!supabaseClient?.auth?.getSession || !currentStudent) return "";
+  if (!currentStudent) return "";
   try {
-    const owner = await currentStudentMaterialOwner();
-    if (!owner) return "";
-    const { data, error } = await supabaseClient.from("student_materials")
-      .select("title, course_title, extracted_text")
-      .eq("owner_id", owner.id).eq("course_code", courseCode)
-      .order("created_at", { ascending: false }).limit(5);
-    if (error) throw error;
-    return (data || []).map((item) => `${item.title}${item.course_title ? ` · ${item.course_title}` : ""}\n${item.extracted_text}`).join("\n\n").slice(0, 18000);
+    const { materials } = await requestStudentMaterialsApi(null, "GET");
+    return (materials || []).filter((item) => item.course_code === courseCode).slice(0, 5)
+      .map((item) => `${item.title}${item.course_title ? ` · ${item.course_title}` : ""}\n${item.extracted_text}`).join("\n\n").slice(0, 18000);
   } catch (error) {
     console.warn("Could not load private study materials:", error);
     return "";
@@ -2429,19 +2392,15 @@ document.querySelector("#studyVoice").addEventListener("change", (event) => {
 });
 
 async function refreshStudentMaterials() {
-  if (!studentMaterialList || !supabaseClient) return;
-  const owner = await currentStudentMaterialOwner();
-  if (!owner) return;
-  const { data, error } = await supabaseClient.from("student_materials")
-    .select("id,title,course_code,course_title,file_name,created_at")
-    .eq("owner_id", owner.id).order("created_at", { ascending: false }).limit(25);
-  if (error) throw error;
-  studentCustomCourses = [...new Map((data || []).map((item) => [item.course_code, { code: item.course_code, title: item.course_title || "My course" }])).values()]
+  if (!studentMaterialList || !currentStudent) return;
+  const { materials } = await requestStudentMaterialsApi(null, "GET");
+  const materialList = materials || [];
+  studentCustomCourses = [...new Map(materialList.map((item) => [item.course_code, { code: item.course_code, title: item.course_title || "My course" }])).values()]
     .filter((item) => !coursesForLevel(currentStudentLevel).some((course) => course.code === item.code));
   const priorCourse = chatCourseCode;
   updateChatCourseDropdown(priorCourse);
   studentMaterialList.replaceChildren();
-  for (const material of data || []) {
+  for (const material of materialList) {
     const row = document.createElement("li");
     const label = document.createElement("span");
     const remove = document.createElement("button");
@@ -2452,11 +2411,14 @@ async function refreshStudentMaterials() {
     remove.setAttribute("aria-label", `Delete ${material.title}`);
     remove.addEventListener("click", async () => {
       remove.disabled = true;
-      const { data: owned } = await supabaseClient.from("student_materials").select("storage_path").eq("id", material.id).maybeSingle();
-      const { error: deleteError } = await supabaseClient.from("student_materials").delete().eq("id", material.id);
-      if (!deleteError && owned?.storage_path) await supabaseClient.storage.from("student-materials").remove([owned.storage_path]);
-      if (deleteError) studentMaterialStatus.textContent = deleteError.message;
-      else { studentMaterialStatus.textContent = "Material deleted."; await refreshStudentMaterials(); }
+      try {
+        await requestStudentMaterialsApi({ action: "delete", id: material.id });
+        studentMaterialStatus.textContent = "Material deleted.";
+        await refreshStudentMaterials();
+      } catch (error) {
+        remove.disabled = false;
+        studentMaterialStatus.textContent = error.message;
+      }
     });
     row.append(label, remove);
     studentMaterialList.append(row);
@@ -2572,30 +2534,26 @@ studentMaterialForm?.addEventListener("submit", async (event) => {
   const submit = studentMaterialForm.querySelector("button[type=submit]");
   submit.disabled = true;
   studentMaterialSaving = true;
+  let preparedUpload = null;
+  let uploaded = false;
   try {
     if (!pendingStudentMaterialText) throw new Error("The document has not finished processing yet. Please choose it again.");
-    showStudentUploadProgress(5, "Step 1 of 3 · Securing your private study space…");
-    const user = await ensureStudentAuth();
+    showStudentUploadProgress(5, "Step 1 of 3 · Preparing your private upload…");
     const extracted = pendingStudentMaterialText;
-    showStudentUploadProgress(55, "Step 2 of 3 · Document processed. Saving your material and course details…");
-    const id = crypto.randomUUID();
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-100);
     const inferredMime = ({ pdf: "application/pdf", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp" })[file.name.toLowerCase().split(".").pop()];
     const mimeType = ["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(file.type) ? file.type : inferredMime;
     if (!mimeType) throw new Error("Upload a PDF, JPG, PNG, or WebP photo.");
-    const storagePath = `${user.id}/${id}/${safeName}`;
+    preparedUpload = await requestStudentMaterialsApi({ action: "prepare", fileName: file.name, mimeType, size: file.size });
+    showStudentUploadProgress(55, "Step 2 of 3 · Document processed. Uploading your material securely…");
     const { error: uploadError } = await supabaseClient.storage.from("student-materials")
-      .upload(storagePath, file, { contentType: mimeType, upsert: false });
+      .uploadToSignedUrl(preparedUpload.path, preparedUpload.token, file, { contentType: mimeType });
     if (uploadError) throw uploadError;
-    const { error: rowError } = await supabaseClient.from("student_materials").insert({
-      id, owner_id: user.id, title, course_code: courseCode, course_title: courseTitle,
-      description, level: currentStudentLevel,
-      file_name: safeName, storage_path: storagePath, mime_type: mimeType, extracted_text: extracted,
+    uploaded = true;
+    showStudentUploadProgress(82, "Step 3 of 3 · Saving your course details for Dr. Eco and admin review…");
+    await requestStudentMaterialsApi({
+      action: "finalize", id: preparedUpload.id, path: preparedUpload.path,
+      title, courseCode, courseTitle, description, mimeType, extractedText: extracted,
     });
-    if (rowError) {
-      await supabaseClient.storage.from("student-materials").remove([storagePath]);
-      throw rowError;
-    }
     showStudentUploadProgress(100, "Step 3 of 3 · Saved! Dr. Eco can use it, and the course details are ready for admin review.");
     pendingStudentMaterialText = "";
     pendingStudentMaterialFile = null;
@@ -2607,6 +2565,9 @@ studentMaterialForm?.addEventListener("submit", async (event) => {
       showNotice("Material saved and sent to the admin review queue.");
     }, 500);
   } catch (error) {
+    if (preparedUpload && uploaded) {
+      await requestStudentMaterialsApi({ action: "abort", id: preparedUpload.id, path: preparedUpload.path }).catch(() => {});
+    }
     studentMaterialStatus.textContent = error.message || "Could not save this material. Please try again.";
   } finally {
     studentMaterialSaving = false;
@@ -3642,10 +3603,9 @@ document.querySelector("#dismiss-card").addEventListener("click", () => {
 async function signOut() {
   if (voiceCallActive) toggleVoiceCallRoom(false);
   try {
-    await supabaseClient?.auth?.signOut({ scope: "local" });
-    window.localStorage.removeItem(STUDENT_MATERIAL_OWNER_KEY);
+    await fetch("/api/student/auth", { method: "DELETE", credentials: "same-origin", headers: { Accept: "application/json" } });
   } catch (error) {
-    console.warn("Could not clear this browser's private upload identity:", error);
+    console.warn("Could not clear the student sign-in cookie:", error);
   }
   currentStudent = null;
   isMasterAdmin = false;
@@ -3963,7 +3923,6 @@ async function handleAuthSubmit(fullName, regNumber, phone, passcode, password) 
     setStudentRegistration(registration);
     await refreshLiveCourseCatalog(studentLevel);
     applyStudentLevel(studentLevel);
-    await currentStudentMaterialOwner();
     window.localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({
       role: "student",
       name: student.name,
