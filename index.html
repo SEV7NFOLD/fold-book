@@ -74,6 +74,7 @@
                 <div id="cbar" class="bar-fill" style="width: 0%;"></div>
               </div>
               <b class="mono" id="cpct">0%</b>
+              <div class="course-progress-lottie" id="courseProgressLottie" aria-hidden="true" hidden></div>
             </div>
             <div class="course-week-meta"><span class="mono" id="wkd">COURSE PROGRESS</span><span id="wkp">0 / 5 modules</span></div>
           </header>
@@ -88,13 +89,19 @@
             </div>
             <p class="lesson-question" id="lessonQuestion"></p>
             <div class="answer-options" id="answerOptions"></div>
-            <p class="lesson-feedback" id="lessonFeedback" role="status"></p>
+            <div class="lesson-feedback-row"><div class="feedback-animation" id="lessonFeedbackAnimation" aria-hidden="true" hidden></div>
+              <p class="lesson-feedback" id="lessonFeedback" role="status"></p>
+            </div>
           </section>
         </div>
         <aside class="study-sidebar">
           <section class="card">
             <h2>This Week's Activity</h2>
             <div class="week-tracker" id="weekTracker" aria-label="Study activity for this week"></div>
+          </section>
+          <section class="card learning-focus-card">
+            <h2>Your learning focus</h2>
+            <p id="learningFocus">Your tricky topics will show up here as you practise.</p>
           </section>
           <section class="card exam-card">
             <span class="section-kicker" id="examPredictorStatus">LOCKED</span>
@@ -143,6 +150,21 @@
             </label>
             <p id="chatLevel" role="status" aria-live="polite">Detected level: 100L</p>
           </div>
+          <div class="learner-preferences">
+            <label>Dr. Eco’s tone
+              <select id="studyTone"><option value="friendly">Friendly & encouraging</option><option value="calm">Calm & patient</option><option value="direct">Direct & focused</option></select>
+            </label>
+            <label>Explanation pace
+              <select id="studyPace"><option value="gentle">One small step at a time</option><option value="balanced">Balanced</option><option value="quick">Quick revision</option></select>
+            </label>
+            <label>Live call voice
+              <select id="studyVoice"><option value="Kore">Kore · Female, firm</option><option value="Aoede">Aoede · Female, breezy</option><option value="Leda">Leda · Female, youthful</option><option value="Puck">Puck · Male, upbeat</option><option value="Orus">Orus · Male, firm</option></select>
+            </label>
+          </div>
+          <details class="student-materials-panel" id="studentMaterialsPanel">
+            <summary>📚 My study materials <span>Saved to your study space. Authorized FoldBook admins can review the extracted text and course details; matching text is shared with Gemini when you study that course.</span></summary>
+            <ul id="studentMaterialList" class="student-material-list"></ul>
+          </details>
           <div class="chat-fuel"><span>⚡ Fuel</span><div class="fuel-track"><i id="chatFuelBar"></i></div><strong class="mono" id="chatFuelValue">85/100</strong></div>
         </div>
         <div class="chat-messages" id="chatMessages" aria-live="polite"></div>
@@ -153,6 +175,10 @@
         </div>
         <form class="chat-composer" id="chatForm">
           <button type="button" class="chat-icon-button" id="micButton" aria-label="Speak your question">🎤</button>
+          <button type="button" class="chat-icon-button" id="cameraUploadButton" aria-label="Take a photo with your camera" title="Take a photo">📷</button>
+          <button type="button" class="chat-icon-button" id="fileUploadButton" aria-label="Attach a PDF or photo" title="Attach a PDF or photo">📎</button>
+          <input id="chatMaterialPicker" class="chat-material-picker" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp" aria-label="Choose a PDF or photo to add as study material">
+          <input id="cameraMaterialPicker" class="chat-material-picker" type="file" accept="image/*" capture="environment" aria-label="Take a photo of study material">
           <input id="chatInput" type="text" placeholder="Ask Dr. Eco about your course" autocomplete="off" aria-label="Your question">
           <button type="submit" class="results-submit">Send</button>
           <button type="button" class="results-submit quiz-launch" id="openTest">Test Me 📝</button>
@@ -192,6 +218,7 @@
           <div class="invite-progress-heading"><strong>Referral actions</strong><strong class="mono" id="inviteCount">0 / 5</strong></div>
           <div class="fuel-track"><i id="inviteBar"></i></div>
           <p>Share or copy your link 5 times to earn +50 fuel credits and a 48-hour all-access demo pass. Referral actions are not verified sign-ups.</p>
+          <div class="invite-reward-animation" id="inviteRewardAnimation" aria-hidden="true" hidden></div>
           <div class="invite-friends" id="inviteFriends" aria-live="polite"></div>
           <p class="invite-reward-status" id="inviteRewardStatus" role="status" aria-live="polite"></p>
         </section>
@@ -203,8 +230,8 @@
     <section id="landingView" class="landing-view">
       <section class="landing-hero">
         <span class="section-kicker">FOLDBOOK · UNIUYO ECONOMICS</span>
-        <h1>Verify your results instantly, then master your courses with Dr. Eco.</h1>
-        <p>Look up your published scores and create a result poster, or launch the study app to continue learning.</p>
+        <h1>Master your Economics courses with Dr. Eco.</h1>
+        <p>Check your Economics results, then build your study streak and learn with Dr. Eco.</p>
         <button class="results-submit landing-launch" id="launchApp" type="button">Launch FoldBook App →</button>
       </section>
       <section class="results-section" id="results">
@@ -216,7 +243,7 @@
           <div class="results-intro">
             <div>
               <h2 id="results-title">Find your <span>results.</span></h2>
-              <p class="section-description">Enter your registration number and full name to see your published scores and grades.</p>
+              <p class="section-description">Enter your registration number and full name as recorded on the results sheet.</p>
             </div>
             <form class="results-form" id="lookupForm" novalidate>
               <div class="lookup-grid">
@@ -233,7 +260,7 @@
                 <span>Access My Results</span>
                 <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M4 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
               </button>
-              <span class="results-help" id="results-help">Enter your registration number and full name as shown on your result record.</span>
+              <span class="results-help" id="results-help">Use your full name and registration number as shown on your result record.</span>
             </form>
           </div>
           <p class="results-status" id="results-status" role="status" aria-live="polite"></p>
@@ -307,8 +334,8 @@
               </div>
             </article>
           </section>
-          <p class="helper-text"><span class="score-note-marker" aria-hidden="true">i</span> The published data provides total scores and grades. Enter your registration number and full name to access your statement.</p>
-          <div class="results-foot"><span>PUBLISHED COURSE RESULTS.</span><span>MADE WITH INTENTION BY SEV7N FOLD.</span></div>
+          <p class="helper-text"><span class="score-note-marker" aria-hidden="true">i</span> Demo access checks the supplied name and registration number against the results sheet.</p>
+          <div class="results-foot"><span>UNIUYO ECONOMICS COURSE RESULTS.</span><span>MADE WITH INTENTION BY SEV7N FOLD.</span></div>
         </div>
       </section>
     </section>
@@ -317,7 +344,7 @@
       <div class="auth-screen-card">
         <span class="section-kicker">STUDENT & ADMIN ACCESS</span>
         <h1>Welcome to FoldBook</h1>
-        <p>Create your student account once, then log in with your matric number and password.</p>
+        <p>Create a study profile to open your learning workspace. This does not verify identity for access to official results.</p>
         <div class="auth-mode-switch" role="group" aria-label="Student account access">
           <button type="button" class="auth-mode-button is-active" id="authSignupMode" aria-pressed="true">Create account</button>
           <button type="button" class="auth-mode-button" id="authLoginMode" aria-pressed="false">Log in</button>
@@ -331,19 +358,26 @@
             <label for="authRegNo">Registration / Matric Number</label>
             <input id="authRegNo" name="registration" type="text" autocomplete="off" autocapitalize="characters" required>
           </div>
-          <div class="form-group" id="authPhoneGroup">
-            <label for="authWhatsapp">WhatsApp Phone Number</label>
-            <input id="authWhatsapp" name="whatsapp" type="tel" autocomplete="tel" inputmode="tel" placeholder="08012345678" required>
+          <div class="form-group" id="authLevelGroup">
+            <label for="authLevel">Current academic level</label>
+            <select id="authLevel" name="level" required>
+              <option value="100L">100 Level</option><option value="200L">200 Level</option>
+              <option value="300L">300 Level</option><option value="400L">400 Level</option>
+            </select>
           </div>
           <div class="form-group">
             <label for="authPassword">Password</label>
             <input id="authPassword" name="password" type="password" autocomplete="new-password" minlength="8" required>
           </div>
+          <div class="form-group" id="authPhoneGroup">
+            <label for="authWhatsapp">WhatsApp Phone Number</label>
+            <input id="authWhatsapp" name="whatsapp" type="tel" autocomplete="tel" inputmode="tel" placeholder="08012345678" required>
+          </div>
           <div class="form-group" id="adminPasscodeGroup" hidden>
             <label for="adminPasscode">Admin Passcode</label>
             <input id="adminPasscode" name="adminPasscode" type="password" autocomplete="current-password">
           </div>
-          <label class="whatsapp-consent" id="authConsentGroup"><input type="checkbox" id="authMarketingConsent" required> I agree that FoldBook may save this number and send me study updates and WhatsApp study reminders.</label>
+          <label class="whatsapp-consent" id="authConsentGroup"><input type="checkbox" id="authMarketingConsent" required> I agree that FoldBook may save this number and send me up to two WhatsApp study reminders per day. I can reply STOP at any time.</label>
           <p class="verification-status" id="authStatus" role="status" aria-live="polite"></p>
           <div class="auth-actions">
             <button type="button" class="card-secondary-button" id="backToLanding">Back</button>
@@ -364,6 +398,7 @@
           <button type="button" class="admin-nav-button is-active" data-admin-view="broadsheets">📊 Broadsheets</button>
           <button type="button" class="admin-nav-button" data-admin-view="catalog">📚 Course Catalog</button>
           <button type="button" class="admin-nav-button" data-admin-view="indexer">🧠 AI Indexer</button>
+          <button type="button" class="admin-nav-button" data-admin-view="materials">📚 Materials</button>
           <button type="button" class="admin-nav-button" data-admin-view="students">👥 Student Records</button>
         </nav>
         <div class="admin-portal-content">
@@ -376,7 +411,7 @@
             </label>
             <button type="button" class="results-submit" id="importBroadsheet">Import scores to Supabase</button>
             <p id="broadsheetStatus" class="admin-material-status" role="status" aria-live="polite"></p>
-            <label class="lookup-field admin-search">Filter compiled records<input id="adminSearch" type="search" placeholder="Search by name or registration"></label>
+            <label class="lookup-field admin-search">Filter private broadsheets<input id="adminSearch" type="search" placeholder="Search by name or registration"></label>
             <p id="adminStatus" class="admin-material-status" role="status" aria-live="polite"></p>
             <div class="results-table-wrap"><table class="results-table"><thead><tr><th scope="col">Student</th><th scope="col">Registration</th><th scope="col">Courses</th><th scope="col">Action</th></tr></thead><tbody id="adminResults"></tbody></table></div>
             <section class="admin-student-detail" id="adminStudentDetail" hidden>
@@ -400,19 +435,45 @@
           <section class="admin-view-panel" id="adminView-indexer" hidden>
             <section id="adminMaterialsTab" class="admin-materials" aria-labelledby="adminMaterialsHeading">
               <h2 id="adminMaterialsHeading">🧠 AI Indexer</h2>
-              <p class="admin-materials-intro">Select a target level and course, then paste lecture slides, outlines, or past questions for Dr. Eco.</p>
+              <p class="admin-materials-intro">Select a target level and course, then drop a folder or any supported study file here. Text is extracted in your browser before indexing.</p>
               <div class="admin-material-fields">
                 <label for="adminLevelSelect">Target Academic Level<select id="adminLevelSelect" class="admin-material-control"><option value="100L">100 Level</option><option value="200L">200 Level</option><option value="300L">300 Level</option><option value="400L">400 Level</option></select></label>
                 <label for="adminCourseSelect">Course Code<select id="adminCourseSelect" class="admin-material-control"></select></label>
               </div>
-              <label for="adminFileUploader">Upload PDF, DOCX, TXT, or image for text extraction</label>
-              <input type="file" id="adminFileUploader" class="admin-material-control" accept=".pdf,.docx,.txt,.png,.jpg,.jpeg,.webp,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,image/png,image/jpeg,image/webp">
+              <div class="admin-material-dropzone" id="adminMaterialDropzone" tabindex="0" role="button" aria-controls="adminFileUploader" aria-label="Choose course material files or drop files here">
+                <strong>Choose files on mobile, or drop files here</strong>
+                <span>PDF, DOCX, TXT, PNG, JPG, WEBP, CSV, XLSX and XLS · up to 20 MB each</span>
+                <div><button type="button" class="card-secondary-button" id="adminChoosePdf">Choose PDF</button><button type="button" class="card-secondary-button" id="adminChooseFiles">Choose files</button><button type="button" class="card-secondary-button" id="adminChooseFolder">Choose folder</button></div>
+              </div>
+              <input type="file" id="adminPdfUploader" accept=".pdf,application/pdf" multiple hidden>
+              <input type="file" id="adminFileUploader" class="admin-material-control" accept=".pdf,.docx,.txt,.png,.jpg,.jpeg,.webp,.csv,.xlsx,.xls" multiple hidden>
+              <input type="file" id="adminFolderUploader" webkitdirectory directory multiple hidden>
+              <ul id="adminMaterialQueue" class="admin-material-queue" aria-live="polite"></ul>
+              <div id="adminMaterialAssignments" class="admin-material-assignments" hidden></div>
               <label for="adminMaterialTitle">Material Title</label>
               <input type="text" id="adminMaterialTitle" class="admin-material-control" placeholder="Lecture 4: Peak-Load Pricing &amp; Congestion">
               <label for="adminMaterialText">Lecture slides, outline, or past questions</label>
               <textarea id="adminMaterialText" class="admin-material-control" rows="6"></textarea>
               <button type="button" id="adminMaterialSubmit" class="results-submit admin-material-submit">Index Material into Supabase</button>
               <p id="adminMaterialStatus" class="admin-material-status mono" role="status" aria-live="polite"></p>
+            </section>
+          </section>
+          <section class="admin-view-panel" id="adminView-materials" hidden>
+            <h2>📚 Materials Library</h2>
+            <p>Manage materials indexed for Dr. Eco and review documents shared by students.</p>
+            <section class="admin-material-library-section">
+              <h3>Materials in Dr. Eco’s library</h3>
+              <p>These are the shared course materials currently stored in Supabase.</p>
+              <button type="button" class="results-submit" id="loadAdminMaterials">Refresh library</button>
+              <p id="adminMaterialsStatus" class="admin-material-status" role="status" aria-live="polite"></p>
+              <div id="adminMaterialsList" class="student-material-admin-list"></div>
+            </section>
+            <section class="admin-material-library-section">
+            <h3>Student material submissions</h3>
+            <p>Review student-shared PDFs and photos, and spot course codes and titles to add to the catalog.</p>
+            <button type="button" class="results-submit" id="loadStudentMaterials">Load Student Submissions</button>
+            <p id="studentMaterialsAdminStatus" class="admin-material-status" role="status" aria-live="polite"></p>
+            <div id="studentMaterialsAdminList" class="student-material-admin-list"></div>
             </section>
           </section>
           <section class="admin-view-panel" id="adminView-students" hidden>
@@ -428,6 +489,7 @@
 
     <section class="voice-call-room hide" id="voiceCallRoom" role="dialog" aria-modal="true" aria-labelledby="voiceCallTitle" hidden>
       <div class="voice-call-content">
+        <button type="button" class="voice-minimize" id="voiceMinimizeButton" aria-label="Minimize live call">⌄</button>
         <p class="section-kicker">LIVE STUDY CALL</p>
         <h1 id="voiceCallTitle">Dr. Eco</h1>
         <p class="voice-call-subtitle">UNIUYO Economics Study Companion</p>
@@ -437,6 +499,7 @@
         </div>
         <p class="voice-call-status" id="voiceCallStatus" role="status" aria-live="polite">Starting voice session…</p>
         <div class="voice-call-caption" id="voiceCaption" aria-live="polite">Dr. Eco is listening…</div>
+        <div class="voice-transcript" id="voiceTranscript" aria-label="Call transcript" aria-live="polite"></div>
         <div class="voice-call-controls">
           <button type="button" class="voice-call-control" id="voiceMuteButton" aria-pressed="false">🎙️ Mute mic</button>
           <button type="button" class="voice-call-control" id="voiceSpeakerButton" aria-pressed="true">🔊 Speaker on</button>
@@ -444,6 +507,10 @@
         </div>
       </div>
     </section>
+    <aside class="voice-mini-player" id="voiceMiniPlayer" hidden aria-label="Minimized live study call">
+      <button type="button" class="voice-mini-open" id="voiceMiniOpen" aria-label="Return to live call"><span aria-hidden="true">🎙️</span><span><b>Dr. Eco is on the line</b><small id="voiceMiniTranscript">Your call transcript will appear here.</small></span></button>
+      <button type="button" class="voice-mini-end" id="voiceMiniEnd" aria-label="End live call">End</button>
+    </aside>
 
     <nav class="bnav" id="studentMobileNav" aria-label="Student navigation">
       <button id="mobileLearn" type="button" data-tab="home"><i>🗺️</i>Learn</button>
@@ -523,18 +590,57 @@
         <button type="button" class="modal-close" id="close-verification" aria-label="Close verification dialog">×</button>
         <img src="/assets/brand/SEV7N%20FOLD%20white%20with%20word%20mark.png" alt="SEV7N FOLD" class="auth-logo-img">
         <h2 id="auth-title">GET STUDY REMINDERS</h2>
-        <p id="auth-description">Enter your WhatsApp number and consent to save it for daily study streak reminders. Your result card will be created after the opt-in is saved.</p>
+        <p id="auth-description">Enter your WhatsApp number and opt in to up to two daily study reminders. Your result card will be created after the opt-in is saved.</p>
         <form id="whatsappForm" novalidate>
           <div class="form-group">
             <label for="exportWhatsapp">WhatsApp Number</label>
             <input type="tel" id="exportWhatsapp" name="whatsapp" autocomplete="tel" inputmode="tel" placeholder="08012345678" aria-describedby="whatsapp-status" required>
           </div>
-          <label class="whatsapp-consent"><input type="checkbox" id="whatsappConsent" required> I agree to have this number saved and used for daily study reminders.</label>
+          <label class="whatsapp-consent"><input type="checkbox" id="whatsappConsent" required> I agree to have this number saved and receive up to two study reminders per day. Reply STOP at any time.</label>
           <p class="verification-status" id="whatsapp-status" role="status" aria-live="polite"></p>
           <div class="auth-actions">
             <button type="button" class="card-secondary-button" id="cancel-whatsapp">Cancel</button>
             <button type="submit" class="results-submit">Continue to Card</button>
           </div>
+        </form>
+      </section>
+    </div>
+
+    <div class="student-tour-overlay" id="studentTour" hidden>
+      <section class="student-tour-card" role="dialog" aria-modal="true" aria-labelledby="studentTourTitle" aria-describedby="studentTourCopy">
+        <div class="student-tour-progress" id="studentTourProgress">WELCOME · 1 OF 5</div>
+        <h2 id="studentTourTitle"></h2>
+        <p id="studentTourCopy"></p>
+        <div class="student-tour-actions">
+          <button type="button" class="card-secondary-button" id="studentTourSkip">Skip tour</button>
+          <div><button type="button" class="card-secondary-button" id="studentTourBack" hidden>Back</button>
+            <button type="button" class="results-submit" id="studentTourNext">Show me</button></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="student-upload-overlay" id="studentUploadDialog" hidden>
+      <section class="student-upload-card" role="dialog" aria-modal="true" aria-labelledby="studentUploadTitle" aria-describedby="studentUploadIntro">
+        <button type="button" class="chat-settings-close student-upload-close" id="studentUploadClose" aria-label="Close upload">×</button>
+        <span class="section-kicker">ADD TO YOUR STUDY SPACE</span>
+        <h2 id="studentUploadTitle">Let’s get this ready</h2>
+        <p id="studentUploadIntro">We’ll read the PDF or photo, then file it under the course you choose. Its extracted text and course details will be visible to authorized FoldBook admins for review.</p>
+        <div class="student-upload-file"><span aria-hidden="true">📄</span><span id="studentUploadFileName">No file selected</span><button type="button" class="card-secondary-button" id="studentUploadReplace">Change</button></div>
+        <form id="studentMaterialForm" class="student-material-form">
+          <div class="student-upload-progress" id="studentUploadProgressWrap" hidden><div class="student-upload-progress-heading"><strong id="studentUploadProgressTitle">Getting ready</strong><span id="studentUploadProgressValue">0%</span></div><progress id="studentUploadProgress" max="100" value="0"></progress></div>
+          <div id="studentUploadDetails" hidden>
+          <label>Material title<input id="studentMaterialTitle" required maxlength="100" placeholder="e.g. Week 3 assignment"></label>
+          <div class="student-upload-course-fields">
+            <label>Course code<input id="studentCustomCourseCode" required maxlength="20" placeholder="e.g. ECO 214"></label>
+            <label>Course title<input id="studentCustomCourseTitle" required maxlength="100" placeholder="e.g. Development Economics"></label>
+          </div>
+          <label>What is this document about?<textarea id="studentMaterialDescription" required maxlength="500" rows="3" placeholder="A short description to help you and the admin identify its contents"></textarea></label>
+          <label class="student-material-file-label">Choose a different PDF or photo
+            <input id="studentMaterialFile" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp">
+          </label>
+          </div>
+          <div class="student-upload-actions"><button type="button" class="card-secondary-button" id="studentUploadCancel">Cancel</button><button class="results-submit" type="submit" id="studentUploadSubmit" disabled>Save to my study space</button></div>
+          <p id="studentMaterialStatus" role="status" aria-live="polite"></p>
         </form>
       </section>
     </div>

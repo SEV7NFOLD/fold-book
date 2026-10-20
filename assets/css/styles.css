@@ -230,9 +230,12 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid 
 .auth-screen-card { padding: clamp(22px, 5vw, 42px); border: 1px solid var(--border-light); background: var(--surface); }
 .auth-screen-card h1 { margin: 10px 0 6px; font-size: clamp(26px, 5vw, 38px); }
 .auth-screen-card > p { color: var(--muted); font-size: 13px; line-height: 1.7; }
+.auth-screen-card select { width: 100%; min-height: 46px; padding: 0 12px; border: 1px solid var(--border-light); background: var(--bg); color: var(--text); font: inherit; }
 .auth-mode-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 18px 0 6px; padding: 5px; background: var(--bg); }
 .auth-mode-button { min-height: 40px; border: 1px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
 .auth-mode-button.is-active { border-color: var(--border-light); background: var(--surface); color: var(--text); }
+.admin-material-library-section { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--border-light); }
+.admin-material-library-section h3 { margin: 0 0 8px; }
 .auth-screen-card .form-group { margin-top: 17px; }
 .auth-screen-card input:not([type="checkbox"]) { width: 100%; min-height: 46px; padding: 0 12px; border: 1px solid var(--border-light); background: var(--bg); color: var(--text); font: inherit; }
 .admin-portal { width: min(100% - 40px, 1400px); min-height: calc(100vh - 100px); margin: 0 auto; padding: 28px 0 60px; }
@@ -551,6 +554,8 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid 
   background: radial-gradient(circle at 50% 38%, #1b1d18 0, #0b0c0a 45%, #070807 100%);
 }
 .voice-call-content { display: grid; width: min(100%, 600px); justify-items: center; gap: 10px; text-align: center; }
+.voice-call-content { position: relative; }
+.voice-minimize { position: absolute; top: 0; right: 0; display: grid; width: 42px; height: 42px; place-items: center; border: 1px solid var(--border-light); border-radius: 50%; background: var(--surface); color: var(--text); font-size: 24px; cursor: pointer; }
 .voice-call-content > .section-kicker { margin: 0; color: var(--accent); }
 .voice-call-content h1 { margin: 0; font-size: clamp(30px, 6vw, 48px); letter-spacing: -.04em; }
 .voice-call-subtitle, .voice-call-status { margin: 0; color: var(--muted); font-size: 14px; }
@@ -559,10 +564,21 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid 
 .voice-call-mascot dotlottie-player { width: 100%; height: 100%; }
 .voice-call-pulse { position: absolute; inset: 8%; border: 1px solid rgb(228 239 141 / 36%); border-radius: 50%; box-shadow: 0 0 32px rgb(228 239 141 / 12%), inset 0 0 32px rgb(228 239 141 / 8%); animation: voice-call-pulse 2.2s ease-in-out infinite; }
 .voice-call-caption { display: grid; width: min(100%, 560px); min-height: 92px; align-content: center; padding: 16px 20px; border: 1px solid var(--border-light); border-radius: 16px; background: rgb(16 16 16 / 88%); color: var(--text); font-size: 16px; line-height: 1.65; overflow-wrap: anywhere; }
+.voice-transcript { display: grid; width: min(100%, 560px); max-height: min(19vh, 150px); gap: 6px; overflow: auto; text-align: left; }
+.voice-transcript p { margin: 0; padding: 7px 10px; border-radius: 9px; background: rgb(24 24 24 / 88%); color: var(--muted); font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+.voice-transcript p b { color: var(--accent); }
 .voice-call-controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 14px; }
 .voice-call-control, .voice-call-end { min-height: 48px; padding: 0 18px; border: 1px solid var(--border-light); border-radius: 999px; background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
 .voice-call-control[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 .voice-call-end { min-width: 130px; border-color: #a83434; background: #a83434; color: #fff; }
+.voice-mini-player { position: fixed; z-index: 59; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); left: max(14px, env(safe-area-inset-left)); display: flex; max-width: 620px; min-height: 70px; align-items: center; gap: 10px; margin: auto; padding: 9px 12px; border: 1px solid var(--fb-color-border); border-radius: 16px; background: var(--fb-color-surface); box-shadow: 0 12px 40px rgb(0 0 0 / 35%); }
+.voice-mini-player[hidden] { display: none; }
+.voice-mini-open { display: flex; min-width: 0; flex: 1; align-items: center; gap: 10px; border: 0; background: transparent; color: var(--fb-color-text); text-align: left; cursor: pointer; }
+.voice-mini-open > span:first-child { font-size: 22px; }
+.voice-mini-open > span:last-child { display: grid; min-width: 0; gap: 4px; }
+.voice-mini-open b { font-size: 13px; }
+.voice-mini-open small { overflow: hidden; color: var(--fb-color-muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.voice-mini-end { min-height: 38px; padding: 0 12px; border: 1px solid #a83434; border-radius: 999px; background: #a83434; color: #fff; font: inherit; cursor: pointer; }
 @keyframes voice-call-pulse {
   0%, 100% { transform: scale(.96); opacity: .62; }
   50% { transform: scale(1.04); opacity: 1; }
@@ -739,6 +755,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .bar-bg { height: 10px; background: var(--fb-color-surface-2); }
 .bar-fill { background: var(--fb-color-lime); }
 .progress-row b { color: var(--fb-color-lime); font: 700 12px var(--fb-font-mono); }
+.course-progress-lottie { display: grid; width: 42px; height: 42px; flex: 0 0 42px; place-items: center; }
+.course-progress-lottie dotlottie-player { display: block; width: 100%; height: 100%; }
 .course-week-meta { display: flex; justify-content: space-between; margin-top: 7px; color: var(--fb-color-muted); font-size: 12px; }
 .course-week-meta::before { position: absolute; width: 0; height: 0; content: ""; }
 .path-tree.path { position: relative; display: flex; flex-direction: column; align-items: center; gap: 30px; margin: 4px 0 0; padding: 58px 0 18px; }
@@ -781,6 +799,9 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .lesson-feedback { font-size: 14px; }
 .lesson-feedback.is-retry { color: var(--fb-color-red-soft); }
 .lesson-feedback.is-correct { color: var(--fb-color-lime); }
+.lesson-feedback-row { display: flex; min-height: 0; align-items: center; gap: 8px; }
+.lesson-feedback-row .feedback-animation { width: 44px; height: 44px; flex: 0 0 44px; }
+.lesson-feedback-row .lesson-feedback { flex: 1; }
 
 .chat-section, .invite-section { width: min(100%, 780px); min-height: 68vh; padding: 16px 0 50px; }
 .chat-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--fb-color-border); border-radius: 14px; background: var(--fb-color-surface); }
@@ -801,12 +822,63 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .chat-header-actions .voice-toggle { min-height: 44px; padding: 0 13px; white-space: nowrap; }
 .chat-settings-toggle, .chat-settings-close { display: grid; width: 44px; min-width: 44px; height: 44px; min-height: 44px; place-items: center; border: 1px solid var(--fb-color-border); border-radius: 10px; background: var(--fb-color-surface-2); color: var(--fb-color-text); font: inherit; font-size: 19px; cursor: pointer; }
 .chat-settings-toggle:hover, .chat-settings-close:hover { border-color: var(--fb-color-lime); color: var(--fb-color-lime); }
+.student-tour-overlay { position: fixed; inset: 0; z-index: 1200; display: grid; align-items: end; justify-items: center; padding: 24px 16px max(24px, env(safe-area-inset-bottom)); background: rgb(0 0 0 / 58%); }
+.student-tour-overlay[hidden] { display: none; }
+.student-tour-card { width: min(100%, 500px); padding: 22px; border: 1px solid var(--fb-color-lime); border-radius: 20px; background: var(--fb-color-surface); color: var(--fb-color-text); box-shadow: 0 18px 60px rgb(0 0 0 / 45%); animation: tour-card-in .24s ease-out both; }
+.student-tour-progress { color: var(--fb-color-lime); font: 700 11px var(--fb-font-mono); letter-spacing: .08em; }
+.student-tour-card h2 { margin: 10px 0 6px; font-size: clamp(21px, 5vw, 27px); }
+.student-tour-card p { margin: 0; color: var(--fb-color-muted); font-size: 14px; line-height: 1.65; }
+.student-tour-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 20px; }
+.student-tour-actions > div { display: flex; gap: 8px; }
+.student-tour-actions button { min-height: 42px; }
+.tour-highlight { position: relative !important; z-index: 1201 !important; outline: 3px solid var(--fb-color-lime) !important; outline-offset: 4px; border-radius: 12px; box-shadow: 0 0 0 9999px rgb(0 0 0 / 56%), 0 0 24px rgb(193 230 85 / 45%) !important; }
+@keyframes tour-card-in { from { opacity: 0; transform: translateY(12px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 .chat-settings-drawer { display: grid; gap: 14px; margin-bottom: 14px; padding: 15px; border: 1px solid var(--fb-color-border); border-radius: 14px; background: var(--fb-color-surface); }
 .chat-settings-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .chat-settings-heading h2 { margin: 0; font-size: 15px; }
 .chat-settings-heading p { margin: 3px 0 0; color: var(--fb-color-muted); font-size: 12px; }
 .chat-settings-close { width: 36px; min-width: 36px; height: 36px; min-height: 36px; font-size: 22px; }
 .chat-settings-drawer .course-chat-select select { min-height: 44px; padding: 0 10px; border: 2px solid var(--fb-color-border); border-radius: 10px; background: var(--fb-color-surface-2); color: var(--fb-color-text); }
+.learner-preferences { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.learner-preferences label, .student-material-form label { display: grid; gap: 6px; color: var(--fb-color-muted); font-size: 12px; }
+.learner-preferences select, .student-material-form input, .student-material-form select { width: 100%; min-width: 0; min-height: 42px; padding: 8px 10px; border: 2px solid var(--fb-color-border); border-radius: 10px; background: var(--fb-color-surface-2); color: var(--fb-color-text); font: inherit; }
+.student-materials-panel { display: grid; gap: 12px; padding: 12px; border: 1px solid var(--fb-color-border); border-radius: 12px; background: var(--fb-color-surface-2); }
+.student-materials-panel summary { color: var(--fb-color-text); font-size: 14px; font-weight: 750; cursor: pointer; }
+.student-materials-panel summary span { display: block; margin-top: 3px; color: var(--fb-color-muted); font-size: 11px; font-weight: 400; }
+.chat-material-picker { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; clip-path: inset(50%); }
+.student-material-form { display: grid; gap: 10px; }
+.student-material-form input[type=file] { min-height: 50px; padding: 8px; }
+.student-material-form p { margin: 0; color: var(--fb-color-lime); font-size: 12px; }
+.student-material-list { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.student-material-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 8px; border-top: 1px solid var(--fb-color-border); color: var(--fb-color-text); font-size: 12px; }
+.student-material-list li span { overflow-wrap: anywhere; }
+.student-material-list .card-secondary-button { min-height: 34px; padding: 0 9px; }
+.student-upload-overlay { position: fixed; inset: 0; z-index: 1300; display: grid; place-items: center; overflow-y: auto; padding: 18px; background: rgb(0 0 0 / 72%); }
+.student-upload-overlay[hidden] { display: none; }
+.student-upload-card { position: relative; width: min(100%, 560px); max-height: min(92vh, 900px); overflow-y: auto; padding: 24px; border: 1px solid var(--fb-color-border); border-radius: 20px; background: var(--fb-color-surface); color: var(--fb-color-text); box-shadow: 0 24px 80px rgb(0 0 0 / 55%); animation: tour-card-in .2s ease-out both; }
+.student-upload-close { position: absolute; top: 14px; right: 14px; }
+.student-upload-card h2 { margin: 8px 44px 6px 0; font-size: clamp(23px, 5vw, 30px); }
+.student-upload-card > p { margin: 0 0 16px; color: var(--fb-color-muted); font-size: 13px; line-height: 1.6; }
+.student-upload-file { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; padding: 10px 12px; border: 1px solid var(--fb-color-border); border-radius: 12px; background: var(--fb-color-surface-2); }
+.student-upload-file > span:nth-child(2) { flex: 1; min-width: 0; overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.student-upload-course-fields { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 10px; }
+.student-material-form textarea { width: 100%; min-height: 80px; padding: 10px; border: 2px solid var(--fb-color-border); border-radius: 10px; background: var(--fb-color-surface-2); color: var(--fb-color-text); font: inherit; resize: vertical; }
+.student-upload-progress { display: grid; gap: 7px; margin-top: 2px; }
+.student-upload-progress[hidden] { display: none; }
+.student-upload-progress-heading { display: flex; justify-content: space-between; gap: 10px; color: var(--fb-color-muted); font-size: 12px; }
+.student-upload-progress-heading span { color: var(--fb-color-lime); font-family: var(--fb-font-mono); }
+.student-upload-progress progress { width: 100%; height: 8px; accent-color: var(--fb-color-lime); }
+.student-upload-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.student-material-admin-list { display: grid; gap: 12px; margin-top: 16px; }
+.student-material-admin-card { display: grid; gap: 8px; padding: 16px; border: 1px solid var(--fb-color-border); border-radius: 14px; background: var(--fb-color-surface); }
+.student-material-admin-card h3, .student-material-admin-card p { margin: 0; }
+.student-material-admin-card h3 { font-size: 16px; }
+.student-material-admin-card p { color: var(--fb-color-muted); font-size: 13px; line-height: 1.5; }
+.student-material-admin-card small { color: var(--fb-color-muted); font-size: 11px; }
+.student-material-admin-card pre { max-height: 260px; overflow: auto; padding: 12px; border-radius: 8px; background: var(--fb-color-bg); color: var(--fb-color-text); font: 12px/1.55 var(--fb-font-mono); white-space: pre-wrap; }
+.student-material-admin-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.node.needs-review { border-color: var(--fb-color-gold); box-shadow: 0 0 0 3px color-mix(in srgb, var(--fb-color-gold) 22%, transparent); }
+.learning-focus-card p { margin: 0; color: var(--fb-color-muted); line-height: 1.5; }
 .chat-routing { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 0; }
 .chat-routing label { display: grid; gap: 5px; color: var(--fb-color-muted); font-size: 12px; }
 .chat-routing input { min-height: 38px; padding: 0 10px; border: 2px solid var(--fb-color-border); border-radius: 10px; background: var(--fb-color-surface-2); color: var(--fb-color-text); }
@@ -826,6 +898,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .prompt-chip { min-height: 36px; padding: 7px 12px; border: 1px solid var(--fb-color-border); border-radius: 10px; background: var(--fb-color-surface-2); color: var(--fb-color-text); font-size: 13px; font-weight: 700; box-shadow: var(--fb-shadow-dark-edge-small); }
 .prompt-chip:hover { border-color: var(--fb-color-lime); color: var(--fb-color-lime); }
 .chat-composer { gap: 8px; }
+.chat-composer .chat-icon-button { width: 42px; min-width: 42px; height: 46px; padding: 0; font-size: 18px; cursor: pointer; }
 .chat-composer input { min-height: 46px; border: 2px solid var(--fb-color-border); border-radius: 12px; background: var(--fb-color-bg); font-size: 15px; }
 .chat-composer .results-submit { min-height: 46px; }
 .chat-disclaimer { color: var(--fb-color-muted); font-size: 11px; }
@@ -863,6 +936,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .invite-status { color: var(--fb-color-muted); font-size: 13px; }
 .invite-progress-heading { font-size: 14px; }
 .invite-progress-card > p { color: var(--fb-color-muted); font-size: 14px; }
+.invite-reward-animation { width: 64px; height: 64px; margin: 8px auto; }
+.invite-reward-animation dotlottie-player { display: block; width: 100%; height: 100%; }
 .invite-progress-card .fuel-track { height: 10px; }
 .invite-friend { width: 34px; height: 34px; border-color: var(--fb-color-border); background: var(--fb-color-surface-2); color: var(--fb-color-muted); }
 .invite-friend.is-joined { border-color: var(--fb-color-green-edge); background: var(--fb-color-green-surface); color: var(--fb-color-green); }
@@ -947,6 +1022,16 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .admin-materials { display: grid; gap: 10px; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--fb-color-border); }
 .admin-materials h3 { margin: 0; font-size: 18px; }
 .admin-materials-intro { margin: 0 0 4px; color: var(--fb-color-muted); font-size: 13px; line-height: 1.6; }
+.admin-material-dropzone { display: grid; gap: 10px; justify-items: center; padding: 22px 14px; border: 2px dashed var(--fb-color-border); border-radius: 14px; background: var(--fb-color-surface-2); text-align: center; cursor: pointer; transition: border-color .18s ease, background .18s ease; }
+.admin-material-dropzone strong { color: var(--fb-color-text); font-size: 15px; }
+.admin-material-dropzone > span { color: var(--fb-color-muted); font-size: 12px; line-height: 1.5; }
+.admin-material-dropzone > div { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.admin-material-dropzone.is-dragging, .admin-material-dropzone:focus-visible { border-color: var(--fb-color-lime); background: var(--fb-color-bg); outline: none; }
+.admin-material-queue { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.admin-material-queue li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1px solid var(--fb-color-border); border-radius: 10px; color: var(--fb-color-muted); font-size: 12px; overflow-wrap: anywhere; }
+.admin-material-queue li span { min-width: 0; }
+.admin-material-assignments[hidden] { display: none; }
+.queue-assignment-select { width: auto; min-width: 82px; min-height: 36px; padding: 5px 7px; font-size: 12px; }
 .admin-material-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .admin-material-fields > div, .admin-materials > label { display: grid; gap: 6px; color: var(--fb-color-text-subtle); font-size: 13px; }
 .admin-material-control { width: 100%; min-height: 42px; padding: 9px 11px; border: 2px solid var(--fb-color-border); border-radius: 10px; background: var(--fb-color-surface-2); color: var(--fb-color-text); font: inherit; }
@@ -1045,13 +1130,19 @@ textarea.admin-material-control { min-height: 140px; resize: vertical; }
   .chat-settings-toggle { width: 44px; min-width: 44px; height: 44px; }
   .chat-settings-drawer { gap: 12px; padding: 13px; }
   .chat-settings-drawer .course-chat-select select { min-height: 44px; }
+  .learner-preferences { grid-template-columns: 1fr; }
   .chat-routing { display: grid; grid-template-columns: minmax(0, 1fr); }
   .admin-material-fields { grid-template-columns: 1fr; }
   .chat-messages { min-height: 250px; max-height: 45vh; padding: 12px; }
   .chat-message { max-width: 92%; }
-  .chat-composer { flex-wrap: wrap; }
-  .chat-composer input { flex-basis: calc(100% - 58px); }
-  .chat-composer .results-submit { flex: 1; }
+  .chat-composer { position: sticky; bottom: calc(70px + env(safe-area-inset-bottom)); z-index: 5; padding: 10px 0 max(8px, env(safe-area-inset-bottom)); background: linear-gradient(180deg, transparent, var(--fb-color-bg) 18%); }
+  .chat-composer { flex-wrap: nowrap; gap: 5px; }
+  .chat-composer .chat-icon-button { width: 36px; min-width: 36px; height: 42px; min-height: 42px; }
+  .chat-composer input { flex: 1 1 0; min-width: 40px; min-height: 42px; padding: 0 8px; }
+  .chat-composer .results-submit { flex: 0 0 auto; min-height: 42px; padding: 0 10px; }
+  .chat-composer .quiz-launch { display: none; }
+  .student-upload-card { padding: 18px; }
+  .student-upload-course-fields { grid-template-columns: 1fr; }
   .lb-header { align-items: flex-start; flex-direction: column; }
   .lb-header h1 { font-size: 21px; }
   .podium-place { min-width: 0; flex: 1; }

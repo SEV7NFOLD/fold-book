@@ -53,6 +53,10 @@ function normalizePhone(value) {
   return /^234[789]\d{9}$/.test(formatted) ? formatted : "";
 }
 
+function normalizeLevel(value) {
+  return /^(100L|200L|300L|400L)$/.test(value) ? value : "";
+}
+
 function sessionSecret() {
   const secret = process.env.FOLDBOOK_ADMIN_SESSION_SECRET;
   return typeof secret === "string" && secret.length >= 32 ? secret : "";
@@ -64,6 +68,7 @@ function encodeSession(student) {
     registration: student.reg_number,
     name: student.full_name,
     phoneNumber: student.phone_number,
+    level: student.academic_level || "100L",
     expiresAt: Date.now() + SESSION_SECONDS * 1000,
   })).toString("base64url");
   const signature = createHmac("sha256", sessionSecret()).update(payload).digest("base64url");
@@ -163,32 +168,34 @@ module.exports = async function studentAuthHandler(request, response) {
     if (mode === "signup") {
       const fullName = typeof payload.fullName === "string" ? payload.fullName.trim().replace(/\s+/g, " ") : "";
       const phone = normalizePhone(payload.phone);
-      if (fullName.length < 3 || fullName.length > 120 || nameTokens(fullName).length < 2 || !phone || payload.consent !== true) {
-        return sendJson(response, 400, { error: "Enter your full name, a valid WhatsApp number, and agree to study reminders." });
+      const level = normalizeLevel(payload.level);
+      if (fullName.length < 3 || fullName.length > 120 || nameTokens(fullName).length < 2 || !phone || !level || payload.consent !== true) {
+        return sendJson(response, 400, { error: "Enter your full name, level, a valid WhatsApp number, and agree to study reminders." });
       }
       const salt = randomBytes(16).toString("hex");
       const hash = (await derivePassword(password, salt)).toString("hex");
-      account = { reg_number: registration, full_name: fullName, phone_number: phone, password_salt: salt, password_hash: hash };
+      account = { reg_number: registration, full_name: fullName, phone_number: phone, academic_level: level, password_salt: salt, password_hash: hash };
       await supabaseRequest(config, "rpc/create_foldbook_student_account", "", {
         method: "POST",
         body: {
           p_reg_number: registration,
           p_full_name: fullName,
           p_phone_number: phone,
+          p_academic_level: level,
           p_password_salt: salt,
           p_password_hash: hash,
         },
       });
       response.setHeader("Set-Cookie", cookie(encodeSession(account), request));
       return sendJson(response, 200, {
-        student: { role: "student", registration, name: fullName, phoneNumber: phone },
+        student: { role: "student", registration, name: fullName, phoneNumber: phone, level },
         contactSaved: true,
       });
     }
 
     if (mode !== "login") return sendJson(response, 400, { error: "Choose create account or log in." });
     const found = await supabaseRequest(config, "student_accounts",
-      `?select=reg_number,full_name,phone_number,password_salt,password_hash&reg_number=eq.${encodeURIComponent(registration)}&limit=1`);
+      `?select=reg_number,full_name,phone_number,academic_level,password_salt,password_hash&reg_number=eq.${encodeURIComponent(registration)}&limit=1`);
     account = found?.[0];
     if (!account) return sendJson(response, 401, { error: "No account found for that matric number. Choose Create account first." });
     const candidate = await derivePassword(password, account.password_salt);
@@ -198,7 +205,7 @@ module.exports = async function studentAuthHandler(request, response) {
     }
     response.setHeader("Set-Cookie", cookie(encodeSession(account), request));
     return sendJson(response, 200, {
-      student: { role: "student", registration: account.reg_number, name: account.full_name, phoneNumber: account.phone_number },
+      student: { role: "student", registration: account.reg_number, name: account.full_name, phoneNumber: account.phone_number, level: account.academic_level || "100L" },
       contactSaved: true,
     });
   } catch (error) {
