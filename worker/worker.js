@@ -14,10 +14,10 @@ const path = require("node:path");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const FOLDBOOK_URL = process.env.FOLDBOOK_URL || "https://foldbook.app";
+const FOLDBOOK_URL = process.env.FOLDBOOK_URL || "https://foldbook-beta.vercel.app";
 const AUTH_DIRECTORY = path.resolve(process.env.WHATSAPP_AUTH_DIRECTORY || "auth_info_baileys");
 const BOT_PHONE_NUMBER = process.env.BOT_PHONE_NUMBER || "";
-const NUDGE_INTERVAL_HOURS = 20;
+const DEFAULT_NUDGE_INTERVAL_HOURS = 10;
 const PAGE_SIZE = 500;
 const SEND_DELAY_MS = 3000;
 const supabase = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
@@ -33,6 +33,16 @@ let pairingCodeTimer;
 let reconnectDelayMs = 5000;
 let dispatchInProgress = false;
 let shuttingDown = false;
+const completedScheduleRuns = new Set();
+let reminderSettings = {
+  enabled: true,
+  morning_time: "07:00",
+  evening_time: "19:00",
+  min_interval_hours: DEFAULT_NUDGE_INTERVAL_HOURS,
+  audience: "all",
+  morning_message: "☀️ Good morning, {{name}}! {{streak}}. Today's mini-quest: five minutes of {{course}}.\n\nOpen FoldBook → {{link}}\nReply STOP any time to pause reminders.",
+  evening_message: "🌙 Evening checkpoint, {{name}}! {{streak}}. Your mini-quest: one quick {{course}} question before you call it a day.\n\nOpen FoldBook → {{link}}\nReply STOP any time to pause reminders.",
+};
 
 function validateConfiguration() {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
@@ -92,24 +102,66 @@ async function handleIncomingMessage(message) {
   await socket.sendMessage(remoteJid, { text: "You are unsubscribed from FoldBook study reminders. Reply START if you want reminders again." });
 }
 
-function generateNudgeMessage(name, streak, courseCode) {
+function generateNudgeMessage(name, streak, courseCode, session = "morning") {
   const firstName = typeof name === "string" ? name.trim().split(/\s+/)[0] : "";
   const greeting = firstName || "there";
-  const streakDays = Number.isInteger(streak) && streak > 0 ? streak : 1;
-  const course = typeof courseCode === "string" && courseCode.trim() ? courseCode.trim() : "your Economics course";
-  const messages = [
-    `📚 Hi ${greeting}! Keep your ${streakDays}-day study streak going with a quick review of ${course} on FoldBook.\n\n${FOLDBOOK_URL}\n\nReply STOP to unsubscribe.`,
-    `⚡ ${greeting}, take a few minutes for ${course} practice today and keep building your study streak.\n\n${FOLDBOOK_URL}\n\nReply STOP to unsubscribe.`,
-    `🎓 Your next ${course} review is ready when you are, ${greeting}. Open FoldBook for a short study session.\n\n${FOLDBOOK_URL}\n\nReply STOP to unsubscribe.`,
+  const streakDays = Number.isInteger(streak) && streak > 0 ? streak : 0;
+  const course = typeof courseCode === "string" && courseCode.trim() ? courseCode.trim() : "Economics";
+  const streakLine = streakDays
+    ? `Your ${streakDays}-day streak is looking strong. Keep it glowing with one tiny win.`
+    : "Your next streak starts with one tiny win. Five minutes is plenty.";
+  const messages = session === "evening" ? [
+    `🌙 Evening checkpoint, ${greeting}! ${streakLine}\n\nYour mini-quest: answer one quick ${course} question before you call it a day. You’ve got this ✨`,
+    `✨ ${greeting}, one last little win? Give ${course} five focused minutes and let tomorrow-you wake up proud.\n\nNo marathon required.`,
+    `🐾 Dr. Eco’s evening mission for ${greeting}: open ${course}, tackle one idea, then enjoy your night. Small steps count!`,
+  ] : [
+    `☀️ Good morning, ${greeting}! ${streakLine}\n\nToday's mini-quest: warm up with five minutes of ${course}. Ready, set, learn! 🎯`,
+    `🚀 Rise and shine, ${greeting}! Dr. Eco has a bite-sized ${course} quest waiting. One lesson now; main-character energy all day.`,
+    `🐱 Your morning study streak is calling, ${greeting}! Pop into ${course} for one quick lesson and collect a little win before the day gets busy.`,
   ];
-  return messages[Math.floor(Math.random() * messages.length)];
+  const message = messages[Math.floor(Math.random() * messages.length)];
+  const footer = `\n\nOpen FoldBook → ${FOLDBOOK_URL}\nReply STOP any time to pause reminders.`;
+  return `${message}${footer}`;
 }
 
 function delay(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-async function dispatchDailyNudges() {
+function renderAdminMessage(template, name, streak, courseCode) {
+  const firstName = typeof name === "string" ? name.trim().split(/\s+/)[0] : "";
+  const streakDays = Number.isInteger(streak) && streak > 0 ? streak : 0;
+  const streakText = streakDays
+    ? `Your ${streakDays}-day streak is glowing. Keep it going with one tiny win`
+    : "Your next streak starts with one tiny win";
+  const values = {
+    name: firstName || "there",
+    streak: streakText,
+    course: typeof courseCode === "string" && courseCode.trim() ? courseCode.trim() : "Economics",
+    link: FOLDBOOK_URL,
+  };
+  return template.replace(/\{\{(name|streak|course|link)\}\}/g, (_, key) => values[key]);
+}
+
+async function refreshReminderSettings() {
+  const { data, error } = await supabase.from("whatsapp_bot_settings")
+    .select("enabled,morning_time,evening_time,min_interval_hours,audience,morning_message,evening_message")
+    .eq("id", 1).maybeSingle();
+  if (error) throw error;
+  if (data) reminderSettings = { ...reminderSettings, ...data };
+  return reminderSettings;
+}
+
+async function updateWorkerHeartbeat(isConnected) {
+  const { error } = await supabase.from("whatsapp_bot_heartbeat").upsert({
+    id: 1,
+    connected: isConnected,
+    last_seen_at: new Date().toISOString(),
+  }, { onConflict: "id" });
+  if (error) console.warn("Could not update WhatsApp worker heartbeat:", error.message);
+}
+
+async function dispatchDailyNudges(session = "morning") {
   if (dispatchInProgress) {
     console.warn("Skipping nudge run because a previous dispatch is still in progress.");
     return;
@@ -119,13 +171,15 @@ async function dispatchDailyNudges() {
     return;
   }
   dispatchInProgress = true;
-  const cutoff = new Date(Date.now() - NUDGE_INTERVAL_HOURS * 60 * 60 * 1000).toISOString();
+  const cutoff = new Date(Date.now() - reminderSettings.min_interval_hours * 60 * 60 * 1000).toISOString();
   let afterPhone = "";
+  let recipientCount = 0;
+  let failures = 0;
   try {
     while (connected && socket) {
       let query = supabase
         .from("whatsapp_optins")
-        .select("phone_number,full_name,streak_count,course_code")
+        .select("phone_number,full_name,streak_count,course_code,last_activity_at")
         .eq("opted_in", true)
         .or(`last_nudged_at.is.null,last_nudged_at.lt.${cutoff}`)
         .not("phone_number", "is", null)
@@ -134,8 +188,21 @@ async function dispatchDailyNudges() {
       if (afterPhone) query = query.gt("phone_number", afterPhone);
       const { data: optIns, error } = await query;
       if (error) throw error;
-      if (!optIns || optIns.length === 0) break;
-      afterPhone = optIns[optIns.length - 1].phone_number;
+      const pageLastPhone = optIns?.at(-1)?.phone_number || "";
+      const pageCount = optIns?.length || 0;
+      if (reminderSettings.audience === "inactive") {
+        const inactiveCutoff = Date.now() - 2 * 24 * 60 * 60 * 1000;
+        const inactiveUsers = (optIns || []).filter((user) => !user.last_activity_at || Date.parse(user.last_activity_at) < inactiveCutoff);
+        optIns.splice(0, optIns.length, ...inactiveUsers);
+      }
+      if (!optIns || optIns.length === 0) {
+        if (pageLastPhone && pageCount === PAGE_SIZE) {
+          afterPhone = pageLastPhone;
+          continue;
+        }
+        break;
+      }
+      afterPhone = pageLastPhone;
 
       for (const user of optIns) {
         if (!connected || !socket) break;
@@ -146,8 +213,12 @@ async function dispatchDailyNudges() {
         try {
           const jid = `${user.phone_number}@s.whatsapp.net`;
           await socket.sendMessage(jid, {
-            text: generateNudgeMessage(user.full_name, user.streak_count, user.course_code),
+            text: renderAdminMessage(
+              session === "evening" ? reminderSettings.evening_message : reminderSettings.morning_message,
+              user.full_name, user.streak_count, user.course_code,
+            ),
           });
+          recipientCount += 1;
           const { error: updateError } = await supabase
             .from("whatsapp_optins")
             .update({ last_nudged_at: new Date().toISOString() })
@@ -158,15 +229,49 @@ async function dispatchDailyNudges() {
           }
           await delay(SEND_DELAY_MS);
         } catch (error) {
+          failures += 1;
           console.error("Could not send a study reminder:", error.message);
         }
       }
       if (optIns.length < PAGE_SIZE) break;
     }
   } catch (error) {
+    failures += 1;
     console.error("Daily WhatsApp nudge dispatch failed:", error.message);
   } finally {
+    const { error: logError } = await supabase.from("whatsapp_bot_delivery_log").insert({
+      session,
+      status: failures ? (recipientCount ? "sent" : "failed") : "sent",
+      recipient_count: recipientCount,
+      detail: failures ? `${failures} send or dispatch error(s)` : null,
+    });
+    if (logError) console.warn("Could not log reminder delivery:", logError.message);
     dispatchInProgress = false;
+  }
+}
+
+function minutesOfDay(value) {
+  const [hour, minute] = String(value || "").split(":").map(Number);
+  return Number.isInteger(hour) && Number.isInteger(minute) ? hour * 60 + minute : -1;
+}
+
+async function runConfiguredReminderCheck() {
+  try {
+    await refreshReminderSettings();
+    await updateWorkerHeartbeat(connected);
+    const lagosDate = new Date(new Date().toLocaleString("en-US", { timeZone: "Africa/Lagos" }));
+    const currentMinute = lagosDate.getHours() * 60 + lagosDate.getMinutes();
+    const session = [["morning", reminderSettings.morning_time], ["evening", reminderSettings.evening_time]]
+      .find(([, time]) => minutesOfDay(time) === currentMinute)?.[0];
+    if (session && reminderSettings.enabled) {
+      const runKey = `${lagosDate.getFullYear()}-${lagosDate.getMonth()}-${lagosDate.getDate()}:${session}`;
+      if (!completedScheduleRuns.has(runKey)) {
+        completedScheduleRuns.add(runKey);
+        await dispatchDailyNudges(session);
+      }
+    }
+  } catch (error) {
+    console.error("Could not check configured WhatsApp reminder schedule:", error.message);
   }
 }
 
@@ -236,10 +341,12 @@ async function connectToWhatsApp() {
       }
       if (connection === "open") {
         connected = true;
+        void updateWorkerHeartbeat(true);
         reconnectDelayMs = 5000;
         console.log("FoldBook WhatsApp worker connected.");
       } else if (connection === "close") {
         connected = false;
+        void updateWorkerHeartbeat(false);
         const statusCode = lastDisconnect?.error?.output?.statusCode;
         const shouldResetAuth = statusCode === DisconnectReason.loggedOut || statusCode === 401;
         if (pairingCodeTimer) {
@@ -271,17 +378,18 @@ async function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log(`Stopping worker after ${signal}.`);
-  cronTask.stop();
+  for (const task of cronTasks) task.stop();
   if (reconnectTimer) clearTimeout(reconnectTimer);
   if (pairingCodeTimer) clearTimeout(pairingCodeTimer);
   connected = false;
+  void updateWorkerHeartbeat(false);
   if (socket) socket.end(undefined);
 }
 
 validateConfiguration();
-const cronTask = cron.schedule("0 8 * * *", () => {
-  void dispatchDailyNudges();
-}, { timezone: "Africa/Lagos" });
+const cronTasks = [
+  cron.schedule("* * * * *", () => { void runConfiguredReminderCheck(); }, { timezone: "Africa/Lagos" }),
+];
 
 process.once("SIGINT", () => { void shutdown("SIGINT"); });
 process.once("SIGTERM", () => { void shutdown("SIGTERM"); });

@@ -7,6 +7,16 @@ const drEcoHandler = require("../api/dr-eco.js");
 const geminiLiveTokenHandler = require("../api/gemini/live-token.js");
 const adminSessionHandler = require("../api/admin/session.js");
 const adminCourseMaterialsHandler = require("../api/admin/course-materials.js");
+const adminBroadsheetsHandler = require("../api/admin/broadsheets.js");
+const adminCourseCatalogHandler = require("../api/admin/course-catalog.js");
+const adminStudentRecordsHandler = require("../api/admin/student-records.js");
+const adminMaterialsHandler = require("../api/admin/materials.js");
+const adminStudentMaterialsHandler = require("../api/admin/student-materials.js");
+const adminWhatsAppSettingsHandler = require("../api/admin/whatsapp-settings.js");
+const studentAuthHandler = require("../api/student/auth.js");
+const courseCatalogHandler = require("../api/course-catalog.js");
+const searchCourseMaterialsHandler = require("../api/course-materials/search.js");
+const resultsLookupHandler = require("../api/results/lookup.js");
 
 const projectRoot = path.join(__dirname, "..");
 const servingBuiltSite = process.argv.includes("--built");
@@ -75,6 +85,46 @@ const server = http.createServer((request, response) => {
   }
   if (pathname === "/api/admin/course-materials") {
     void adminCourseMaterialsHandler(request, response);
+    return;
+  }
+  if (pathname === "/api/admin/broadsheets") {
+    void adminBroadsheetsHandler(request, response);
+    return;
+  }
+  if (pathname === "/api/admin/course-catalog") {
+    void adminCourseCatalogHandler(request, response);
+    return;
+  }
+  if (pathname === "/api/admin/student-records") {
+    void adminStudentRecordsHandler(request, response);
+    return;
+  }
+  if (pathname === "/api/admin/materials") {
+    void adminMaterialsHandler(request, response);
+    return;
+  }
+  if (pathname === "/api/admin/student-materials") {
+    void adminStudentMaterialsHandler(request, response);
+    return;
+  }
+  if (pathname === "/api/admin/whatsapp-settings") {
+    void adminWhatsAppSettingsHandler(request, response);
+    return;
+  }
+  if (pathname === "/api/student/auth") {
+    void studentAuthHandler(request, response);
+    return;
+  }
+  if (pathname === "/api/course-catalog") {
+    void courseCatalogHandler(request, response);
+    return;
+  }
+  if (pathname === "/api/results/lookup") {
+    void resultsLookupHandler(request, response);
+    return;
+  }
+  if (pathname === "/api/course-materials/search") {
+    void searchCourseMaterialsHandler(request, response);
     return;
   }
 

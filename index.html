@@ -37,7 +37,7 @@
           </div>
           <button class="pill fuel-pill" id="pFuel" type="button" aria-label="Open fuel and passes" title="Dr. Eco fuel">
             <span aria-hidden="true">⚡</span>
-            <span class="mono" id="vFuel">85/100</span>
+            <span class="mono" id="vFuel">100/100</span>
             <span class="fuel-meter" aria-hidden="true"><i id="fbar"></i></span>
           </button>
           <button class="pill sound-toggle" id="sndToggle" type="button" aria-label="Turn sound off" aria-pressed="true" title="Toggle sound">🔊</button>
@@ -142,7 +142,7 @@
             <button type="button" class="chat-settings-close" id="chatSettingsClose" aria-label="Close chat settings" title="Close settings">×</button>
           </div>
           <label class="course-chat-select">Active course
-            <select id="chatCourse" aria-label="Chat course"><option>ECO 128</option><option>ECO 122</option></select>
+            <select id="chatCourse" aria-label="Chat course"><option>Loading your courses…</option></select>
           </label>
           <div class="chat-routing">
             <label for="chatRegistration">Matric number for level routing
@@ -165,7 +165,7 @@
             <summary>📚 My study materials <span>Saved to your study space. Authorized FoldBook admins can review the extracted text and course details; matching text is shared with Gemini when you study that course.</span></summary>
             <ul id="studentMaterialList" class="student-material-list"></ul>
           </details>
-          <div class="chat-fuel"><span>⚡ Fuel</span><div class="fuel-track"><i id="chatFuelBar"></i></div><strong class="mono" id="chatFuelValue">85/100</strong></div>
+          <div class="chat-fuel"><span>⚡ Fuel</span><div class="fuel-track"><i id="chatFuelBar"></i></div><strong class="mono" id="chatFuelValue">100/100</strong></div>
         </div>
         <div class="chat-messages" id="chatMessages" aria-live="polite"></div>
         <div class="chat-prompts" id="chatPrompts">
@@ -399,6 +399,7 @@
           <button type="button" class="admin-nav-button" data-admin-view="catalog">📚 Course Catalog</button>
           <button type="button" class="admin-nav-button" data-admin-view="indexer">🧠 AI Indexer</button>
           <button type="button" class="admin-nav-button" data-admin-view="materials">📚 Materials</button>
+          <button type="button" class="admin-nav-button" data-admin-view="whatsapp">💬 WhatsApp Bot</button>
           <button type="button" class="admin-nav-button" data-admin-view="students">👥 Student Records</button>
         </nav>
         <div class="admin-portal-content">
@@ -482,6 +483,31 @@
             <button type="button" class="results-submit" id="loadStudentRecords">Load Student Records</button>
             <p id="studentRecordsStatus" class="admin-material-status" role="status" aria-live="polite"></p>
             <div class="results-table-wrap"><table class="results-table"><thead><tr><th>Name</th><th>Registration</th><th>WhatsApp</th><th>Streak</th><th>Active Days</th><th>Last Activity</th></tr></thead><tbody id="studentRecords"></tbody></table></div>
+          </section>
+          <section class="admin-view-panel" id="adminView-whatsapp" hidden>
+            <h2>💬 WhatsApp Bot</h2>
+            <p>Control FoldBook study reminders. Changes are saved to Supabase and picked up by the worker.</p>
+            <div class="admin-material-fields">
+              <div class="whatsapp-toggle-field"><span>Reminder schedule</span><label><input type="checkbox" id="whatsappRemindersEnabled"> Enable scheduled reminders</label></div>
+              <label>Morning send time (Lagos)<input type="time" id="whatsappMorningTime" value="07:00"></label>
+              <label>Evening send time (Lagos)<input type="time" id="whatsappEveningTime" value="19:00"></label>
+              <label>Minimum hours between reminders<input type="number" id="whatsappMinInterval" min="6" max="48" value="10"></label>
+              <label>Reminder group<select id="whatsappAudience"><option value="all">All opted-in students</option><option value="inactive">Students inactive for 2+ days</option></select></label>
+            <label>Preview message<select id="whatsappPreviewSession"><option value="morning">Morning</option><option value="evening">Evening</option></select></label>
+            </div>
+            <h3>Morning reminder</h3>
+            <textarea id="whatsappMorningMessage" class="admin-material-control" rows="4" maxlength="700"></textarea>
+            <h3>Evening reminder</h3>
+            <textarea id="whatsappEveningMessage" class="admin-material-control" rows="4" maxlength="700"></textarea>
+            <p>Use <code>{{name}}</code>, <code>{{course}}</code>, <code>{{streak}}</code>, and <code>{{link}}</code> in your message. Replying STOP remains available to every student.</p>
+            <button type="button" class="results-submit" id="saveWhatsAppSettings">Save bot settings</button>
+            <button type="button" class="card-secondary-button" id="previewWhatsAppMessage">Preview reminder</button>
+            <div id="whatsappMessagePreview" class="admin-message-preview" hidden></div>
+            <p id="whatsappBotStatus" class="admin-material-status" role="status" aria-live="polite"></p>
+            <h3>Bot connection</h3>
+            <p id="whatsappWorkerStatus" class="admin-material-status">Checking worker…</p>
+            <h3>Recent reminder activity</h3>
+            <div id="whatsappDeliveryLog" class="whatsapp-delivery-log" aria-live="polite"></div>
           </section>
         </div>
       </div>

@@ -1,6 +1,7 @@
 "use strict";
 
 const GEMINI_MODEL = "gemini-3.5-flash-lite";
+const RESULT_LOOKUP = null;
 // Official results are fetched on demand from the server; they are never bundled into client code.
 let UNIUYO_COURSE_CATALOG = {
   "100L": [
@@ -270,6 +271,10 @@ async function refreshLiveCourseCatalog(preferredLevel = currentStudentLevel) {
     return false;
   }
 }
+
+document.querySelector("#chatCourse")?.addEventListener("focus", () => {
+  void refreshLiveCourseCatalog(currentStudentLevel);
+});
 
 function freshStudyProgress() {
   return {
@@ -3178,6 +3183,110 @@ async function loadStudentRecords() {
 }
 document.querySelector("#loadStudentRecords").addEventListener("click", loadStudentRecords);
 
+const WHATSAPP_BOT_DEFAULTS = {
+  enabled: true,
+  morning_time: "07:00",
+  evening_time: "19:00",
+  min_interval_hours: 10,
+  audience: "all",
+  morning_message: "☀️ Good morning, {{name}}! {{streak}}. Today's mini-quest: five minutes of {{course}}.\n\nOpen FoldBook → {{link}}\nReply STOP any time to pause reminders.",
+  evening_message: "🌙 Evening checkpoint, {{name}}! {{streak}}. Your mini-quest: one quick {{course}} question before you call it a day.\n\nOpen FoldBook → {{link}}\nReply STOP any time to pause reminders.",
+};
+
+function readWhatsAppBotForm() {
+  return {
+    enabled: document.querySelector("#whatsappRemindersEnabled").checked,
+    morning_time: document.querySelector("#whatsappMorningTime").value,
+    evening_time: document.querySelector("#whatsappEveningTime").value,
+    min_interval_hours: Number(document.querySelector("#whatsappMinInterval").value),
+    audience: document.querySelector("#whatsappAudience").value,
+    morning_message: document.querySelector("#whatsappMorningMessage").value,
+    evening_message: document.querySelector("#whatsappEveningMessage").value,
+  };
+}
+
+function setWhatsAppBotForm(settings = WHATSAPP_BOT_DEFAULTS) {
+  document.querySelector("#whatsappRemindersEnabled").checked = settings.enabled === true;
+  document.querySelector("#whatsappMorningTime").value = settings.morning_time || "07:00";
+  document.querySelector("#whatsappEveningTime").value = settings.evening_time || "19:00";
+  document.querySelector("#whatsappMinInterval").value = String(settings.min_interval_hours || 10);
+  document.querySelector("#whatsappAudience").value = settings.audience || "all";
+  document.querySelector("#whatsappMorningMessage").value = settings.morning_message || WHATSAPP_BOT_DEFAULTS.morning_message;
+  document.querySelector("#whatsappEveningMessage").value = settings.evening_message || WHATSAPP_BOT_DEFAULTS.evening_message;
+}
+
+function renderWhatsAppDeliveryLog(deliveries) {
+  const container = document.querySelector("#whatsappDeliveryLog");
+  if (!container) return;
+  container.replaceChildren();
+  if (!deliveries.length) {
+    container.textContent = "No reminder activity has been logged yet.";
+    return;
+  }
+  for (const delivery of deliveries) {
+    const item = document.createElement("p");
+    const label = delivery.session === "preview" ? "Preview" : `${delivery.session} reminder`;
+    const count = Number(delivery.recipient_count) || 0;
+    item.textContent = `${delivery.status === "sent" ? "✅" : "⚠️"} ${label} · ${count} student${count === 1 ? "" : "s"} · ${new Date(delivery.created_at).toLocaleString()}${delivery.detail ? ` · ${delivery.detail}` : ""}`;
+    container.append(item);
+  }
+}
+
+async function loadWhatsAppBotSettings() {
+  const status = document.querySelector("#whatsappBotStatus");
+  const workerStatus = document.querySelector("#whatsappWorkerStatus");
+  status.textContent = "Loading reminder settings…";
+  workerStatus.textContent = "Checking worker connection…";
+  try {
+    const result = await requestAdminApi("/api/admin/whatsapp-settings", { action: "status" });
+    if (!result.settingsAvailable) throw new Error("Run supabase/whatsapp_bot_settings.sql in Supabase before managing reminders.");
+    setWhatsAppBotForm(result.settings);
+    status.textContent = "Reminder settings loaded. Scheduled messages are off until you enable them and save.";
+    workerStatus.textContent = result.workerConnected
+      ? `Worker connected · last check ${new Date(result.workerLastSeen).toLocaleString()}`
+      : result.workerLastSeen
+        ? `Worker is not responding · last check ${new Date(result.workerLastSeen).toLocaleString()}`
+        : "Worker has not reported a connection yet. Confirm the Render worker is running and the Supabase migration is applied.";
+    renderWhatsAppDeliveryLog(result.deliveries || []);
+  } catch (error) {
+    status.textContent = error.message || "Bot settings could not be loaded.";
+    workerStatus.textContent = "Worker status unavailable.";
+  }
+}
+
+document.querySelector("#saveWhatsAppSettings")?.addEventListener("click", async () => {
+  const button = document.querySelector("#saveWhatsAppSettings");
+  const status = document.querySelector("#whatsappBotStatus");
+  if (!S.isAdmin) return showAccessRestrictedNotice();
+  button.disabled = true;
+  status.textContent = "Saving reminder settings…";
+  try {
+    await requestAdminApi("/api/admin/whatsapp-settings", { action: "save", settings: readWhatsAppBotForm() });
+    status.textContent = "Saved. The WhatsApp worker will pick up these settings within one minute.";
+    await loadWhatsAppBotSettings();
+  } catch (error) {
+    status.textContent = error.message || "Reminder settings could not be saved.";
+  } finally {
+    button.disabled = false;
+  }
+});
+
+document.querySelector("#previewWhatsAppMessage")?.addEventListener("click", async () => {
+  const status = document.querySelector("#whatsappBotStatus");
+  const preview = document.querySelector("#whatsappMessagePreview");
+  const session = document.querySelector("#whatsappPreviewSession").value;
+  const template = session === "evening"
+    ? document.querySelector("#whatsappEveningMessage").value
+    : document.querySelector("#whatsappMorningMessage").value;
+  preview.textContent = template
+    .replace(/\{\{name\}\}/g, "Ada")
+    .replace(/\{\{course\}\}/g, "ECO 128")
+    .replace(/\{\{streak\}\}/g, "Your next streak starts with one tiny win")
+    .replace(/\{\{link\}\}/g, "https://foldbook-beta.vercel.app");
+  preview.hidden = false;
+  status.textContent = "Preview uses sample student details and does not send a WhatsApp message.";
+});
+
 async function loadAdminCourseMaterials() {
   const status = document.querySelector("#adminMaterialsStatus");
   const list = document.querySelector("#adminMaterialsList");
@@ -3875,6 +3984,7 @@ document.querySelectorAll("[data-admin-view]").forEach((button) => {
       void loadStudentMaterialSubmissions();
     }
     if (button.dataset.adminView === "students") loadStudentRecords();
+    if (button.dataset.adminView === "whatsapp") void loadWhatsAppBotSettings();
   });
 });
 

@@ -255,7 +255,14 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid 
 .broadsheet-dropzone span { font-size: 11px; }
 .admin-view-panel .admin-search { margin-top: 22px; }
 .admin-view-panel .admin-material-fields { margin: 18px 0; }
+.admin-view-panel textarea.admin-material-control { width: 100%; min-height: 105px; margin: 8px 0 14px; padding: 12px; border: 1px solid var(--border-light); background: var(--bg); color: var(--text); font: inherit; font-size: 12px; line-height: 1.6; resize: vertical; }
+.admin-view-panel input[type="time"], .admin-view-panel input[type="number"], .admin-view-panel select { width: 100%; min-height: 40px; padding: 0 10px; border: 1px solid var(--border-light); background: var(--bg); color: var(--text); font: inherit; }
+.admin-view-panel .admin-message-preview { margin: 14px 0; padding: 14px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 12px; line-height: 1.7; white-space: pre-wrap; }
+.whatsapp-delivery-log { display: grid; gap: 4px; }
+.whatsapp-delivery-log p { margin: 0; padding: 10px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 11px; line-height: 1.6; }
 .admin-view-panel .admin-material-fields label { display: grid; gap: 7px; color: var(--muted); font-size: 11px; }
+.admin-view-panel .whatsapp-toggle-field { display: grid; align-content: start; gap: 7px; color: var(--muted); font-size: 11px; }
+.admin-view-panel .whatsapp-toggle-field label { display: flex; align-items: center; gap: 8px; color: var(--text); }
 .admin-view-panel .admin-material-fields input { min-height: 40px; padding: 0 10px; border: 1px solid var(--border-light); background: var(--bg); color: var(--text); font: inherit; }
 .admin-view-panel > .results-submit { margin-top: 10px; }
 .results-shell { width: min(100% - 112px, 1200px); margin: 0 auto; padding: 55px 0 20px; }
