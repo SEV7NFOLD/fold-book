@@ -50,20 +50,31 @@ async function rest(configValue, table, query, options = {}) {
   const text = await response.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { /* provider error */ }
-  if (!response.ok) throw new Error(data?.message || data?.hint || "Supabase database request failed.");
+  if (!response.ok) {
+    const error = new Error(data?.message || data?.hint || "Supabase database request failed.");
+    error.code = data?.code;
+    error.status = response.status;
+    throw error;
+  }
   return data;
 }
 
 async function removeStorage(configValue, path) {
   const client = createClient(configValue.url, configValue.key, { auth: { persistSession: false, autoRefreshToken: false } });
   const { error } = await client.storage.from(BUCKET).remove([path]);
-  if (error && !/not found/i.test(error.message || "")) throw new Error("Could not remove the stored file.");
+  if (error && !/not found/i.test(error.message || "")) {
+    error.stage = "storage cleanup";
+    throw error;
+  }
 }
 
 async function createSignedUpload(configValue, path) {
   const client = createClient(configValue.url, configValue.key, { auth: { persistSession: false, autoRefreshToken: false } });
   const { data, error } = await client.storage.from(BUCKET).createSignedUploadUrl(path, { upsert: false });
-  if (error || !data?.token) throw new Error(error?.message || "Could not prepare a private upload.");
+  if (error || !data?.token) {
+    if (error) error.stage = "secure upload setup";
+    throw error || new Error("Supabase did not return a secure upload token.");
+  }
   return data.token;
 }
 
@@ -78,8 +89,10 @@ module.exports = async function studentMaterialsHandler(request, response) {
   const supabase = config();
   if (!supabase) return sendJson(response, 503, { error: "Private material uploads are not configured on the server." });
 
+  let operation = "processing your materials request";
   try {
     if (request.method === "GET") {
+      operation = "loading your materials";
       const query = new URLSearchParams({
         select: "id,title,course_code,course_title,description,level,file_name,storage_path,mime_type,extracted_text,created_at",
         owner_registration: `eq.${session.registration}`,
@@ -94,6 +107,7 @@ module.exports = async function studentMaterialsHandler(request, response) {
       if (!body || typeof body !== "object" || Array.isArray(body)) return sendJson(response, 400, { error: "Invalid material request." });
 
       if (body.action === "prepare") {
+        operation = "preparing the secure upload";
         const mimeType = String(body.mimeType || "");
         const size = Number(body.size);
         if (!MIME_TYPES.has(mimeType) || !Number.isFinite(size) || size < 1 || size > MAX_FILE_SIZE) {
@@ -107,6 +121,7 @@ module.exports = async function studentMaterialsHandler(request, response) {
       }
 
       if (body.action === "finalize") {
+        operation = "saving the material details";
         const id = String(body.id || "");
         const path = String(body.path || "");
         const expectedPrefix = `${storageOwner(session.registration)}/${id}/`;
@@ -147,6 +162,7 @@ module.exports = async function studentMaterialsHandler(request, response) {
       }
 
       if (body.action === "delete") {
+        operation = "deleting the material";
         const id = String(body.id || "");
         if (!/^[0-9a-f-]{36}$/i.test(id)) return sendJson(response, 400, { error: "Invalid material id." });
         const found = await rest(supabase, "student_materials", `?select=id,storage_path&id=eq.${encodeURIComponent(id)}&${ownerQuery(session)}&limit=1`);
@@ -158,6 +174,7 @@ module.exports = async function studentMaterialsHandler(request, response) {
       }
 
       if (body.action === "abort") {
+        operation = "cleaning up the incomplete upload";
         const id = String(body.id || "");
         const path = String(body.path || "");
         const expectedPrefix = `${storageOwner(session.registration)}/${id}/`;
@@ -171,7 +188,23 @@ module.exports = async function studentMaterialsHandler(request, response) {
     response.setHeader("Allow", "GET, POST");
     return sendJson(response, 405, { error: "Method not allowed." });
   } catch (error) {
-    console.error("Student materials request failed:", error.message);
-    return sendJson(response, 502, { error: "Could not save or load your materials right now. Please try again." });
+    const details = String(error.message || "");
+    console.error("Student materials request failed:", {
+      operation: error.stage || operation,
+      status: error.status || error.statusCode || null,
+      code: error.code || null,
+      message: details,
+    });
+    if (/owner_registration|PGRST204|42703|student_materials.*does not exist|42P01/i.test(`${error.code || ""} ${details}`)) {
+      return sendJson(response, 503, { error: "The Supabase upload database update is missing or incomplete. Run supabase/student_materials_server_uploads.sql in the FoldBook project's SQL Editor, then retry." });
+    }
+    if (/bucket.*not found|bucket.*does not exist/i.test(details)) {
+      return sendJson(response, 503, { error: "The private student-materials bucket is missing. Run supabase/student_materials_server_uploads.sql in the FoldBook project's SQL Editor, then retry." });
+    }
+    if (error.status === 401 || error.status === 403 || error.statusCode === 401 || error.statusCode === 403) {
+      return sendJson(response, 503, { error: "Supabase rejected the server's private upload credentials. Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Vercel." });
+    }
+    const stage = error.stage || operation;
+    return sendJson(response, 502, { error: `FoldBook could not complete ${stage}. Please try again; the server has logged the provider error.` });
   }
 };

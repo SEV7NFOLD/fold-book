@@ -40,8 +40,8 @@ let reminderSettings = {
   evening_time: "19:00",
   min_interval_hours: DEFAULT_NUDGE_INTERVAL_HOURS,
   audience: "all",
-  morning_message: "☀️ Good morning, {{name}}! {{streak}}. Today's mini-quest: five minutes of {{course}}.\n\nOpen FoldBook → {{link}}\nReply STOP any time to pause reminders.",
-  evening_message: "🌙 Evening checkpoint, {{name}}! {{streak}}. Your mini-quest: one quick {{course}} question before you call it a day.\n\nOpen FoldBook → {{link}}\nReply STOP any time to pause reminders.",
+  morning_message: "☀️ Good morning, {{name}}! {{streak}}. Your next mini-quest: {{activity}} on {{course}} — {{focus}}. One small step toward {{goal}}.\n\nOpen FoldBook → {{link}}\nReply STOP any time to pause reminders.",
+  evening_message: "🌙 Evening checkpoint, {{name}}! {{streak}}. Take one small step: {{activity}} on {{focus}} for {{course}}. You’re moving toward {{goal}}.\n\nOpen FoldBook → {{link}}\nReply STOP any time to pause reminders.",
 };
 
 function validateConfiguration() {
@@ -128,19 +128,52 @@ function delay(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-function renderAdminMessage(template, name, streak, courseCode) {
+function renderAdminMessage(template, name, streak, courseCode, profile, session = "morning") {
   const firstName = typeof name === "string" ? name.trim().split(/\s+/)[0] : "";
   const streakDays = Number.isInteger(streak) && streak > 0 ? streak : 0;
   const streakText = streakDays
     ? `Your ${streakDays}-day streak is glowing. Keep it going with one tiny win`
     : "Your next streak starts with one tiny win";
+  const course = typeof courseCode === "string" && courseCode.trim() ? courseCode.trim() : "Economics";
+  const path = Array.isArray(profile?.study_path) ? profile.study_path : [];
+  const completed = new Set(Array.isArray(profile?.completed_module_ids) ? profile.completed_module_ids : []);
+  const focus = path.find((step) => !completed.has(step.id)) || null;
+  const activityLabel = {
+    lesson: "a short lesson",
+    chat: "a quick chat with Dr. Eco",
+    live: "a live session with Dr. Eco",
+    article: "a short reading",
+    video: "a recommended video search",
+    test: "a quick practice test",
+  }[focus?.activityType] || (session === "evening" ? "one quick practice question" : "a short lesson");
   const values = {
     name: firstName || "there",
     streak: streakText,
-    course: typeof courseCode === "string" && courseCode.trim() ? courseCode.trim() : "Economics",
+    course,
+    focus: focus?.title || `a small ${course} win`,
+    activity: activityLabel,
+    goal: typeof profile?.learner_goal === "string" && profile.learner_goal.trim()
+      ? profile.learner_goal.trim().slice(0, 100) : "your learning goal",
     link: FOLDBOOK_URL,
   };
-  return template.replace(/\{\{(name|streak|course|link)\}\}/g, (_, key) => values[key]);
+  const rendered = template.replace(/\{\{(name|streak|course|link|focus|activity|goal)\}\}/g, (_, key) => values[key]);
+  if (focus && !template.includes("{{focus}}")) {
+    return `${rendered}\n\nYour next path step: ${activityLabel} — ${focus.title}. One small step toward ${values.goal}.`;
+  }
+  return rendered;
+}
+
+async function loadLearningProfiles(optIns) {
+  const registrationNumbers = [...new Set((optIns || []).map((user) => user.reg_number).filter(Boolean))];
+  if (!registrationNumbers.length) return new Map();
+  const { data, error } = await supabase.from("student_learning_profiles")
+    .select("reg_number,learner_goal,course_code,study_path,completed_module_ids")
+    .in("reg_number", registrationNumbers);
+  if (error) {
+    console.warn("Personalized reminder profiles unavailable; sending course-level reminders:", error.message);
+    return new Map();
+  }
+  return new Map((data || []).map((profile) => [profile.reg_number, profile]));
 }
 
 async function refreshReminderSettings() {
@@ -179,7 +212,7 @@ async function dispatchDailyNudges(session = "morning") {
     while (connected && socket) {
       let query = supabase
         .from("whatsapp_optins")
-        .select("phone_number,full_name,streak_count,course_code,last_activity_at")
+        .select("phone_number,full_name,streak_count,course_code,last_activity_at,reg_number")
         .eq("opted_in", true)
         .or(`last_nudged_at.is.null,last_nudged_at.lt.${cutoff}`)
         .not("phone_number", "is", null)
@@ -203,6 +236,7 @@ async function dispatchDailyNudges(session = "morning") {
         break;
       }
       afterPhone = pageLastPhone;
+      const profiles = await loadLearningProfiles(optIns);
 
       for (const user of optIns) {
         if (!connected || !socket) break;
@@ -216,6 +250,7 @@ async function dispatchDailyNudges(session = "morning") {
             text: renderAdminMessage(
               session === "evening" ? reminderSettings.evening_message : reminderSettings.morning_message,
               user.full_name, user.streak_count, user.course_code,
+              profiles.get(user.reg_number), session,
             ),
           });
           recipientCount += 1;

@@ -61,14 +61,13 @@
     <main id="top">
       <section id="home" class="learn-section hide" hidden>
         <div class="main-path-area">
-          <div class="course-switcher" id="courseSwitcher" aria-label="Choose a course">
-            <button type="button" class="course-choice cs is-selected" data-course="ECO 128" aria-pressed="true"><strong>ECO 128</strong><small>Transportation Economics</small></button>
-            <button type="button" class="course-choice cs" data-course="ECO 122" aria-pressed="false"><strong>ECO 122</strong><small>Statistics</small></button>
-          </div>
+          <div class="course-switcher" id="courseSwitcher" aria-label="Choose a course"></div>
           <header class="course-header-card wk">
             <div class="meta"><small class="mono course-code-label" id="courseCodeLabel">ECO 128 · STUDY PATH</small><small id="wkdays">YOUR STUDY ROADMAP</small></div>
             <h1 id="courseTitle">Transportation Economics</h1>
-            <p>Short lessons, one clear idea at a time. Complete a node to unlock the next.</p>
+            <p id="learningPathIntro">Short lessons, one clear idea at a time. Complete a node to unlock the next.</p>
+            <p class="learning-path-source" id="learningPathSource" aria-live="polite"></p>
+            <button class="card-secondary-button" id="personalizePathButton" type="button">✨ Build my learning path</button>
             <div class="progress-row">
               <div class="bar-bg" role="progressbar" aria-label="Course progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
                 <div id="cbar" class="bar-fill" style="width: 0%;"></div>
@@ -87,6 +86,8 @@
               </div>
               <button class="card-secondary-button" id="closeLesson" type="button">Close</button>
             </div>
+            <p class="lesson-body" id="lessonBody"></p>
+            <div class="lesson-activity" id="lessonActivity" hidden></div>
             <p class="lesson-question" id="lessonQuestion"></p>
             <div class="answer-options" id="answerOptions"></div>
             <div class="lesson-feedback-row"><div class="feedback-animation" id="lessonFeedbackAnimation" aria-hidden="true" hidden></div>
@@ -499,7 +500,7 @@
             <textarea id="whatsappMorningMessage" class="admin-material-control" rows="4" maxlength="700"></textarea>
             <h3>Evening reminder</h3>
             <textarea id="whatsappEveningMessage" class="admin-material-control" rows="4" maxlength="700"></textarea>
-            <p>Use <code>{{name}}</code>, <code>{{course}}</code>, <code>{{streak}}</code>, and <code>{{link}}</code> in your message. Replying STOP remains available to every student.</p>
+            <p>Use <code>{{name}}</code>, <code>{{course}}</code>, <code>{{streak}}</code>, <code>{{focus}}</code>, <code>{{activity}}</code>, <code>{{goal}}</code>, and <code>{{link}}</code>. Focus and goal use the student’s saved learning path; no private notes are sent. Replying STOP remains available to every student.</p>
             <button type="button" class="results-submit" id="saveWhatsAppSettings">Save bot settings</button>
             <button type="button" class="card-secondary-button" id="previewWhatsAppMessage">Preview reminder</button>
             <div id="whatsappMessagePreview" class="admin-message-preview" hidden></div>
@@ -604,6 +605,38 @@
         <button class="card-secondary-button profile-signout" id="profileSignOut" type="button">Sign Out 🚪</button>
       </div>
     </section>
+
+    <div class="profile-modal-overlay learning-path-setup-overlay" id="learningPathSetup" hidden>
+      <section class="profile-modal-card learning-path-setup-card" role="dialog" aria-modal="true" aria-labelledby="learningPathSetupTitle" aria-describedby="learningPathSetupIntro">
+        <span class="section-kicker">YOUR PERSONAL STUDY PLAN</span>
+        <h2 id="learningPathSetupTitle">Let’s make your path yours</h2>
+        <p id="learningPathSetupIntro">A few quick answers help Dr. Eco choose a useful starting point and explain ideas in a way that fits you.</p>
+        <form id="learningPathSetupForm" class="learning-path-setup-form">
+          <label for="learningPathCourse">Which course should we start with?</label>
+          <select id="learningPathCourse" required></select>
+          <label for="learningPathGoal">What’s your main goal?</label>
+          <select id="learningPathGoal" required>
+            <option value="Prepare for an exam">Prepare for an exam</option>
+            <option value="Understand lectures">Understand my lectures</option>
+            <option value="Build a strong foundation">Build a strong foundation</option>
+            <option value="Improve difficult topics">Improve topics I find difficult</option>
+            <option value="Work through assignments">Work through assignments</option>
+          </select>
+          <label for="learningPathDifficulty">What topics or ideas feel difficult right now?</label>
+          <textarea id="learningPathDifficulty" rows="2" maxlength="600" placeholder="It’s okay if you’re not sure yet."></textarea>
+          <label for="learningPathNote">Anything else you want Dr. Eco to know?</label>
+          <textarea id="learningPathNote" rows="2" maxlength="600" placeholder="For example, what kind of examples help you learn?"></textarea>
+          <label for="learningPathPace">What pace feels right?</label>
+          <select id="learningPathPace"><option value="gentle">Slow and step by step</option><option value="balanced" selected>Balanced with examples</option><option value="quick">Quick revision</option></select>
+          <p class="learning-path-privacy">Your answers and matching course notes or your saved course materials are sent to Gemini to create this path. Your answers stay in this browser.</p>
+          <p id="learningPathSetupStatus" class="profile-status" role="status" aria-live="polite"></p>
+          <div class="learning-path-setup-actions">
+            <button type="button" class="card-secondary-button" id="skipLearningPathSetup">Maybe later</button>
+            <button type="submit" class="results-submit" id="buildLearningPathSubmit">Build my path</button>
+          </div>
+        </form>
+      </section>
+    </div>
 
     <footer class="site-footer">
       <a class="footer-brand" href="#top">FoldBook</a>

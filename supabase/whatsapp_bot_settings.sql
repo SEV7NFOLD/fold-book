@@ -6,8 +6,8 @@ create table if not exists public.whatsapp_bot_settings (
   evening_time text not null default '19:00' check (evening_time ~ '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$'),
   min_interval_hours integer not null default 10 check (min_interval_hours between 6 and 48),
   audience text not null default 'all' check (audience in ('all', 'inactive')),
-  morning_message text not null default 'Good morning {{name}}! {{streak}}. Today mini-quest: five minutes of {{course}}. Open FoldBook: {{link}} Reply STOP any time to pause reminders.',
-  evening_message text not null default 'Evening checkpoint {{name}}! {{streak}}. Your mini-quest: one quick {{course}} question. Open FoldBook: {{link}} Reply STOP any time to pause reminders.',
+  morning_message text not null default 'Good morning {{name}}! {{streak}}. Your next mini-quest: {{activity}} on {{course}} — {{focus}}. One small step toward {{goal}}. Open FoldBook: {{link}} Reply STOP any time to pause reminders.',
+  evening_message text not null default 'Evening checkpoint {{name}}! {{streak}}. Take one small step: {{activity}} on {{focus}} for {{course}}. You are moving toward {{goal}}. Open FoldBook: {{link}} Reply STOP any time to pause reminders.',
   updated_at timestamptz not null default now()
 );
 
