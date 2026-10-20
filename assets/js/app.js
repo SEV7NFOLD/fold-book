@@ -1237,36 +1237,60 @@ function appendChatMessage(text, kind) {
   return article;
 }
 
-function ensureExternalScript(url, globalName) {
+function ensureExternalScript(url, globalName, timeoutMs = 20000) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   const existing = document.querySelector(`script[data-foldbook-parser="${globalName}"]`);
   if (existing?.dataset.loaded === "true") return Promise.resolve(window[globalName]);
-  if (existing?.dataset.loading === "true") {
-    return new Promise((resolve, reject) => {
-      existing.addEventListener("load", () => resolve(window[globalName]), { once: true });
-      existing.addEventListener("error", () => reject(new Error(`Could not load ${globalName} parser.`)), { once: true });
-    });
+  const script = existing || document.createElement("script");
+  if (!existing) {
+    script.src = url;
+    script.async = true;
+    script.dataset.foldbookParser = globalName;
+    script.dataset.loading = "true";
   }
-  const script = document.createElement("script");
-  script.src = url;
-  script.async = true;
-  script.dataset.foldbookParser = globalName;
-  script.dataset.loading = "true";
   const loaded = new Promise((resolve, reject) => {
-    script.addEventListener("load", () => {
+    let settled = false;
+    const finish = (error, value) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      script.removeEventListener("load", onLoad);
+      script.removeEventListener("error", onError);
+      if (error) reject(error);
+      else resolve(value);
+    };
+    const onLoad = () => {
       script.dataset.loading = "false";
       script.dataset.loaded = "true";
-      if (!window[globalName]) reject(new Error(`${globalName} parser did not initialize.`));
-      else resolve(window[globalName]);
-    }, { once: true });
-    script.addEventListener("error", () => {
+      if (!window[globalName]) finish(new Error(`${globalName} parser did not initialize.`));
+      else finish(null, window[globalName]);
+    };
+    const onError = () => {
       script.dataset.loading = "false";
       script.remove();
-      reject(new Error(`Could not load ${globalName} parser.`));
-    }, { once: true });
+      finish(new Error(`Could not load ${globalName} parser. Check your connection and try again.`));
+    };
+    const timeout = window.setTimeout(() => {
+      script.dataset.loading = "false";
+      script.remove();
+      finish(new Error(`Loading ${globalName} timed out. Check your connection and retry.`));
+    }, timeoutMs);
+    script.addEventListener("load", onLoad, { once: true });
+    script.addEventListener("error", onError, { once: true });
+    if (script.dataset.loaded === "true" && window[globalName]) onLoad();
   });
-  document.head.append(script);
+  if (!existing) document.head.append(script);
   return loaded;
+}
+
+function withProcessingTimeout(promise, timeoutMs, message) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    }),
+  ]).finally(() => window.clearTimeout(timer));
 }
 
 const MAX_INDEX_UPLOAD_BYTES = 20 * 1024 * 1024;
@@ -1300,7 +1324,11 @@ async function extractAdminUploadText(file) {
       "pdfjsLib",
     );
     pdfjs.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
-    const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+    const pdf = await withProcessingTimeout(
+      pdfjs.getDocument({ data: await file.arrayBuffer() }).promise,
+      45000,
+      "The PDF reader took too long to open this file. Retry, or attach a clear photo instead.",
+    );
     if (pdf.numPages > 100) throw new Error("PDFs are limited to 100 pages for browser-side extraction.");
     const pages = [];
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
@@ -2331,7 +2359,11 @@ async function prepareStudentMaterial(file) {
   studentUploadDialog.hidden = false;
   showStudentUploadProgress(15, "Processing your document on this device…");
   try {
-    const extracted = await extractStudentMaterialText(file);
+    const extracted = await extractStudentMaterialText(file, (progress, message) => {
+      if (token === studentMaterialProcessingToken && pendingStudentMaterialFile === file) {
+        showStudentUploadProgress(progress, message);
+      }
+    });
     if (token !== studentMaterialProcessingToken || pendingStudentMaterialFile !== file) return;
     pendingStudentMaterialText = extracted;
     document.querySelector("#studentUploadDetails").hidden = false;
@@ -2415,26 +2447,47 @@ async function refreshStudentMaterials() {
   }
 }
 
-async function extractStudentMaterialText(file) {
+async function extractStudentMaterialText(file, reportProgress = () => {}) {
   if (file.size > 10 * 1024 * 1024) throw new Error("Choose a file smaller than 10 MB.");
   const extension = file.name.toLowerCase().split(".").pop();
   if (file.type === "application/pdf" || extension === "pdf") {
+    reportProgress(18, "Loading the PDF reader…");
     const pdfjs = await ensureExternalScript("https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js", "pdfjsLib");
+    reportProgress(24, "Opening your PDF…");
     pdfjs.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
     const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
     if (pdf.numPages > 100) throw new Error("PDFs are limited to 100 pages.");
     const pages = [];
-    for (let n = 1; n <= pdf.numPages && pages.join("\n").length < 12000; n += 1) {
-      const page = await pdf.getPage(n);
-      pages.push((await page.getTextContent()).items.map((item) => item.str).join(" "));
+    const textPageLimit = Math.min(pdf.numPages, 30);
+    for (let n = 1; n <= textPageLimit && pages.join("\n").length < 12000; n += 1) {
+      const page = await withProcessingTimeout(pdf.getPage(n), 20000, "Reading this PDF page timed out. Try a smaller file.");
+      const pageText = await withProcessingTimeout(page.getTextContent(), 20000, "Extracting text from this PDF timed out. Try a smaller file.");
+      pages.push(pageText.items.map((item) => item.str).join(" "));
+      reportProgress(24 + Math.round((n / textPageLimit) * 16), `Reading page ${n} of ${textPageLimit}…`);
     }
     let text = pages.join("\n").trim();
     if (text.length < 80) {
+      reportProgress(43, "This looks like a scan. Loading text recognition…");
       const tesseract = await ensureExternalScript("https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js", "Tesseract");
-      const worker = await tesseract.createWorker("eng");
+      let scanPage = 0;
+      const scanPageLimit = Math.min(pdf.numPages, 5);
+      const worker = await withProcessingTimeout(
+        tesseract.createWorker("eng", 1, { logger: (event) => {
+          if (!event.status) return;
+          if (event.status === "recognizing text") {
+            reportProgress(64 + Math.round(((scanPage - 1 + (event.progress || 0)) / scanPageLimit) * 30), `Recognizing text on page ${scanPage} of ${scanPageLimit}…`);
+          } else {
+            reportProgress(44 + Math.round((event.progress || 0) * 18), `Preparing text recognition · ${event.status}…`);
+          }
+        } }),
+        90000,
+        "Text recognition setup timed out. Try again on a stronger connection.",
+      );
       try {
         const scannedPages = [];
-        for (let n = 1; n <= Math.min(pdf.numPages, 10) && scannedPages.join("\n").length < 12000; n += 1) {
+        for (let n = 1; n <= scanPageLimit && scannedPages.join("\n").length < 12000; n += 1) {
+          scanPage = n;
+          reportProgress(64 + Math.round(((n - 1) / scanPageLimit) * 30), `Recognizing text on page ${n} of ${scanPageLimit}…`);
           const page = await pdf.getPage(n);
           const base = page.getViewport({ scale: 1 });
           const viewport = page.getViewport({ scale: Math.min(1.5, 1600 / base.width) });
@@ -2451,9 +2504,23 @@ async function extractStudentMaterialText(file) {
     return text.slice(0, 12000);
   }
   if (["image/jpeg", "image/png", "image/webp"].includes(file.type) || ["jpg", "jpeg", "png", "webp"].includes(extension)) {
+    reportProgress(25, "Loading photo text recognition…");
     const tesseract = await ensureExternalScript("https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js", "Tesseract");
-    const worker = await tesseract.createWorker("eng");
+    let recognizingPhoto = false;
+    const worker = await withProcessingTimeout(
+      tesseract.createWorker("eng", 1, { logger: (event) => {
+        if (!event.status) return;
+        if (recognizingPhoto && event.status === "recognizing text") {
+          reportProgress(58 + Math.round((event.progress || 0) * 38), `Reading your photo · ${Math.round((event.progress || 0) * 100)}%…`);
+        } else {
+          reportProgress(28 + Math.round((event.progress || 0) * 28), `Preparing text recognition · ${event.status}…`);
+        }
+      } }),
+      90000,
+      "Text recognition setup timed out. Try again on a stronger connection.",
+    );
     try {
+      recognizingPhoto = true;
       const { data } = await worker.recognize(file);
       if (!data.text.trim()) throw new Error("No readable text was found. Try a clearer, well-lit photo.");
       return data.text.trim().slice(0, 12000);

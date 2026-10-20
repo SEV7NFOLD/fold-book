@@ -19,8 +19,8 @@ function sendJson(response, status, body) {
 }
 
 module.exports = async function adminStudentRecordsHandler(request, response) {
-  if (request.method !== "GET") {
-    response.setHeader("Allow", "GET");
+  if (request.method !== "POST" && request.method !== "GET") {
+    response.setHeader("Allow", "GET, POST");
     return sendJson(response, 405, { error: "Method not allowed." });
   }
   if (!isSameOriginRequest(request)) return sendJson(response, 403, { error: "A same-origin request is required." });
