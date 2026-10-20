@@ -14,14 +14,14 @@ function config() {
 async function readBody(request) {
   if (request.body !== undefined) {
     const text = typeof request.body === "string" ? request.body : JSON.stringify(request.body);
-    if (Buffer.byteLength(text) > 24000) throw new RangeError("Request is too large.");
+    if (Buffer.byteLength(text) > 60000) throw new RangeError("Request is too large.");
     return typeof request.body === "string" ? JSON.parse(request.body) : request.body;
   }
   const chunks = [];
   let size = 0;
   for await (const chunk of request) {
     size += chunk.length;
-    if (size > 24000) throw new RangeError("Request is too large.");
+    if (size > 60000) throw new RangeError("Request is too large.");
     chunks.push(chunk);
   }
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
@@ -53,6 +53,19 @@ function cleanText(value, maxLength) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
 }
 
+function cleanModuleAttempts(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).slice(0, 12).flatMap(([id, record]) => {
+    if (!/^[a-z0-9-]{2,100}$/i.test(id) || !record || typeof record !== "object") return [];
+    return [[id, {
+      attempts: Math.max(0, Math.min(1000, Math.floor(Number(record.attempts) || 0))),
+      correct: Math.max(0, Math.min(1000, Math.floor(Number(record.correct) || 0))),
+      wrong: Math.max(0, Math.min(1000, Math.floor(Number(record.wrong) || 0))),
+      questionResults: Array.isArray(record.questionResults) ? record.questionResults.slice(0, 15).map((answer) => answer === true) : [],
+    }]];
+  }));
+}
+
 function cleanPath(path, courseCode) {
   if (!Array.isArray(path) || path.length > 12) return [];
   return path.filter((item) => item && typeof item === "object" && !Array.isArray(item)
@@ -66,6 +79,12 @@ function cleanPath(path, courseCode) {
       question: cleanText(item.question, 500),
       answers: Array.isArray(item.answers) ? item.answers.slice(0, 4).map((answer) => cleanText(answer, 250)) : [],
       correctAnswer: Number.isInteger(item.correctAnswer) && item.correctAnswer >= 0 && item.correctAnswer <= 3 ? item.correctAnswer : 0,
+      questions: Array.isArray(item.questions) ? item.questions.slice(0, 15).filter((question) => question && typeof question === "object")
+        .map((question) => ({
+          question: cleanText(question.question, 500),
+          answers: Array.isArray(question.answers) ? question.answers.slice(0, 4).map((answer) => cleanText(answer, 250)) : [],
+          correctAnswer: Number.isInteger(question.correctAnswer) && question.correctAnswer >= 0 && question.correctAnswer <= 3 ? question.correctAnswer : 0,
+        })).filter((question) => question.question && question.answers.length >= 2 && question.answers.every(Boolean) && question.correctAnswer < question.answers.length) : [],
       activityType: item.activityType,
       activityText: cleanText(item.activityText, 1200),
       chatPrompt: cleanText(item.chatPrompt, 500),
@@ -109,6 +128,7 @@ module.exports = async function learningProfileHandler(request, response) {
     course_code: courseCode,
     course_title: cleanText(payload.courseTitle, 120),
     completed_module_ids: completed,
+    module_attempts: cleanModuleAttempts(payload.moduleAttempts),
     updated_at: new Date().toISOString(),
   };
   if (payload.mode === "path") {

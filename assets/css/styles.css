@@ -819,6 +819,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .lesson-page .lesson-body { margin: 22px 0; color: var(--fb-color-text-subtle); font-size: 17px; line-height: 1.75; }
 .lesson-page .lesson-activity { margin: 24px 0; padding: 20px; border: 1px solid var(--fb-color-border); border-radius: 18px; background: var(--fb-color-surface); }
 .lesson-page .lesson-question { margin: 30px 0 18px; color: var(--fb-color-text); font-size: 19px; font-weight: 750; line-height: 1.5; }
+.lesson-page .lesson-assessment-progress { margin: 0 0 14px; color: var(--fb-color-muted); font: 700 11px var(--fb-font-mono); letter-spacing: .06em; }
 .lesson-page .answer-options { gap: 12px; }
 .lesson-page .answer-option { min-height: 58px; font-size: 16px; }
 .lesson-page .lesson-feedback { font-size: 15px; }
