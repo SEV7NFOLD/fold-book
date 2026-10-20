@@ -823,6 +823,12 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .lesson-page .answer-options { gap: 12px; }
 .lesson-page .answer-option { min-height: 58px; font-size: 16px; }
 .lesson-page .lesson-feedback { font-size: 15px; }
+.module-completion { display: grid; gap: 14px; margin: 30px auto 12px; justify-items: center; }
+.module-completion[hidden] { display: none !important; }
+.module-completion h2 { width: 100%; margin: 0; font-size: 21px; }
+.module-completion-summary { width: 100%; margin: 0; color: var(--fb-color-text-subtle); line-height: 1.6; }
+.module-completion canvas { display: block; width: min(100%, 480px); height: auto; border: 1px solid var(--fb-color-border); border-radius: 22px; background: #f3f1e8; box-shadow: 0 16px 42px rgb(0 0 0 / 28%); }
+.module-completion .results-submit { width: min(100%, 480px); }
 @keyframes lesson-page-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 .lesson-feedback-row .feedback-animation { width: 44px; height: 44px; flex: 0 0 44px; }
 .lesson-feedback-row .lesson-feedback { flex: 1; }

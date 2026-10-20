@@ -102,6 +102,10 @@ const answerOptions = document.querySelector("#answerOptions");
 const lessonFeedback = document.querySelector("#lessonFeedback");
 const lessonFeedbackAnimation = document.querySelector("#lessonFeedbackAnimation");
 const lessonNextQuestion = document.querySelector("#lessonNextQuestion");
+const moduleCompletion = document.querySelector("#moduleCompletion");
+const moduleCompletionSummary = document.querySelector("#moduleCompletionSummary");
+const moduleCompletionCanvas = document.querySelector("#moduleCompletionCanvas");
+const exportModuleCompletion = document.querySelector("#exportModuleCompletion");
 const courseBar = document.querySelector("#cbar");
 const courseProgressBar = document.querySelector(".bar-bg");
 const coursePercent = document.querySelector("#cpct");
@@ -874,7 +878,8 @@ function renderModuleQuestion(module, record, index) {
 }
 
 function completeStudyModule(module, record) {
-  if (!studyProgress.completed.includes(module.id)) {
+  const newlyCompleted = !studyProgress.completed.includes(module.id);
+  if (newlyCompleted) {
     studyProgress.completed.push(module.id);
     studyProgress.xp += 20;
     studyProgress.gems += 5;
@@ -888,10 +893,168 @@ function completeStudyModule(module, record) {
     lessonFeedback.className = "lesson-feedback is-correct";
     lessonFeedbackAnimation.hidden = false;
     renderLottieInto(lessonFeedbackAnimation, "jump-for-joy.json", "✨", "Module complete", { loop: false });
+    showModuleCompletionCard(module, record, true);
     return "Perfect run! +20 XP · +5 gems. You cleared all the questions, and the next node is ready.";
   }
+  showModuleCompletionCard(module, record, false);
   return "All questions complete. This module is already finished, so no extra XP was added.";
 }
+
+function wrapCanvasText(context, text, x, y, maxWidth, lineHeight, maxLines = 4) {
+  const words = String(text || "").split(/\s+/).filter(Boolean);
+  let line = "";
+  let lineCount = 0;
+  for (const word of words) {
+    const candidate = line ? `${line} ${word}` : word;
+    if (line && context.measureText(candidate).width > maxWidth) {
+      if (lineCount === maxLines - 1) {
+        context.fillText(`${line}…`, x, y + lineCount * lineHeight);
+        return;
+      }
+      context.fillText(line, x, y + lineCount * lineHeight);
+      line = word;
+      lineCount += 1;
+    } else line = candidate;
+  }
+  if (line && lineCount < maxLines) context.fillText(line, x, y + lineCount * lineHeight);
+}
+
+async function showModuleCompletionCard(module, record, awardedXp) {
+  const total = module.questions?.length || 10;
+  const misses = Math.max(0, Number(record.wrong) || 0);
+  const mainIdea = String(module.lesson || "").replace(/\s+/g, " ").trim().slice(0, 320);
+  const recap = misses
+    ? `You stuck with the tricky parts in ${module.title} and reached full mastery. Remember: ${mainIdea}`
+    : `A strong first pass through ${module.title}. Your key takeaway: ${mainIdea}`;
+  moduleCompletionSummary.textContent = recap;
+  moduleCompletion.hidden = false;
+  lessonQuestion.hidden = true;
+  lessonAssessmentProgress.hidden = true;
+  answerOptions.hidden = true;
+  lessonNextQuestion.hidden = true;
+  document.querySelector(".lesson-feedback-row").hidden = true;
+  exportModuleCompletion.disabled = true;
+
+  const canvas = moduleCompletionCanvas;
+  const context = canvas.getContext("2d");
+  if (!context) return;
+  const width = canvas.width;
+  const height = canvas.height;
+  context.fillStyle = "#f3f1e8";
+  context.fillRect(0, 0, width, height);
+  context.fillStyle = "#111713";
+  context.beginPath();
+  context.moveTo(0, 0);
+  context.lineTo(width, 0);
+  context.lineTo(width, 410);
+  context.quadraticCurveTo(width * 0.52, 525, 0, 420);
+  context.closePath();
+  context.fill();
+  context.fillStyle = "#d9f07c";
+  context.fillRect(80, 75, 10, 255);
+
+  const logo = new Image();
+  try {
+    const logoLoaded = new Promise((resolve, reject) => {
+      logo.onload = resolve;
+      logo.onerror = reject;
+    });
+    logo.src = "/assets/brand/SEV7N%20FOLD%20white%20with%20word%20mark.png";
+    await logoLoaded;
+    context.drawImage(logo, 115, 76, 175, 164);
+  } catch {
+    context.fillStyle = "#f3f1e8";
+    context.font = "800 28px system-ui, sans-serif";
+    context.fillText("SEV7NFOLD", 125, 112);
+  }
+
+  context.fillStyle = "#d9f07c";
+  context.font = "700 22px system-ui, sans-serif";
+  context.fillText("FOLDBOOK · DR. ECO", 330, 100);
+  context.fillStyle = "#f3f1e8";
+  context.font = "800 68px system-ui, sans-serif";
+  context.fillText("Lesson complete", 330, 190);
+  context.fillStyle = "#d9f07c";
+  context.font = "700 23px system-ui, sans-serif";
+  context.fillText("YOUR PERSONAL LEARNING RECAP", 330, 238);
+  context.fillStyle = "#d5d8d1";
+  context.font = "500 25px system-ui, sans-serif";
+  const learnerName = currentStudent?.name ? `${currentStudent.name.split(/\s+/)[0]} · ` : "";
+  context.fillText(`${learnerName}${currentCourse} · ${courseTitleFor(currentCourse)}`, 330, 286, 680);
+
+  context.fillStyle = "#ffffff";
+  context.beginPath();
+  context.roundRect(78, 385, 924, 750, 36);
+  context.fill();
+  context.strokeStyle = "#d8d7cf";
+  context.lineWidth = 2;
+  context.stroke();
+  context.fillStyle = "#5b6658";
+  context.font = "700 22px system-ui, sans-serif";
+  context.fillText("MODULE MASTERED", 126, 460);
+  context.fillStyle = "#171a16";
+  context.font = "800 50px system-ui, sans-serif";
+  wrapCanvasText(context, module.title, 126, 530, 610, 58, 2);
+
+  context.fillStyle = "#e7efcf";
+  context.beginPath();
+  context.arc(835, 555, 112, 0, Math.PI * 2);
+  context.fill();
+  context.strokeStyle = "#b6d554";
+  context.lineWidth = 10;
+  context.stroke();
+  context.fillStyle = "#20251b";
+  context.textAlign = "center";
+  context.font = "800 54px system-ui, sans-serif";
+  context.fillText(`${total}/${total}`, 835, 568);
+  context.font = "700 17px system-ui, sans-serif";
+  context.fillText("QUESTIONS", 835, 605);
+  context.textAlign = "left";
+
+  context.fillStyle = "#f0f2e8";
+  context.beginPath();
+  context.roundRect(126, 705, 828, 300, 24);
+  context.fill();
+  context.fillStyle = "#637b27";
+  context.font = "700 21px system-ui, sans-serif";
+  context.fillText("DR. ECO SAYS", 164, 765);
+  context.fillStyle = "#20251b";
+  context.font = "500 30px system-ui, sans-serif";
+  wrapCanvasText(context, recap, 164, 825, 742, 44, 4);
+  context.fillStyle = "#171a16";
+  context.font = "800 25px system-ui, sans-serif";
+  context.fillText(awardedXp ? "+20 XP" : "MODULE REVIEW", 130, 1085);
+  context.fillStyle = "#69705f";
+  context.font = "600 20px system-ui, sans-serif";
+  context.fillText(new Intl.DateTimeFormat(undefined, { dateStyle: "long" }).format(new Date()), 330, 1085);
+  context.fillStyle = "#78806e";
+  context.font = "600 19px system-ui, sans-serif";
+  context.fillText("Keep showing up. Your next step is waiting.", 80, 1220);
+  context.fillStyle = "#171a16";
+  context.font = "800 23px system-ui, sans-serif";
+  context.fillText("FOLDBOOK", 80, 1290);
+  context.fillStyle = "#73786d";
+  context.font = "600 18px system-ui, sans-serif";
+  context.fillText("A learning companion by SEV7NFOLD", 240, 1290);
+  exportModuleCompletion.disabled = false;
+}
+
+exportModuleCompletion.addEventListener("click", () => {
+  const module = activeModules.find((item) => item.id === answerOptions.dataset.moduleId);
+  const title = (module?.title || "learning-recap").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "");
+  moduleCompletionCanvas.toBlob((blob) => {
+    if (!blob) {
+      showNotice("I couldn’t export the recap card. Please try again.");
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `FoldBook-${title}.png`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }, "image/png");
+});
 
 async function showStudyLesson(index) {
   const module = activeModules[index];
@@ -900,6 +1063,11 @@ async function showStudyLesson(index) {
   document.querySelector("#lessonPageCourse").textContent = `${currentCourse} · ${courseTitleFor(currentCourse)}`;
   lessonTitle.textContent = module.title;
   answerOptions.dataset.moduleId = module.id;
+  moduleCompletion.hidden = true;
+  lessonQuestion.hidden = false;
+  lessonAssessmentProgress.hidden = false;
+  answerOptions.hidden = false;
+  document.querySelector(".lesson-feedback-row").hidden = false;
   document.querySelector("#lessonBody").textContent = module.lesson;
   renderLessonActivity(module);
   lessonFeedback.textContent = "";
