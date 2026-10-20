@@ -1565,9 +1565,21 @@ async function ensureStudentAuth() {
   const currentUser = await currentStudentMaterialOwner();
   if (currentUser) return currentUser;
   const { data, error } = await supabaseClient.auth.signInAnonymously();
-  if (error) throw new Error(/anonymous|disabled/i.test(error.message)
-    ? "Private uploads are not enabled yet. The FoldBook admin must enable Anonymous Sign-Ins in Supabase Authentication settings."
-    : error.message);
+  if (error) {
+    const message = String(error.message || "Supabase could not start a private upload session.");
+    const status = Number(error.status || error.statusCode);
+    if (/anonymous.{0,40}(disabled|not enabled)|(disabled|not enabled).{0,40}anonymous/i.test(message)) {
+      throw new Error("Supabase says Anonymous Sign-Ins are disabled for this project. Confirm the setting is enabled in the same project FoldBook uses, then retry.");
+    }
+    if (status === 429 || /rate.?limit|too many requests/i.test(message)) {
+      throw new Error("Supabase is temporarily limiting private upload sign-ins. Wait a while before retrying; repeated attempts can hit this limit.");
+    }
+    if (/captcha/i.test(message)) {
+      throw new Error("Supabase is requiring CAPTCHA for anonymous sign-ins, but FoldBook has no CAPTCHA token configured. Review the Auth Bot and Abuse Protection settings.");
+    }
+    console.error("Supabase private upload sign-in failed:", { status: status || null, code: error.code || null, message });
+    throw new Error(`Private upload sign-in failed${status ? ` (${status})` : ""}: ${message}`);
+  }
   if (currentStudent?.registration) window.localStorage.setItem(STUDENT_MATERIAL_OWNER_KEY, currentStudent.registration);
   return data.user;
 }
