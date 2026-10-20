@@ -102,7 +102,16 @@ module.exports = async function drEcoHandler(request, response) {
     });
     const responseText = await upstream.text();
     if (!upstream.ok) {
-      sendJson(response, 502, { error: `Gemini request failed (${upstream.status}).` });
+      let providerMessage = "";
+      try {
+        const failure = JSON.parse(responseText);
+        providerMessage = typeof failure.error?.message === "string" ? failure.error.message : "";
+      } catch { /* Do not reflect arbitrary provider response bodies. */ }
+      const detail = providerMessage.replace(/[\r\n\t]+/g, " ").slice(0, 320);
+      console.error("Gemini provider rejected the request:", upstream.status, detail || "no provider detail");
+      sendJson(response, 502, {
+        error: `Gemini request failed (${upstream.status})${detail ? `: ${detail}` : "."}`,
+      });
       return;
     }
 

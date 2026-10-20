@@ -608,31 +608,27 @@
 
     <div class="profile-modal-overlay learning-path-setup-overlay" id="learningPathSetup" hidden>
       <section class="profile-modal-card learning-path-setup-card" role="dialog" aria-modal="true" aria-labelledby="learningPathSetupTitle" aria-describedby="learningPathSetupIntro">
-        <span class="section-kicker">YOUR PERSONAL STUDY PLAN</span>
-        <h2 id="learningPathSetupTitle">Let’s make your path yours</h2>
-        <p id="learningPathSetupIntro">A few quick answers help Dr. Eco choose a useful starting point and explain ideas in a way that fits you.</p>
+        <div class="path-guide-header">
+          <div class="path-guide-mascot" id="learningPathMascot" aria-label="Dr. Eco"></div>
+          <div><span class="section-kicker">A QUICK CHAT WITH DR. ECO</span><h2 id="learningPathSetupTitle">Let’s plan your first steps</h2></div>
+          <span class="path-guide-count" id="learningPathStepCount">1 of 5</span>
+        </div>
+        <div class="path-guide-progress" aria-hidden="true"><span id="learningPathStepProgress"></span></div>
+        <p class="path-guide-dialogue" id="learningPathDialogue" aria-live="polite">Hey! I’m Dr. Eco. Tell me where you want to begin, and I’ll shape a study route around you.</p>
+        <p id="learningPathSetupIntro" class="path-guide-caption">No pressure to have everything figured out. We’ll take it one question at a time.</p>
         <form id="learningPathSetupForm" class="learning-path-setup-form">
-          <label for="learningPathCourse">Which course should we start with?</label>
-          <select id="learningPathCourse" required></select>
-          <label for="learningPathGoal">What’s your main goal?</label>
-          <select id="learningPathGoal" required>
-            <option value="Prepare for an exam">Prepare for an exam</option>
-            <option value="Understand lectures">Understand my lectures</option>
-            <option value="Build a strong foundation">Build a strong foundation</option>
-            <option value="Improve difficult topics">Improve topics I find difficult</option>
-            <option value="Work through assignments">Work through assignments</option>
-          </select>
-          <label for="learningPathDifficulty">What topics or ideas feel difficult right now?</label>
-          <textarea id="learningPathDifficulty" rows="2" maxlength="600" placeholder="It’s okay if you’re not sure yet."></textarea>
-          <label for="learningPathNote">Anything else you want Dr. Eco to know?</label>
-          <textarea id="learningPathNote" rows="2" maxlength="600" placeholder="For example, what kind of examples help you learn?"></textarea>
-          <label for="learningPathPace">What pace feels right?</label>
-          <select id="learningPathPace"><option value="gentle">Slow and step by step</option><option value="balanced" selected>Balanced with examples</option><option value="quick">Quick revision</option></select>
-          <p class="learning-path-privacy">Your answers and matching course notes or your saved course materials are sent to Gemini to create this path. Your answers stay in this browser.</p>
+          <div class="path-guide-step" data-path-step="0"><label for="learningPathCourse">Choose a course</label><select id="learningPathCourse"></select></div>
+          <div class="path-guide-step" data-path-step="1" hidden><label for="learningPathGoal">Choose your main goal</label><select id="learningPathGoal"><option value="Prepare for an exam">Prepare for an exam</option><option value="Understand lectures">Understand my lectures</option><option value="Build a strong foundation">Build a strong foundation</option><option value="Improve difficult topics">Improve topics I find difficult</option><option value="Work through assignments">Work through assignments</option></select></div>
+          <div class="path-guide-step" data-path-step="2" hidden><label for="learningPathDifficulty">What ideas feel difficult right now?</label><textarea id="learningPathDifficulty" rows="3" maxlength="600" placeholder="Tell me in your own words — or leave this blank and we’ll figure it out together."></textarea><button type="button" class="path-guide-skip-answer" id="learningPathNotSure">I’m not sure yet</button></div>
+          <div class="path-guide-step" data-path-step="3" hidden><label for="learningPathNote">What helps you learn best?</label><textarea id="learningPathNote" rows="3" maxlength="600" placeholder="Examples, patient explanations, practice questions… anything you like."></textarea><p class="path-guide-caption">You can leave this blank too.</p></div>
+          <div class="path-guide-step" data-path-step="4" hidden><label for="learningPathPace">Pick a pace that feels right</label><select id="learningPathPace"><option value="gentle">Slow and step by step</option><option value="balanced" selected>Balanced with examples</option><option value="quick">Quick revision</option></select></div>
+          <p class="learning-path-privacy">Your answers and matching course materials go to Gemini to build the path. Your profile and path are saved privately to your student account for Dr. Eco and personalized reminders; your private notes are not included in WhatsApp messages.</p>
           <p id="learningPathSetupStatus" class="profile-status" role="status" aria-live="polite"></p>
           <div class="learning-path-setup-actions">
             <button type="button" class="card-secondary-button" id="skipLearningPathSetup">Maybe later</button>
-            <button type="submit" class="results-submit" id="buildLearningPathSubmit">Build my path</button>
+            <button type="button" class="card-secondary-button" id="learningPathBack" hidden>Back</button>
+            <button type="button" class="results-submit" id="learningPathNext">Continue</button>
+            <button type="submit" class="results-submit" id="buildLearningPathSubmit" hidden>Build my path</button>
           </div>
         </form>
       </section>

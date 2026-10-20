@@ -1815,6 +1815,20 @@ async function generatePersonalizedStudyPath(courseCode, profile) {
   let studentNotes = "";
   try { studentNotes = await loadStudentMaterialContext(courseCode); }
   catch (error) { console.info("Student notes unavailable while building the path:", error.message); }
+  const trimContext = (value, maxBytes = 4600) => {
+    let output = "";
+    let bytes = 0;
+    const encoder = new TextEncoder();
+    for (const character of String(value || "")) {
+      const length = encoder.encode(character).length;
+      if (bytes + length > maxBytes) break;
+      output += character;
+      bytes += length;
+    }
+    return output;
+  };
+  courseNotes = trimContext(courseNotes);
+  studentNotes = trimContext(studentNotes);
   const prompt = `Build a unique seven-step learning journey for this ${currentStudentLevel} student studying ${courseCode} (${courseTitleFor(courseCode)}).
 Their goal: ${profile.goal}.
 Topics they find difficult: ${profile.difficulties || "They are not sure yet; gently diagnose through examples."}
@@ -1839,7 +1853,11 @@ STUDENT'S OWN MATERIALS:\n${studentNotes || "(No personal materials saved for th
     }),
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(`Gemini path generation failed (${response.status}): ${data.error?.message || response.statusText}`);
+  if (!response.ok) {
+    const detail = typeof data.error === "string" ? data.error
+      : data.error?.message || data.message || response.statusText || "The AI service returned no details.";
+    throw new Error(`Gemini path generation failed (${response.status}): ${detail}`);
+  }
   const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text).filter(Boolean).join("\n");
   if (!text) throw new Error("Gemini did not return a learning path.");
   const modules = parsePersonalizedStudyPath(text, courseCode);
@@ -1863,6 +1881,29 @@ function fillLearningPathCourseOptions(selectedCourse = currentCourse) {
   }));
 }
 
+let learningPathWizardStep = 0;
+const learningPathDialogue = [
+  "Hey! I’m Dr. Eco. First, tell me which course you want us to work on. I’ll meet you where you are.",
+  "Nice choice. What are we aiming for together? This helps me choose the right mix of lessons and practice.",
+  "Every learner has a sticky spot. What topic or idea has been giving you trouble? If you’re not sure, that’s completely fine.",
+  "One more thing: what helps an idea click for you? You can mention examples, slower explanations, or anything else.",
+  "Last question: how should we pace the journey? I’ll use your answers to build a route with lessons, practice, reading, and time together.",
+];
+
+function renderLearningPathWizardStep() {
+  const steps = [...document.querySelectorAll("[data-path-step]")];
+  steps.forEach((step, index) => { step.hidden = index !== learningPathWizardStep; });
+  document.querySelector("#learningPathStepCount").textContent = `${learningPathWizardStep + 1} of ${steps.length}`;
+  document.querySelector("#learningPathStepProgress").style.width = `${((learningPathWizardStep + 1) / steps.length) * 100}%`;
+  document.querySelector("#learningPathDialogue").textContent = learningPathDialogue[learningPathWizardStep];
+  document.querySelector("#learningPathBack").hidden = learningPathWizardStep === 0;
+  document.querySelector("#learningPathNext").hidden = learningPathWizardStep === steps.length - 1;
+  document.querySelector("#buildLearningPathSubmit").hidden = learningPathWizardStep !== steps.length - 1;
+  document.querySelector("#learningPathSetupStatus").textContent = "";
+  const activeField = steps[learningPathWizardStep]?.querySelector("select,textarea");
+  activeField?.focus({ preventScroll: true });
+}
+
 function openLearningPathSetup() {
   fillLearningPathCourseOptions(currentCourse);
   const profile = studyProgress.learnerProfile || {};
@@ -1872,15 +1913,34 @@ function openLearningPathSetup() {
   document.querySelector("#learningPathPace").value = profile.pace || studyProgress.studyPace || "balanced";
   document.querySelector("#learningPathSetupStatus").textContent = "";
   document.querySelector("#learningPathSetup").hidden = false;
-  document.querySelector("#learningPathCourse").focus();
+  learningPathWizardStep = 0;
+  renderLottieInto(document.querySelector("#learningPathMascot"), "hello-wave.json", "🐱", "Dr. Eco welcomes you");
+  renderLearningPathWizardStep();
 }
 
 document.querySelector("#personalizePathButton").addEventListener("click", openLearningPathSetup);
+document.querySelector("#learningPathNext").addEventListener("click", () => {
+  if (learningPathWizardStep === 0 && !document.querySelector("#learningPathCourse").value) {
+    document.querySelector("#learningPathSetupStatus").textContent = "Choose a course so I know where to start.";
+    return;
+  }
+  learningPathWizardStep = Math.min(4, learningPathWizardStep + 1);
+  renderLearningPathWizardStep();
+});
+document.querySelector("#learningPathBack").addEventListener("click", () => {
+  learningPathWizardStep = Math.max(0, learningPathWizardStep - 1);
+  renderLearningPathWizardStep();
+});
+document.querySelector("#learningPathNotSure").addEventListener("click", () => {
+  document.querySelector("#learningPathDifficulty").value = "";
+  learningPathWizardStep = 3;
+  renderLearningPathWizardStep();
+});
 document.querySelector("#skipLearningPathSetup").addEventListener("click", () => {
   studyProgress.onboardingComplete = true;
   saveStudyProgress();
   document.querySelector("#learningPathSetup").hidden = true;
-  startStudentTour();
+  activateTab("home");
 });
 document.querySelector("#learningPathSetupForm").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -1899,6 +1959,7 @@ document.querySelector("#learningPathSetupForm").addEventListener("submit", asyn
   submit.disabled = true;
   submit.textContent = "Building your path…";
   document.querySelector("#learningPathSetupStatus").textContent = "Finding course notes, then asking Gemini to shape a route around your goal…";
+  document.querySelector("#learningPathDialogue").textContent = "I’m putting your route together now — checking the course notes and choosing a good first step. This can take a few seconds.";
   try {
     studyProgress.learnerProfile = profile;
     studyProgress.studyPace = profile.pace;
@@ -1920,13 +1981,14 @@ document.querySelector("#learningPathSetupForm").addEventListener("submit", asyn
     updateStudySummary();
     document.querySelector("#learningPathSetup").hidden = true;
     document.querySelector("#studyPace").value = profile.pace;
-    startStudentTour();
+    activateTab("home");
     showNotice(synced
       ? "Your learning journey is ready. Dr. Eco and your reminders now know what you’re working toward."
       : "Your learning journey is ready on this device. Sign in again later or retry if you want WhatsApp reminders tailored to this path.");
   } catch (error) {
     console.error("Could not generate personalized learning path:", error);
-    document.querySelector("#learningPathSetupStatus").textContent = `Couldn’t build the path yet: ${error.message}. You can try again or continue and build it from Learn later.`;
+    document.querySelector("#learningPathSetupStatus").textContent = `I hit a snag: ${error.message}. Your answers are still here. Check your connection and try again.`;
+    document.querySelector("#learningPathDialogue").textContent = "Sorry, I couldn’t finish the route just now. I’ve kept your answers, so we can take another run at it.";
   } finally {
     submit.disabled = false;
     submit.textContent = "Build my path";
