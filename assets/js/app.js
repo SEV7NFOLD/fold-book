@@ -40,6 +40,15 @@ function coursesForLevel(level) {
   return UNIUYO_COURSE_CATALOG[level] || UNIUYO_COURSE_CATALOG["100L"];
 }
 
+function isGeneralTopicCode(code) {
+  return /^GEN\s\d{4}$/.test(String(code || ""));
+}
+
+function levelForCourseCode(code) {
+  const digits = String(code || "").match(/\d{3,4}/)?.[0] || "";
+  return digits ? `${digits[0]}00L` : "";
+}
+
 function updateAdminCourseDropdown() {
   const levelSelect = document.querySelector("#adminLevelSelect");
   const courseSelect = document.querySelector("#adminCourseSelect");
@@ -155,6 +164,7 @@ const DEFAULT_STUDY_PROGRESS = {
   quizAttempts: [],
   studyPaths: {},
   studyPathSources: {},
+  courseTitles: {},
   learnerProfile: null,
   onboardingComplete: false,
 };
@@ -207,6 +217,10 @@ function availableStudyCourses() {
   for (const custom of studentCustomCourses) {
     if (!courses.some((course) => course.code === custom.code)) courses.push(custom);
   }
+  for (const [code, title] of Object.entries(studyProgress.courseTitles || {})) {
+    if (!isGeneralTopicCode(code)) continue;
+    if (!courses.some((course) => course.code === code)) courses.push({ code, title });
+  }
   return courses;
 }
 
@@ -233,7 +247,8 @@ function renderStudyCourseSwitcher(preferredCourse = currentCourse) {
 }
 
 function courseTitleFor(courseCode) {
-  return availableStudyCourses().find((course) => course.code === courseCode)?.title || courseCode;
+  return studyProgress.courseTitles?.[courseCode]
+    || availableStudyCourses().find((course) => course.code === courseCode)?.title || courseCode;
 }
 
 function setStudentRegistration(registration) {
@@ -265,6 +280,7 @@ function applyStudentLevel(level) {
   }
   updateChatCourseDropdown(chatCourseCode);
   renderStudyCourseSwitcher(currentCourse);
+  renderProfileCourses();
 }
 
 async function refreshLiveCourseCatalog(preferredLevel = currentStudentLevel) {
@@ -300,6 +316,7 @@ function freshStudyProgress() {
     activityDays: [],
     studyPaths: {},
     studyPathSources: {},
+    courseTitles: {},
     learnerProfile: null,
     onboardingComplete: false,
   };
@@ -341,6 +358,9 @@ function loadStudyProgress(storageKey = STUDY_PROGRESS_KEY) {
       course,
       studyPaths,
       studyPathSources: parsed.studyPathSources && typeof parsed.studyPathSources === "object" ? parsed.studyPathSources : {},
+      courseTitles: parsed.courseTitles && typeof parsed.courseTitles === "object"
+        ? Object.fromEntries(Object.entries(parsed.courseTitles).filter(([code, title]) => COURSE_CODE_PATTERN.test(code) && typeof title === "string").slice(0, 100))
+        : {},
       learnerProfile: parsed.learnerProfile && typeof parsed.learnerProfile === "object" ? parsed.learnerProfile : null,
       onboardingComplete: parsed.onboardingComplete === true,
       activityDays: Array.isArray(parsed.activityDays) ? parsed.activityDays.filter((day) => /^\d{4}-\d{2}-\d{2}$/.test(day)) : [],
@@ -443,7 +463,16 @@ async function loadSyncedLearningProfile() {
         ? { ...serverModule, questions: localModule.questions }
         : serverModule;
     });
-    if (!code || !modules.length || !availableStudyCourses().some((course) => course.code === code)) return false;
+    if (!code || !modules.length) return false;
+    const savedTitle = typeof profile.course_title === "string" ? profile.course_title.trim().slice(0, 100) : "";
+    if (savedTitle) {
+      studyProgress.courseTitles[code] = savedTitle;
+      if (!coursesForLevel(currentStudentLevel).some((course) => course.code === code)
+        && !studentCustomCourses.some((course) => course.code === code)) {
+        studentCustomCourses.push({ code, title: savedTitle });
+      }
+    }
+    if (!availableStudyCourses().some((course) => course.code === code)) return false;
     studyProgress.learnerProfile = {
       goal: typeof profile.learner_goal === "string" ? profile.learner_goal : "",
       difficulties: typeof profile.difficulty_topics === "string" ? profile.difficulty_topics : "",
@@ -1529,7 +1558,7 @@ function syncCourseControls() {
   renderStudyCourseSwitcher(currentCourse);
 }
 
-document.querySelector("#courseSwitcher").addEventListener("click", (event) => {
+document.querySelector("#courseSwitcher")?.addEventListener("click", (event) => {
   const button = event.target.closest("[data-course]");
   if (button) setCourse(button.dataset.course);
 });
@@ -1666,12 +1695,78 @@ function renderUserAvatar(container, user, className = "") {
   }
 }
 
+function semesterForCourse(courseCode) {
+  if (isGeneralTopicCode(courseCode)) return "other";
+  const digits = String(courseCode || "").match(/\d{3,4}/)?.[0] || "";
+  if (digits[1] === "1") return "first";
+  if (digits[1] === "2") return "second";
+  return "other";
+}
+
+function renderProfileCourses() {
+  const container = document.querySelector("#profileCourseList");
+  const section = document.querySelector("#profileCoursesSection");
+  if (!container || !section) return;
+  section.hidden = !currentStudent || isMasterAdmin;
+  container.replaceChildren();
+  const groups = [
+    { id: "first", title: "First semester" },
+    { id: "second", title: "Second semester" },
+    { id: "other", title: "Other courses and topics" },
+  ];
+  const courses = [
+    ...coursesForLevel(currentStudentLevel),
+    ...studentCustomCourses.filter((course) => levelForCourseCode(course.code) === currentStudentLevel),
+    ...Object.entries(studyProgress.courseTitles || {})
+      .filter(([code]) => isGeneralTopicCode(code))
+      .map(([code, title]) => ({ code, title })),
+  ].filter((course, index, all) => all.findIndex((item) => item.code === course.code) === index);
+  for (const group of groups) {
+    const items = courses.filter((course) => semesterForCourse(course.code) === group.id);
+    const details = document.createElement("details");
+    details.className = "profile-course-group";
+    details.open = group.id === "first";
+    const summary = document.createElement("summary");
+    summary.textContent = `${group.title} · ${items.length}`;
+    details.append(summary);
+    if (items.length) {
+      const grid = document.createElement("div");
+      grid.className = "profile-course-grid";
+      for (const course of items) {
+        const row = document.createElement("div");
+        row.className = "profile-course-row";
+        const label = document.createElement("span");
+        const code = document.createElement("strong");
+        const title = document.createElement("small");
+        code.textContent = course.code;
+        title.textContent = course.title || "Course title pending";
+        label.append(code, title);
+        const action = document.createElement("button");
+        action.type = "button";
+        action.className = "card-secondary-button";
+        action.dataset.profileCourse = course.code;
+        action.textContent = studyProgress.studyPaths?.[course.code]?.length ? "Open path" : "Build path";
+        row.append(label, action);
+        grid.append(row);
+      }
+      details.append(grid);
+    } else {
+      const empty = document.createElement("p");
+      empty.className = "profile-course-empty";
+      empty.textContent = "No courses are listed in this semester yet.";
+      details.append(empty);
+    }
+    container.append(details);
+  }
+}
+
 function renderProfile() {
   const user = S.user;
   const name = user?.name || currentStudent?.name || "Student";
   document.querySelector("#headerProfileName").textContent = name.split(/\s+/)[0];
   document.querySelector("#profileDisplayName").textContent = name;
   document.querySelector("#profileDisplayLevel").textContent = user?.level || S.level;
+  renderProfileCourses();
   const levelSettings = document.querySelector("#profileLevelSettings");
   const levelSelect = document.querySelector("#profileLevelSelect");
   const levelSave = document.querySelector("#saveProfileLevel");
@@ -2392,17 +2487,38 @@ function renderLearningPathWizardStep() {
   steps.forEach((step, index) => { step.hidden = index !== learningPathWizardStep; });
   document.querySelector("#learningPathStepCount").textContent = `${learningPathWizardStep + 1} of ${steps.length}`;
   document.querySelector("#learningPathStepProgress").style.width = `${((learningPathWizardStep + 1) / steps.length) * 100}%`;
-  document.querySelector("#learningPathDialogue").textContent = learningPathDialogue[learningPathWizardStep];
+  const dialogue = learningPathWizardStep === 0 && document.querySelector("#learningPathStudyMode").value === "topic"
+    ? "Curious about something outside your courses? Name it, and I’ll build a route from your goal and what you already know."
+    : learningPathDialogue[learningPathWizardStep];
+  document.querySelector("#learningPathDialogue").textContent = dialogue;
   document.querySelector("#learningPathBack").hidden = learningPathWizardStep === 0;
   document.querySelector("#learningPathNext").hidden = learningPathWizardStep === steps.length - 1;
   document.querySelector("#buildLearningPathSubmit").hidden = learningPathWizardStep !== steps.length - 1;
   document.querySelector("#learningPathSetupStatus").textContent = "";
-  const activeField = steps[learningPathWizardStep]?.querySelector("select,textarea");
+  const activeField = steps[learningPathWizardStep]?.querySelector("select:not([hidden]),textarea:not([hidden]),input:not([hidden])");
   activeField?.focus({ preventScroll: true });
 }
 
-function openLearningPathSetup() {
-  fillLearningPathCourseOptions(currentCourse);
+function updateLearningPathStudyMode() {
+  const topicMode = document.querySelector("#learningPathStudyMode").value === "topic";
+  const courseSelect = document.querySelector("#learningPathCourse");
+  const courseLabel = document.querySelector("#learningPathCourseLabel");
+  const topicInput = document.querySelector("#learningPathTopic");
+  const topicLabel = document.querySelector("#learningPathTopicLabel");
+  courseSelect.hidden = topicMode;
+  courseLabel.hidden = topicMode;
+  topicInput.hidden = !topicMode;
+  topicLabel.hidden = !topicMode;
+  if (learningPathWizardStep === 0) renderLearningPathWizardStep();
+}
+
+function openLearningPathSetup(selectedCourse = currentCourse) {
+  fillLearningPathCourseOptions(selectedCourse);
+  const isCatalogCourse = !isGeneralTopicCode(selectedCourse)
+    && availableStudyCourses().some((course) => course.code === selectedCourse);
+  document.querySelector("#learningPathStudyMode").value = isCatalogCourse ? "course" : "topic";
+  document.querySelector("#learningPathTopic").value = isCatalogCourse ? "" : (studyProgress.courseTitles?.[selectedCourse] || "");
+  updateLearningPathStudyMode();
   const profile = studyProgress.learnerProfile || {};
   document.querySelector("#learningPathGoal").value = profile.goal || "Prepare for an exam";
   document.querySelector("#learningPathDifficulty").value = profile.difficulties || "";
@@ -2416,10 +2532,17 @@ function openLearningPathSetup() {
 }
 
 document.querySelector("#personalizePathButton").addEventListener("click", openLearningPathSetup);
+document.querySelector("#learningPathStudyMode").addEventListener("change", updateLearningPathStudyMode);
 document.querySelector("#learningPathNext").addEventListener("click", () => {
-  if (learningPathWizardStep === 0 && !document.querySelector("#learningPathCourse").value) {
-    document.querySelector("#learningPathSetupStatus").textContent = "Choose a course so I know where to start.";
-    return;
+  if (learningPathWizardStep === 0) {
+    const topicMode = document.querySelector("#learningPathStudyMode").value === "topic";
+    if ((!topicMode && !document.querySelector("#learningPathCourse").value)
+      || (topicMode && !document.querySelector("#learningPathTopic").value.trim())) {
+      document.querySelector("#learningPathSetupStatus").textContent = topicMode
+        ? "Give your study topic a name so I can shape a route around it."
+        : "Choose a course so I know where to start.";
+      return;
+    }
   }
   learningPathWizardStep = Math.min(4, learningPathWizardStep + 1);
   renderLearningPathWizardStep();
@@ -2441,15 +2564,18 @@ document.querySelector("#skipLearningPathSetup").addEventListener("click", () =>
 });
 document.querySelector("#learningPathSetupForm").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const courseCode = document.querySelector("#learningPathCourse").value;
+  const topicMode = document.querySelector("#learningPathStudyMode").value === "topic";
+  const topicTitle = document.querySelector("#learningPathTopic").value.trim().slice(0, 100);
+  const courseCode = topicMode ? makeGeneralTopicCode(topicTitle) : document.querySelector("#learningPathCourse").value;
   const profile = {
     goal: document.querySelector("#learningPathGoal").value,
     difficulties: document.querySelector("#learningPathDifficulty").value.trim().slice(0, 600),
     note: document.querySelector("#learningPathNote").value.trim().slice(0, 600),
     pace: document.querySelector("#learningPathPace").value,
+    topic: topicMode ? topicTitle : "",
   };
-  if (!COURSE_CODE_PATTERN.test(courseCode)) {
-    document.querySelector("#learningPathSetupStatus").textContent = "Choose a valid course from your level.";
+  if (!COURSE_CODE_PATTERN.test(courseCode) || (topicMode && !topicTitle)) {
+    document.querySelector("#learningPathSetupStatus").textContent = topicMode ? "Name the topic you want to study." : "Choose a valid course from your level.";
     return;
   }
   const submit = document.querySelector("#buildLearningPathSubmit");
@@ -2458,6 +2584,7 @@ document.querySelector("#learningPathSetupForm").addEventListener("submit", asyn
   document.querySelector("#learningPathSetupStatus").textContent = "Finding course notes, then asking Gemini to shape a route around your goal…";
   document.querySelector("#learningPathDialogue").textContent = "I’m putting your route together now — checking the course notes and choosing a good first step. This can take a few seconds.";
   try {
+    if (topicMode) studyProgress.courseTitles[courseCode] = topicTitle;
     studyProgress.learnerProfile = profile;
     studyProgress.studyPace = profile.pace;
     const result = await generatePersonalizedStudyPath(courseCode, profile);
@@ -2491,6 +2618,19 @@ document.querySelector("#learningPathSetupForm").addEventListener("submit", asyn
     submit.textContent = "Build my path";
   }
 });
+
+function makeGeneralTopicCode(topicTitle) {
+  let hash = 0;
+  for (const character of topicTitle.toLocaleLowerCase()) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  let suffix = 1000 + (hash % 9000);
+  for (let attempt = 0; attempt < 9000; attempt += 1) {
+    const code = `GEN ${suffix}`;
+    const existingTitle = studyProgress.courseTitles?.[code];
+    if (!existingTitle || existingTitle.toLocaleLowerCase() === topicTitle.toLocaleLowerCase()) return code;
+    suffix = 1000 + ((suffix - 999) % 9000);
+  }
+  return `GEN ${Date.now() % 9000 + 1000}`;
+}
 
 let chatRequestInProgress = false;
 let voiceCallActive = false;
@@ -4240,6 +4380,32 @@ document.querySelector("#previewWhatsAppMessage")?.addEventListener("click", asy
   status.textContent = "Preview uses sample student details and does not send a WhatsApp message.";
 });
 
+document.querySelector("#sendWhatsAppTest")?.addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const status = document.querySelector("#whatsappBotStatus");
+  const phoneNumber = document.querySelector("#whatsappTestPhone").value.trim();
+  const session = document.querySelector("#whatsappPreviewSession").value;
+  if (!S.isAdmin) return showAccessRestrictedNotice();
+  if (!phoneNumber) {
+    status.textContent = "Enter an opted-in WhatsApp number to receive the test.";
+    document.querySelector("#whatsappTestPhone").focus();
+    return;
+  }
+  button.disabled = true;
+  status.textContent = "Queuing one test reminder…";
+  try {
+    const result = await requestAdminApi("/api/admin/whatsapp-settings", {
+      action: "test-send", phoneNumber, session,
+    });
+    await loadWhatsAppBotSettings();
+    status.textContent = result.message || "Test queued. The connected worker should send it shortly.";
+  } catch (error) {
+    status.textContent = error.message || "Could not queue the test reminder.";
+  } finally {
+    button.disabled = false;
+  }
+});
+
 async function loadAdminCourseMaterials() {
   const status = document.querySelector("#adminMaterialsStatus");
   const list = document.querySelector("#adminMaterialsList");
@@ -4574,6 +4740,16 @@ document.querySelector("#profileButton").addEventListener("click", () => {
   document.querySelector("#profileLevelStatus").textContent = "";
   document.querySelector("#profileModal").hidden = false;
   document.querySelector("#closeProfile").focus();
+});
+document.querySelector("#profileCourseList").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-profile-course]");
+  if (!button) return;
+  const courseCode = button.dataset.profileCourse;
+  const hasPath = Boolean(studyProgress.studyPaths?.[courseCode]?.length);
+  if (currentCourse !== courseCode) setCourse(courseCode);
+  document.querySelector("#profileModal").hidden = true;
+  if (hasPath) activateTab("home");
+  else openLearningPathSetup(courseCode);
 });
 document.querySelector("#closeProfile").addEventListener("click", () => {
   document.querySelector("#profileModal").hidden = true;

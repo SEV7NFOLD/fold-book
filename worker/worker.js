@@ -20,6 +20,11 @@ const BOT_PHONE_NUMBER = process.env.BOT_PHONE_NUMBER || "";
 const DEFAULT_NUDGE_INTERVAL_HOURS = 10;
 const PAGE_SIZE = 500;
 const SEND_DELAY_MS = 3000;
+const TEST_QUEUE_POLL_MS = 15000;
+const TEST_REMINDER_ARTWORK = ["target.png", "trophy.png"].map((file) => ({
+  file,
+  image: fs.readFileSync(path.join(__dirname, "..", "assets", "brand", file)),
+}));
 const supabase = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
   ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -32,6 +37,8 @@ let reconnectTimer;
 let pairingCodeTimer;
 let reconnectDelayMs = 5000;
 let dispatchInProgress = false;
+let testDispatchInProgress = false;
+let testQueueUnavailableWarned = false;
 let shuttingDown = false;
 const completedScheduleRuns = new Set();
 let reminderSettings = {
@@ -163,6 +170,14 @@ function renderAdminMessage(template, name, streak, courseCode, profile, session
   return rendered;
 }
 
+function reminderMedia(phoneNumber, session, caption) {
+  const day = new Date().toLocaleDateString("en-CA", { timeZone: "Africa/Lagos" });
+  const seed = `${phoneNumber}:${day}:${session}`;
+  const hash = [...seed].reduce((total, character) => total + character.charCodeAt(0), 0);
+  const artwork = TEST_REMINDER_ARTWORK[hash % TEST_REMINDER_ARTWORK.length];
+  return { image: artwork.image, caption };
+}
+
 async function loadLearningProfiles(optIns) {
   const registrationNumbers = [...new Set((optIns || []).map((user) => user.reg_number).filter(Boolean))];
   if (!registrationNumbers.length) return new Map();
@@ -246,13 +261,12 @@ async function dispatchDailyNudges(session = "morning") {
         }
         try {
           const jid = `${user.phone_number}@s.whatsapp.net`;
-          await socket.sendMessage(jid, {
-            text: renderAdminMessage(
+          const message = renderAdminMessage(
               session === "evening" ? reminderSettings.evening_message : reminderSettings.morning_message,
               user.full_name, user.streak_count, user.course_code,
               profiles.get(user.reg_number), session,
-            ),
-          });
+            );
+          await socket.sendMessage(jid, reminderMedia(user.phone_number, session, message));
           recipientCount += 1;
           const { error: updateError } = await supabase
             .from("whatsapp_optins")
@@ -282,6 +296,68 @@ async function dispatchDailyNudges(session = "morning") {
     });
     if (logError) console.warn("Could not log reminder delivery:", logError.message);
     dispatchInProgress = false;
+  }
+}
+
+async function processPendingTestReminder() {
+  if (!connected || !socket || testDispatchInProgress) return;
+  testDispatchInProgress = true;
+  let job;
+  try {
+    const { data, error } = await supabase.rpc("claim_whatsapp_bot_test");
+    if (error) {
+      if (!testQueueUnavailableWarned) {
+        console.warn("Admin test reminders are unavailable; apply the WhatsApp test queue SQL migration:", error.message);
+        testQueueUnavailableWarned = true;
+      }
+      return;
+    }
+    testQueueUnavailableWarned = false;
+    job = Array.isArray(data) ? data[0] : data;
+    if (!job) return;
+
+    let resultStatus = "sent";
+    let detail = "Test reminder sent with FoldBook artwork.";
+    try {
+      await refreshReminderSettings();
+      const { data: user, error: userError } = await supabase.from("whatsapp_optins")
+        .select("phone_number,full_name,streak_count,course_code,last_activity_at,reg_number")
+        .eq("phone_number", job.phone_number)
+        .eq("opted_in", true)
+        .maybeSingle();
+      if (userError) throw userError;
+      if (!user) throw new Error("The target number is no longer opted in.");
+      const profiles = await loadLearningProfiles([user]);
+      const template = job.session === "evening" ? reminderSettings.evening_message : reminderSettings.morning_message;
+      const message = renderAdminMessage(template, user.full_name, user.streak_count, user.course_code,
+        profiles.get(user.reg_number), job.session);
+      await socket.sendMessage(`${user.phone_number}@s.whatsapp.net`, reminderMedia(user.phone_number, job.session, message));
+    } catch (error) {
+      resultStatus = "failed";
+      detail = error.message || "WhatsApp could not send the test reminder.";
+      console.error("Could not send an admin test reminder:", detail);
+    }
+
+    const { error: updateError } = await supabase.from("whatsapp_bot_test_queue")
+      .update({ status: resultStatus, detail, processed_at: new Date().toISOString() })
+      .eq("id", job.id);
+    if (updateError) console.warn("Could not update the test reminder queue status:", updateError.message);
+    const { error: logError } = await supabase.from("whatsapp_bot_delivery_log").insert({
+      session: "test",
+      status: resultStatus,
+      recipient_count: resultStatus === "sent" ? 1 : 0,
+      detail: resultStatus === "sent" ? "Test reminder sent with varied FoldBook artwork." : detail.slice(0, 500),
+    });
+    if (logError) console.warn("Could not log the test reminder:", logError.message);
+  } catch (error) {
+    if (job?.id) {
+      await supabase.from("whatsapp_bot_test_queue")
+        .update({ status: "failed", detail: (error.message || "Worker failed to process test reminder.").slice(0, 500), processed_at: new Date().toISOString() })
+        .eq("id", job.id);
+    }
+    console.error("Could not process the admin test reminder queue:", error.message);
+  } finally {
+    testDispatchInProgress = false;
   }
 }
 
@@ -414,6 +490,7 @@ async function shutdown(signal) {
   shuttingDown = true;
   console.log(`Stopping worker after ${signal}.`);
   for (const task of cronTasks) task.stop();
+  clearInterval(testQueuePoll);
   if (reconnectTimer) clearTimeout(reconnectTimer);
   if (pairingCodeTimer) clearTimeout(pairingCodeTimer);
   connected = false;
@@ -425,6 +502,8 @@ validateConfiguration();
 const cronTasks = [
   cron.schedule("* * * * *", () => { void runConfiguredReminderCheck(); }, { timezone: "Africa/Lagos" }),
 ];
+const testQueuePoll = setInterval(() => { void processPendingTestReminder(); }, TEST_QUEUE_POLL_MS);
+testQueuePoll.unref?.();
 
 process.once("SIGINT", () => { void shutdown("SIGINT"); });
 process.once("SIGTERM", () => { void shutdown("SIGTERM"); });
