@@ -30,6 +30,9 @@ function normalizeName(value) {
     .replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+const MISSING_NAME = "name missing";
+const REGISTRATION_PATTERN = /^\d{2}(?:\/[A-Z0-9]{2,5}){2,3}\/\d{1,4}$/;
+
 module.exports = async function resultsLookupHandler(request, response) {
   if (request.method !== "POST") {
     response.setHeader("Allow", "POST");
@@ -42,8 +45,8 @@ module.exports = async function resultsLookupHandler(request, response) {
   }
   const registration = String(payload?.registration || "").trim().toUpperCase().replace(/\s+/g, "");
   const fullName = String(payload?.fullName || "").trim();
-  if (!/^\d{2}\/SS\/EC\/\d{1,4}$/.test(registration) || fullName.length < 3 || fullName.length > 120) {
-    return sendJson(response, 400, { error: "Enter a valid registration number and full name." });
+  if (!REGISTRATION_PATTERN.test(registration) || (fullName && fullName.length < 3) || fullName.length > 120) {
+    return sendJson(response, 400, { error: "Enter a valid registration number and, when listed, your full name." });
   }
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -60,13 +63,17 @@ module.exports = async function resultsLookupHandler(request, response) {
     if (!upstream.ok) throw new Error("Supabase results lookup failed.");
     const rows = await upstream.json();
     const normalizedInputName = normalizeName(fullName);
-    const matchingNameRow = rows.find((row) => normalizeName(row.full_name) === normalizedInputName);
-    if (!rows.length || !matchingNameRow) {
+    const matchingNameRow = fullName && normalizedInputName !== MISSING_NAME
+      ? rows.find((row) => normalizeName(row.full_name) === normalizedInputName)
+      : null;
+    const registrationOnlyAllowed = (!fullName || normalizedInputName === MISSING_NAME) && rows.length > 0
+      && rows.every((row) => normalizeName(row.full_name) === MISSING_NAME);
+    if (!rows.length || (!matchingNameRow && !registrationOnlyAllowed)) {
       return sendJson(response, 404, { error: "We could not find results matching those details." });
     }
     return sendJson(response, 200, {
       student: {
-        name: matchingNameRow.full_name,
+        name: matchingNameRow?.full_name || "Name missing",
         results: rows.map((row) => ({
           course: row.course_code,
           course_title: row.course_title,

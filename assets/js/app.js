@@ -3551,6 +3551,13 @@ function normalizeRegistration(value) {
   return /^\d{2}\/SS\/EC\/\d{1,4}$/.test(registration) ? registration : "";
 }
 
+function normalizeResultRegistration(value) {
+  const normalized = normalizeRegistration(value);
+  if (normalized) return normalized;
+  const registration = value.trim().toUpperCase().replace(/\s+/g, "");
+  return /^\d{2}(?:\/[A-Z0-9]{2,5}){2,3}\/\d{1,4}$/.test(registration) ? registration : "";
+}
+
 function normalizeNameTokens(value) {
   return value.trim().toLocaleLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -4558,10 +4565,10 @@ resultsForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   resultsStatus.textContent = "";
 
-  const registration = normalizeRegistration(registrationInput.value);
+  const registration = normalizeResultRegistration(registrationInput.value);
   const inputNameTokens = normalizeNameTokens(fullNameInput.value);
-  if (!registration || inputNameTokens.length < 2) {
-    setResultsMessage("Invalid Registration Number or Full Name combination. Please verify your details.");
+  if (!registration || (fullNameInput.value.trim() && inputNameTokens.length < 2)) {
+    setResultsMessage("Check the registration number and enter your full name, unless your record is labeled Name missing.");
     registrationInput.focus();
     return;
   }

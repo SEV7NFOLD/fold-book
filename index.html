@@ -273,15 +273,15 @@
                   <input id="searchRegNo" name="registration" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="18" placeholder="25/SS/EC/071 or 071" aria-describedby="results-help results-status" required>
                 </div>
                 <div class="lookup-field">
-                  <label for="searchFullName">Full Name</label>
-                  <input id="searchFullName" name="fullName" type="text" autocomplete="name" placeholder="UMANAH NDIPMOUWEM SUNDAY" aria-describedby="results-help results-status" required>
+                  <label for="searchFullName">Full Name (only if listed on your result)</label>
+                  <input id="searchFullName" name="fullName" type="text" autocomplete="name" placeholder="Leave blank only if your record has no name" aria-describedby="results-help results-status">
                 </div>
               </div>
               <button class="results-submit" type="submit">
                 <span>Access My Results</span>
                 <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M4 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
               </button>
-              <span class="results-help" id="results-help">Use your full name and registration number as shown on your result record.</span>
+              <span class="results-help" id="results-help">Use your full name and registration number. Leave the name blank only if your result record is labeled “Name missing.”</span>
             </form>
           </div>
           <p class="results-status" id="results-status" role="status" aria-live="polite"></p>
