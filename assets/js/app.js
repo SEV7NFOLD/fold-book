@@ -4657,8 +4657,8 @@ resultsForm.addEventListener("submit", async (event) => {
 
   const registration = normalizeResultRegistration(registrationInput.value);
   const inputNameTokens = normalizeNameTokens(fullNameInput.value);
-  if (!registration || (fullNameInput.value.trim() && inputNameTokens.length < 2)) {
-    setResultsMessage("Check the registration number and enter your full name, unless your record is labeled Name missing.");
+  if (!registration || (fullNameInput.value.trim() && inputNameTokens.length < 1)) {
+    setResultsMessage("Check your registration number and enter at least one name as it appears on your result. Leave the name blank only if your record is labeled Name missing.");
     registrationInput.focus();
     return;
   }
