@@ -1273,6 +1273,14 @@ textarea.admin-material-control { min-height: 140px; resize: vertical; }
 .profile-summary { display: flex; align-items: center; gap: 12px; margin: 14px 0 18px; }
 .profile-summary > div { display: grid; gap: 4px; }
 .profile-summary > div span, .profile-help { color: var(--fb-color-muted); font-size: 12px; }
+.profile-level-settings { margin: 0 0 20px; padding: 15px; border: 1px solid var(--fb-color-border); border-radius: 14px; background: var(--fb-color-bg); }
+.profile-level-settings h3 { margin: 0 0 10px; }
+.profile-level-settings label { display: block; margin-bottom: 7px; font-size: 13px; font-weight: 700; }
+.profile-level-row { display: flex; gap: 8px; }
+.profile-level-row select { min-width: 0; flex: 1; padding: 10px 12px; border: 1px solid var(--fb-color-border); border-radius: 10px; background: var(--fb-color-surface); color: var(--fb-color-text); font: inherit; }
+.profile-level-row button { flex: 0 0 auto; }
+.profile-level-settings .profile-help { margin: 8px 0 0; }
+.profile-level-settings .profile-status { margin: 6px 0 0; }
 .profile-avatar-large { width: 64px; height: 64px; font-size: 21px; }
 .profile-upload-label { display: block; margin-bottom: 7px; font-size: 13px; font-weight: 700; }
 .profile-modal-card input[type="file"] { display: block; width: 100%; padding: 10px; border: 1px solid var(--fb-color-border); border-radius: 10px; background: var(--fb-color-bg); color: var(--fb-color-text); }
@@ -1295,6 +1303,8 @@ textarea.admin-material-control { min-height: 140px; resize: vertical; }
   .header-signout { min-height: 32px; padding: 4px 8px; font-size: 0; }
   .header-signout::before { content: "🚪"; font-size: 14px; }
   .profile-modal-card { padding: 20px 16px; }
+  .profile-level-row { flex-wrap: wrap; }
+  .profile-level-row select, .profile-level-row button { flex: 1 1 100%; }
 }
 
 @media (max-width: 768px) {

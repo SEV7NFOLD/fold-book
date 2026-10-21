@@ -609,6 +609,21 @@
           <span class="profile-avatar profile-avatar-large" id="profilePreviewAvatar" aria-hidden="true">S</span>
           <div><strong id="profileDisplayName">Student</strong><span id="profileDisplayLevel">100L</span></div>
         </div>
+        <section class="profile-level-settings" id="profileLevelSettings" aria-labelledby="profileLevelTitle">
+          <h3 id="profileLevelTitle">Academic level</h3>
+          <label for="profileLevelSelect">Update your current level</label>
+          <div class="profile-level-row">
+            <select id="profileLevelSelect" name="profileLevel">
+              <option value="100L">100 Level</option>
+              <option value="200L">200 Level</option>
+              <option value="300L">300 Level</option>
+              <option value="400L">400 Level</option>
+            </select>
+            <button class="card-secondary-button" id="saveProfileLevel" type="button">Save level</button>
+          </div>
+          <p class="profile-help" id="profileLevelLimit">You can change your level up to 6 times.</p>
+          <p class="profile-status" id="profileLevelStatus" role="status" aria-live="polite"></p>
+        </section>
         <label class="profile-upload-label" for="profilePhotoInput">Upload a profile photo</label>
         <input id="profilePhotoInput" type="file" accept="image/jpeg,image/png,image/webp">
         <p class="profile-help">Photos are resized before being saved to your browser and opted-in profile record.</p>

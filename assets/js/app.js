@@ -248,6 +248,21 @@ function applyStudentLevel(level) {
   currentStudentLevel = level;
   const levelStatus = document.querySelector("#chatLevel");
   if (levelStatus) levelStatus.textContent = `Selected level: ${currentStudentLevel}`;
+  const courses = availableStudyCourses();
+  if (currentCourse && !courses.some((course) => course.code === currentCourse) && courses[0]) {
+    studyProgress.courseCompleted[currentCourse] = [...studyProgress.completed];
+    currentCourse = courses[0].code;
+    studyProgress.course = currentCourse;
+    studyProgress.completed = [...(studyProgress.courseCompleted[currentCourse] || [])];
+    activeModules = studyProgress.studyPaths?.[currentCourse] || [];
+    chatCourseCode = currentCourse;
+    resetChatConversation();
+    syncCourseControls();
+    saveStudyProgress();
+    renderStudyPath();
+    updateStudySummary();
+    return;
+  }
   updateChatCourseDropdown(chatCourseCode);
   renderStudyCourseSwitcher(currentCourse);
 }
@@ -428,7 +443,7 @@ async function loadSyncedLearningProfile() {
         ? { ...serverModule, questions: localModule.questions }
         : serverModule;
     });
-    if (!code || !modules.length) return false;
+    if (!code || !modules.length || !availableStudyCourses().some((course) => course.code === code)) return false;
     studyProgress.learnerProfile = {
       goal: typeof profile.learner_goal === "string" ? profile.learner_goal : "",
       difficulties: typeof profile.difficulty_topics === "string" ? profile.difficulty_topics : "",
@@ -1657,6 +1672,22 @@ function renderProfile() {
   document.querySelector("#headerProfileName").textContent = name.split(/\s+/)[0];
   document.querySelector("#profileDisplayName").textContent = name;
   document.querySelector("#profileDisplayLevel").textContent = user?.level || S.level;
+  const levelSettings = document.querySelector("#profileLevelSettings");
+  const levelSelect = document.querySelector("#profileLevelSelect");
+  const levelSave = document.querySelector("#saveProfileLevel");
+  const levelStatus = document.querySelector("#profileLevelStatus");
+  const levelLimit = document.querySelector("#profileLevelLimit");
+  const levelChangeCount = Math.max(0, Math.min(6, Math.floor(Number(user?.levelChangeCount) || 0)));
+  const levelChangesRemaining = 6 - levelChangeCount;
+  if (levelSettings && levelSelect && levelSave && levelLimit) {
+    levelSettings.hidden = !currentStudent || isMasterAdmin;
+    levelSelect.value = user?.level || S.level;
+    levelSelect.disabled = levelChangesRemaining === 0;
+    levelSave.disabled = levelChangesRemaining === 0 || levelSelect.value === (user?.level || S.level);
+    levelLimit.textContent = levelChangesRemaining === 1
+      ? "1 of 6 level changes remaining. Your saved progress on this device is kept."
+      : `${levelChangesRemaining} of 6 level changes remaining. Your saved progress on this device is kept.`;
+  }
   renderUserAvatar(document.querySelector("#headerProfileAvatar"), user, "profile-avatar");
   renderUserAvatar(document.querySelector("#profilePreviewAvatar"), user, "profile-avatar profile-avatar-large");
   document.querySelectorAll("[data-avatar-lottie]").forEach((button) => {
@@ -1665,6 +1696,63 @@ function renderProfile() {
     renderLottieInto(button.querySelector(".profile-avatar-option-preview"), fileName, "✦", "Avatar animation preview", { loop: false });
   });
 }
+
+document.querySelector("#profileLevelSelect").addEventListener("change", () => {
+  const select = document.querySelector("#profileLevelSelect");
+  const button = document.querySelector("#saveProfileLevel");
+  const remaining = 6 - Math.max(0, Math.min(6, Math.floor(Number(S.user?.levelChangeCount) || 0)));
+  button.disabled = remaining === 0 || select.value === (S.user?.level || S.level);
+  document.querySelector("#profileLevelStatus").textContent = "";
+});
+
+document.querySelector("#saveProfileLevel").addEventListener("click", async () => {
+  if (!currentStudent || isMasterAdmin) return;
+  const select = document.querySelector("#profileLevelSelect");
+  const saveButton = document.querySelector("#saveProfileLevel");
+  const status = document.querySelector("#profileLevelStatus");
+  const level = select.value;
+  if (!/^(100L|200L|300L|400L)$/.test(level) || level === S.level) return;
+  saveButton.disabled = true;
+  select.disabled = true;
+  status.textContent = "Saving your level across FoldBook…";
+  try {
+    const response = await fetch("/api/student/auth", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ mode: "change-level", level }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.student) throw new Error(result.error || "Could not save your level.");
+    const student = result.student;
+    const previousLevel = S.level;
+    S.level = student.level;
+    if (S.user) {
+      S.user.level = student.level;
+      S.user.levelChangeCount = student.levelChangeCount;
+    }
+    currentStudent.level = student.level;
+    currentStudent.levelChangeCount = student.levelChangeCount;
+    S.student = currentStudent;
+    const catalogRefreshed = await refreshLiveCourseCatalog(student.level);
+    if (!catalogRefreshed) applyStudentLevel(student.level);
+    persistAuthSession();
+    renderProfile();
+    status.textContent = previousLevel === student.level
+      ? `You’re already set to ${student.level}; no change was used.`
+      : `Level updated to ${student.level}. Course choices are updated; saved progress on this device is kept.`;
+    if (previousLevel !== student.level) showNotice(`Your FoldBook level is now ${student.level}. Your saved progress on this device is kept.`);
+  } catch (error) {
+    console.error("Could not update the student level:", error);
+    status.textContent = error.message;
+    select.value = S.user?.level || S.level;
+  } finally {
+    renderProfile();
+    saveButton.disabled = select.value === (S.user?.level || S.level)
+      || 6 - Math.max(0, Math.min(6, Math.floor(Number(S.user?.levelChangeCount) || 0))) === 0;
+    select.disabled = 6 - Math.max(0, Math.min(6, Math.floor(Number(S.user?.levelChangeCount) || 0))) === 0;
+  }
+});
 
 function renderMascot(mood, containerId) {
   const container = document.getElementById(containerId);
@@ -4469,6 +4557,7 @@ function persistAuthSession() {
       registration: currentStudent.registration,
       phoneNumber: S.phoneNumber,
       level: S.level,
+      levelChangeCount: Number.isInteger(S.user.levelChangeCount) ? S.user.levelChangeCount : 0,
       avatarUrl: S.user.avatarUrl || "",
       avatarLottie: S.user.avatarLottie || "",
       referralCount: studyProgress.referralCount,
@@ -4482,6 +4571,7 @@ function persistAuthSession() {
 document.querySelector("#profileButton").addEventListener("click", () => {
   renderProfile();
   document.querySelector("#profileStatus").textContent = "";
+  document.querySelector("#profileLevelStatus").textContent = "";
   document.querySelector("#profileModal").hidden = false;
   document.querySelector("#closeProfile").focus();
 });
@@ -4708,7 +4798,7 @@ async function handleAuthSubmit(fullName, regNumber, phone, passcode, password) 
     if (!student || student.registration !== registration || !student.name) throw new Error("Student account details could not be loaded.");
     const studentLevel = student.level || level || detectStudentLevel(registration);
     switchStudyProfile(registration, { fresh: authMode === "signup" });
-    currentStudent = { name: student.name, registration };
+    currentStudent = { name: student.name, registration, level: studentLevel, levelChangeCount: student.levelChangeCount || 0 };
     isMasterAdmin = false;
     S.isAdmin = false;
     S.student = currentStudent;
@@ -4718,6 +4808,7 @@ async function handleAuthSubmit(fullName, regNumber, phone, passcode, password) 
       regNo: registration,
       phone: student.phoneNumber || "",
       level: studentLevel,
+      levelChangeCount: student.levelChangeCount || 0,
       ...savedProfile,
       referralCount: studyProgress.referralCount,
     };
@@ -4735,6 +4826,7 @@ async function handleAuthSubmit(fullName, regNumber, phone, passcode, password) 
       registration,
       phoneNumber: S.phoneNumber,
       level: S.level,
+      levelChangeCount: student.levelChangeCount || 0,
       avatarUrl: S.user.avatarUrl,
       avatarLottie: S.user.avatarLottie,
       referralCount: studyProgress.referralCount,
@@ -4788,7 +4880,12 @@ async function restoreAuthSession() {
       window.localStorage.removeItem(AUTH_SESSION_KEY);
       return false;
     }
-    currentStudent = { name: session.name, registration };
+    currentStudent = {
+      name: session.name,
+      registration,
+      level: session.level || detectStudentLevel(registration),
+      levelChangeCount: Number.isInteger(session.levelChangeCount) ? session.levelChangeCount : 0,
+    };
     S.student = currentStudent;
     switchStudyProfile(registration);
     S.level = session.level || detectStudentLevel(registration);
@@ -4798,6 +4895,7 @@ async function restoreAuthSession() {
       regNo: registration,
       phone: S.phoneNumber,
       level: S.level,
+      levelChangeCount: currentStudent.levelChangeCount,
       avatarUrl: typeof session.avatarUrl === "string"
         && /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(session.avatarUrl)
         && session.avatarUrl.length <= 140000 ? session.avatarUrl : "",

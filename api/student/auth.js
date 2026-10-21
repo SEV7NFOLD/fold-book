@@ -69,6 +69,7 @@ function encodeSession(student) {
     name: student.full_name,
     phoneNumber: student.phone_number,
     level: student.academic_level || "100L",
+    levelChangeCount: Number.isInteger(student.level_change_count) ? student.level_change_count : 0,
     expiresAt: Date.now() + SESSION_SECONDS * 1000,
   })).toString("base64url");
   const signature = createHmac("sha256", sessionSecret()).update(payload).digest("base64url");
@@ -138,7 +139,25 @@ module.exports = async function studentAuthHandler(request, response) {
 
   if (request.method === "GET") {
     const session = readSession(request);
-    return session ? sendJson(response, 200, { student: session }) : sendJson(response, 401, { error: "Please sign in again." });
+    if (!session) return sendJson(response, 401, { error: "Please sign in again." });
+    try {
+      const rows = await supabaseRequest(config, "student_accounts",
+        `?select=reg_number,full_name,phone_number,academic_level,level_change_count&reg_number=eq.${encodeURIComponent(session.registration)}&limit=1`);
+      const account = rows?.[0];
+      if (!account) return sendJson(response, 401, { error: "Please sign in again." });
+      response.setHeader("Set-Cookie", cookie(encodeSession(account), request));
+      return sendJson(response, 200, { student: {
+        role: "student",
+        registration: account.reg_number,
+        name: account.full_name,
+        phoneNumber: account.phone_number,
+        level: account.academic_level || "100L",
+        levelChangeCount: Number.isInteger(account.level_change_count) ? account.level_change_count : 0,
+      } });
+    } catch (error) {
+      console.error("Student session refresh failed:", error.message);
+      return sendJson(response, 503, { error: "Could not load your saved student profile. Please try again shortly." });
+    }
   }
   if (request.method === "DELETE") {
     response.setHeader("Set-Cookie", cookie("", request, 0));
@@ -157,6 +176,52 @@ module.exports = async function studentAuthHandler(request, response) {
     return sendJson(response, 400, { error: "Enter valid sign-in details." });
   }
   const mode = payload.mode;
+
+  if (mode === "change-level") {
+    const session = readSession(request);
+    const level = normalizeLevel(payload.level);
+    if (!session) return sendJson(response, 401, { error: "Please sign in again before updating your level." });
+    if (!level) return sendJson(response, 400, { error: "Choose a valid academic level." });
+    try {
+      const result = await supabaseRequest(config, "rpc/change_foldbook_student_level", "", {
+        method: "POST",
+        body: { p_reg_number: session.registration, p_academic_level: level },
+      });
+      if (!result || !normalizeLevel(result.level) || !Number.isInteger(result.levelChangeCount)) {
+        throw new Error("Student level update returned an invalid response.");
+      }
+      const account = {
+        reg_number: session.registration,
+        full_name: session.name,
+        phone_number: session.phoneNumber || "",
+        academic_level: result.level,
+        level_change_count: result.levelChangeCount,
+      };
+      response.setHeader("Set-Cookie", cookie(encodeSession(account), request));
+      return sendJson(response, 200, { student: {
+        role: "student",
+        registration: account.reg_number,
+        name: account.full_name,
+        phoneNumber: account.phone_number,
+        level: account.academic_level,
+        levelChangeCount: account.level_change_count,
+      } });
+    } catch (error) {
+      const message = String(error.message || "");
+      if (/level change limit reached/i.test(message)) {
+        return sendJson(response, 409, { error: "You have used all 6 academic level changes for this account." });
+      }
+      if (/invalid academic level/i.test(message)) {
+        return sendJson(response, 400, { error: "Choose a valid academic level." });
+      }
+      if (/student account not found/i.test(message)) {
+        return sendJson(response, 404, { error: "Your student account could not be found." });
+      }
+      console.error("Student level update failed:", message);
+      return sendJson(response, 503, { error: "Could not save your level right now. Please try again shortly." });
+    }
+  }
+
   const registration = normalizeRegistration(payload.registration);
   const password = typeof payload.password === "string" ? payload.password : "";
   if (!registration || password.length < 8 || password.length > 128) {
@@ -188,14 +253,14 @@ module.exports = async function studentAuthHandler(request, response) {
       });
       response.setHeader("Set-Cookie", cookie(encodeSession(account), request));
       return sendJson(response, 200, {
-        student: { role: "student", registration, name: fullName, phoneNumber: phone, level },
+        student: { role: "student", registration, name: fullName, phoneNumber: phone, level, levelChangeCount: 0 },
         contactSaved: true,
       });
     }
 
     if (mode !== "login") return sendJson(response, 400, { error: "Choose create account or log in." });
     const found = await supabaseRequest(config, "student_accounts",
-      `?select=reg_number,full_name,phone_number,academic_level,password_salt,password_hash&reg_number=eq.${encodeURIComponent(registration)}&limit=1`);
+      `?select=reg_number,full_name,phone_number,academic_level,level_change_count,password_salt,password_hash&reg_number=eq.${encodeURIComponent(registration)}&limit=1`);
     account = found?.[0];
     if (!account) return sendJson(response, 401, { error: "No account found for that matric number. Choose Create account first." });
     const candidate = await derivePassword(password, account.password_salt);
@@ -205,7 +270,7 @@ module.exports = async function studentAuthHandler(request, response) {
     }
     response.setHeader("Set-Cookie", cookie(encodeSession(account), request));
     return sendJson(response, 200, {
-      student: { role: "student", registration: account.reg_number, name: account.full_name, phoneNumber: account.phone_number, level: account.academic_level || "100L" },
+      student: { role: "student", registration: account.reg_number, name: account.full_name, phoneNumber: account.phone_number, level: account.academic_level || "100L", levelChangeCount: Number.isInteger(account.level_change_count) ? account.level_change_count : 0 },
       contactSaved: true,
     });
   } catch (error) {
