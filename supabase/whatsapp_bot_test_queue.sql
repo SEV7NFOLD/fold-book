@@ -6,19 +6,23 @@ create table if not exists public.whatsapp_bot_test_queue (
   status text not null default 'queued' check (status in ('queued', 'processing', 'sent', 'failed')),
   detail text,
   requested_at timestamptz not null default now(),
+  processing_at timestamptz,
   processed_at timestamptz
 );
 
+alter table public.whatsapp_bot_test_queue
+  add column if not exists processing_at timestamptz;
+
 create index if not exists whatsapp_bot_test_queue_pending_idx
   on public.whatsapp_bot_test_queue (requested_at, id)
-  where status = 'queued';
+  where status in ('queued', 'processing');
 
 alter table public.whatsapp_bot_test_queue enable row level security;
 revoke all on public.whatsapp_bot_test_queue from public, anon, authenticated;
 grant all on public.whatsapp_bot_test_queue to service_role;
 grant usage, select on sequence public.whatsapp_bot_test_queue_id_seq to service_role;
 
--- Claim one row atomically so multiple worker instances cannot send the same test twice.
+-- Atomically claim queued jobs and recover one abandoned by a worker restart.
 create or replace function public.claim_whatsapp_bot_test()
 returns setof public.whatsapp_bot_test_queue
 language sql
@@ -29,12 +33,13 @@ as $$
     select id
     from public.whatsapp_bot_test_queue
     where status = 'queued'
+       or (status = 'processing' and processing_at < now() - interval '5 minutes')
     order by requested_at, id
     for update skip locked
     limit 1
   )
   update public.whatsapp_bot_test_queue as queued
-  set status = 'processing'
+  set status = 'processing', processing_at = now()
   from next_job
   where queued.id = next_job.id
   returning queued.*;

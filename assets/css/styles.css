@@ -1266,6 +1266,28 @@ textarea.admin-material-control { min-height: 140px; resize: vertical; }
 .learning-path-privacy, .learning-path-source { color: var(--fb-color-muted); font-size: 12px; line-height: 1.5; }
 .learning-path-setup-actions { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; }
 .course-switcher { flex-wrap: wrap; }
+.course-switcher { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; color: var(--fb-color-muted); font-size: 12px; }
+.course-switcher[hidden] { display: none; }
+.course-switcher select { max-width: min(100%, 360px); padding: 9px 34px 9px 12px; border: 1px solid var(--fb-color-border); border-radius: 11px; background: var(--fb-color-surface); color: var(--fb-color-text); font: inherit; }
+.profile-courses { margin: 20px 0; padding: 15px; border: 1px solid var(--fb-color-border); border-radius: 14px; background: var(--fb-color-bg); }
+.profile-courses h3 { margin: 0 0 5px; }
+.profile-courses > .profile-help { margin: 0 0 12px; line-height: 1.5; }
+.profile-semester { border-top: 1px solid var(--fb-color-border); }
+.profile-semester summary { display: flex; min-height: 44px; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; font-size: 13px; font-weight: 750; list-style: none; }
+.profile-semester summary::-webkit-details-marker { display: none; }
+.profile-semester summary::after { content: "+"; color: var(--fb-color-lime); font-size: 18px; }
+.profile-semester[open] summary::after { content: "−"; }
+.profile-semester-count { margin-left: auto; color: var(--fb-color-muted); font-size: 11px; font-weight: 500; }
+.profile-course-list { display: grid; gap: 7px; padding: 0 0 12px; }
+.profile-course-item { display: flex; justify-content: space-between; gap: 12px; padding: 9px 10px; border: 1px solid var(--fb-color-border); border-radius: 9px; background: var(--fb-color-surface); }
+.profile-course-item strong { flex: 0 0 auto; color: var(--fb-color-lime); font-family: var(--fb-font-mono, monospace); font-size: 11px; }
+.profile-course-item span { color: var(--fb-color-muted); font-size: 11px; text-align: right; }
+.whatsapp-test-send { display: grid; grid-template-columns: minmax(220px, 1fr) auto; align-items: end; gap: 8px 12px; margin: 14px 0; padding: 14px; border: 1px solid var(--fb-color-border); border-radius: 14px; background: var(--fb-color-surface); }
+.whatsapp-test-send label { display: grid; gap: 7px; color: var(--fb-color-text); font-size: 12px; }
+.whatsapp-test-send input { width: 100%; min-height: 42px; padding: 10px 12px; border: 1px solid var(--fb-color-border); border-radius: 10px; background: var(--fb-color-bg); color: var(--fb-color-text); }
+.whatsapp-test-send small { grid-column: 1 / -1; color: var(--fb-color-muted); font-size: 11px; line-height: 1.5; }
+@media (max-width: 560px) { .whatsapp-test-send { grid-template-columns: 1fr; } .whatsapp-test-send small { grid-column: auto; } }
+.path-guide-step > div + div { margin-top: 12px; }
 .learning-path-empty { max-width: 520px; margin: 18px auto; color: var(--fb-color-muted); text-align: center; line-height: 1.6; }
 .lesson-body { white-space: pre-line; line-height: 1.7; }
 .lesson-activity { margin: 12px 0 18px; padding: 16px; border: 1px solid var(--fb-color-border); border-radius: 14px; background: var(--fb-color-bg); }

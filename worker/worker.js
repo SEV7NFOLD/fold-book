@@ -25,6 +25,17 @@ const TEST_REMINDER_ARTWORK = ["target.png", "trophy.png"].map((file) => ({
   file,
   image: fs.readFileSync(path.join(__dirname, "..", "assets", "brand", file)),
 }));
+const REMINDER_ANIMATIONS = {
+  morning: ["morning-wave.mp4", "study-quest.mp4"],
+  evening: ["evening-winddown.mp4"],
+};
+const REMINDER_ANIMATION_MEDIA = Object.fromEntries(Object.entries(REMINDER_ANIMATIONS).map(([session, files]) => [
+  session,
+  files.flatMap((file) => {
+    const mediaPath = path.join(__dirname, "..", "assets", "whatsapp", file);
+    return fs.existsSync(mediaPath) ? [{ video: fs.readFileSync(mediaPath) }] : [];
+  }),
+]));
 const supabase = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
   ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -47,8 +58,8 @@ let reminderSettings = {
   evening_time: "19:00",
   min_interval_hours: DEFAULT_NUDGE_INTERVAL_HOURS,
   audience: "all",
-  morning_message: "☀️ Good morning, {{name}}! {{streak}}. Your next mini-quest: {{activity}} on {{course}} — {{focus}}. One small step toward {{goal}}.\n\nOpen FoldBook → {{link}}\nReply STOP any time to pause reminders.",
-  evening_message: "🌙 Evening checkpoint, {{name}}! {{streak}}. Take one small step: {{activity}} on {{focus}} for {{course}}. You’re moving toward {{goal}}.\n\nOpen FoldBook → {{link}}\nReply STOP any time to pause reminders.",
+  morning_message: "☀️ Good morning, {{name}}! {{streak}}. Your next mini-quest: {{activity}} on {{course}} — {{focus}}. One small step toward {{goal}}.\n\nOpen FoldBook → {{link}}",
+  evening_message: "🌙 Evening checkpoint, {{name}}! {{streak}}. Take one small step: {{activity}} on {{focus}} for {{course}}. You’re moving toward {{goal}}.\n\nOpen FoldBook → {{link}}",
 };
 
 function validateConfiguration() {
@@ -127,7 +138,7 @@ function generateNudgeMessage(name, streak, courseCode, session = "morning") {
     `🐱 Your morning study streak is calling, ${greeting}! Pop into ${course} for one quick lesson and collect a little win before the day gets busy.`,
   ];
   const message = messages[Math.floor(Math.random() * messages.length)];
-  const footer = `\n\nOpen FoldBook → ${FOLDBOOK_URL}\nReply STOP any time to pause reminders.`;
+  const footer = `\n\nOpen FoldBook → ${FOLDBOOK_URL}`;
   return `${message}${footer}`;
 }
 
@@ -136,6 +147,7 @@ function delay(milliseconds) {
 }
 
 function renderAdminMessage(template, name, streak, courseCode, profile, session = "morning") {
+  const cleanTemplate = String(template || "").replace(/\n?\s*Reply\s+(?:STOP|UNSUBSCRIBE)\b[^\n]*/gi, "").trim();
   const firstName = typeof name === "string" ? name.trim().split(/\s+/)[0] : "";
   const streakDays = Number.isInteger(streak) && streak > 0 ? streak : 0;
   const streakText = streakDays
@@ -163,19 +175,44 @@ function renderAdminMessage(template, name, streak, courseCode, profile, session
       ? profile.learner_goal.trim().slice(0, 100) : "your learning goal",
     link: FOLDBOOK_URL,
   };
-  const rendered = template.replace(/\{\{(name|streak|course|link|focus|activity|goal)\}\}/g, (_, key) => values[key]);
-  if (focus && !template.includes("{{focus}}")) {
-    return `${rendered}\n\nYour next path step: ${activityLabel} — ${focus.title}. One small step toward ${values.goal}.`;
-  }
-  return rendered;
+  const rendered = cleanTemplate.replace(/\{\{(name|streak|course|link|focus|activity|goal)\}\}/g, (_, key) => values[key]);
+  const personalized = focus && !cleanTemplate.includes("{{focus}}") && !cleanTemplate.includes("{{activity}}")
+    ? `${rendered}\n\nNext in your path: ${activityLabel} — ${focus.title}.`
+    : rendered;
+  return personalized.includes(FOLDBOOK_URL)
+    ? personalized
+    : `${personalized}\n\nOpen FoldBook → ${FOLDBOOK_URL}`;
 }
 
 function reminderMedia(phoneNumber, session, caption) {
   const day = new Date().toLocaleDateString("en-CA", { timeZone: "Africa/Lagos" });
   const seed = `${phoneNumber}:${day}:${session}`;
   const hash = [...seed].reduce((total, character) => total + character.charCodeAt(0), 0);
+  const animations = REMINDER_ANIMATION_MEDIA[session] || [];
+  if (animations.length) {
+    const animation = animations[hash % animations.length];
+    return { video: animation.video, gifPlayback: true, mimetype: "video/mp4", caption };
+  }
   const artwork = TEST_REMINDER_ARTWORK[hash % TEST_REMINDER_ARTWORK.length];
   return { image: artwork.image, caption };
+}
+
+async function sendReminderMedia(jid, phoneNumber, session, caption) {
+  try {
+    await socket.sendMessage(jid, reminderMedia(phoneNumber, session, caption));
+    return "animated";
+  } catch (animationError) {
+    console.warn("Could not send animated reminder media; falling back to static artwork:", animationError.message);
+  }
+  try {
+    const artwork = TEST_REMINDER_ARTWORK[0];
+    await socket.sendMessage(jid, { image: artwork.image, caption });
+    return "image";
+  } catch (imageError) {
+    console.warn("Could not send reminder artwork; falling back to text:", imageError.message);
+    await socket.sendMessage(jid, { text: caption });
+    return "text";
+  }
 }
 
 async function loadLearningProfiles(optIns) {
@@ -212,11 +249,11 @@ async function updateWorkerHeartbeat(isConnected) {
 async function dispatchDailyNudges(session = "morning") {
   if (dispatchInProgress) {
     console.warn("Skipping nudge run because a previous dispatch is still in progress.");
-    return;
+    return false;
   }
   if (!connected || !socket) {
     console.warn("Skipping nudge run because WhatsApp is not connected.");
-    return;
+    return false;
   }
   dispatchInProgress = true;
   const cutoff = new Date(Date.now() - reminderSettings.min_interval_hours * 60 * 60 * 1000).toISOString();
@@ -266,7 +303,7 @@ async function dispatchDailyNudges(session = "morning") {
               user.full_name, user.streak_count, user.course_code,
               profiles.get(user.reg_number), session,
             );
-          await socket.sendMessage(jid, reminderMedia(user.phone_number, session, message));
+          await sendReminderMedia(jid, user.phone_number, session, message);
           recipientCount += 1;
           const { error: updateError } = await supabase
             .from("whatsapp_optins")
@@ -297,6 +334,7 @@ async function dispatchDailyNudges(session = "morning") {
     if (logError) console.warn("Could not log reminder delivery:", logError.message);
     dispatchInProgress = false;
   }
+  return failures === 0 && connected;
 }
 
 async function processPendingTestReminder() {
@@ -317,7 +355,7 @@ async function processPendingTestReminder() {
     if (!job) return;
 
     let resultStatus = "sent";
-    let detail = "Test reminder sent with FoldBook artwork.";
+    let detail = "Test reminder sent with FoldBook animated media.";
     try {
       await refreshReminderSettings();
       const { data: user, error: userError } = await supabase.from("whatsapp_optins")
@@ -331,7 +369,8 @@ async function processPendingTestReminder() {
       const template = job.session === "evening" ? reminderSettings.evening_message : reminderSettings.morning_message;
       const message = renderAdminMessage(template, user.full_name, user.streak_count, user.course_code,
         profiles.get(user.reg_number), job.session);
-      await socket.sendMessage(`${user.phone_number}@s.whatsapp.net`, reminderMedia(user.phone_number, job.session, message));
+      const mediaKind = await sendReminderMedia(`${user.phone_number}@s.whatsapp.net`, user.phone_number, job.session, message);
+      detail = `Test reminder sent with FoldBook ${mediaKind} media.`;
     } catch (error) {
       resultStatus = "failed";
       detail = error.message || "WhatsApp could not send the test reminder.";
@@ -346,7 +385,7 @@ async function processPendingTestReminder() {
       session: "test",
       status: resultStatus,
       recipient_count: resultStatus === "sent" ? 1 : 0,
-      detail: resultStatus === "sent" ? "Test reminder sent with varied FoldBook artwork." : detail.slice(0, 500),
+      detail: resultStatus === "sent" ? detail : detail.slice(0, 500),
     });
     if (logError) console.warn("Could not log the test reminder:", logError.message);
   } catch (error) {
@@ -373,12 +412,28 @@ async function runConfiguredReminderCheck() {
     const lagosDate = new Date(new Date().toLocaleString("en-US", { timeZone: "Africa/Lagos" }));
     const currentMinute = lagosDate.getHours() * 60 + lagosDate.getMinutes();
     const session = [["morning", reminderSettings.morning_time], ["evening", reminderSettings.evening_time]]
-      .find(([, time]) => minutesOfDay(time) === currentMinute)?.[0];
+      .find(([, time]) => {
+        const minutesLate = currentMinute - minutesOfDay(time);
+        return minutesLate >= 0 && minutesLate <= 180;
+      })?.[0];
     if (session && reminderSettings.enabled) {
       const runKey = `${lagosDate.getFullYear()}-${lagosDate.getMonth()}-${lagosDate.getDate()}:${session}`;
       if (!completedScheduleRuns.has(runKey)) {
-        completedScheduleRuns.add(runKey);
-        await dispatchDailyNudges(session);
+        if (!connected || !socket) {
+          const disconnectedKey = `${runKey}:disconnected`;
+          if (!completedScheduleRuns.has(disconnectedKey)) {
+            const { error } = await supabase.from("whatsapp_bot_delivery_log").insert({
+              session,
+              status: "failed",
+              recipient_count: 0,
+              detail: "WhatsApp was disconnected at the scheduled time. The worker will retry during the next 3 hours.",
+            });
+            if (error) console.warn("Could not record the disconnected reminder attempt:", error.message);
+            completedScheduleRuns.add(disconnectedKey);
+          }
+          return;
+        }
+        if (await dispatchDailyNudges(session)) completedScheduleRuns.add(runKey);
       }
     }
   } catch (error) {

@@ -40,15 +40,6 @@ function coursesForLevel(level) {
   return UNIUYO_COURSE_CATALOG[level] || UNIUYO_COURSE_CATALOG["100L"];
 }
 
-function isGeneralTopicCode(code) {
-  return /^GEN\s\d{4}$/.test(String(code || ""));
-}
-
-function levelForCourseCode(code) {
-  const digits = String(code || "").match(/\d{3,4}/)?.[0] || "";
-  return digits ? `${digits[0]}00L` : "";
-}
-
 function updateAdminCourseDropdown() {
   const levelSelect = document.querySelector("#adminLevelSelect");
   const courseSelect = document.querySelector("#adminCourseSelect");
@@ -164,7 +155,7 @@ const DEFAULT_STUDY_PROGRESS = {
   quizAttempts: [],
   studyPaths: {},
   studyPathSources: {},
-  courseTitles: {},
+  studyPathTitles: {},
   learnerProfile: null,
   onboardingComplete: false,
 };
@@ -200,6 +191,11 @@ function updateChatCourseDropdown(preferredCourse = chatCourseCode) {
   for (const custom of studentCustomCourses) {
     if (!courses.some((course) => course.code === custom.code)) courses.push(custom);
   }
+  for (const [code, modules] of Object.entries(studyProgress.studyPaths || {})) {
+    if (modules.length && !courses.some((course) => course.code === code)) {
+      courses.push({ code, title: studyProgress.studyPathTitles?.[code] || code });
+    }
+  }
   courseSelect.replaceChildren(...courses.map((course) => {
     const option = document.createElement("option");
     option.value = course.code;
@@ -217,38 +213,72 @@ function availableStudyCourses() {
   for (const custom of studentCustomCourses) {
     if (!courses.some((course) => course.code === custom.code)) courses.push(custom);
   }
-  for (const [code, title] of Object.entries(studyProgress.courseTitles || {})) {
-    if (!isGeneralTopicCode(code)) continue;
-    if (!courses.some((course) => course.code === code)) courses.push({ code, title });
+  for (const [code, modules] of Object.entries(studyProgress.studyPaths || {})) {
+    if (modules.length && !courses.some((course) => course.code === code)) {
+      courses.push({ code, title: studyProgress.studyPathTitles?.[code] || code });
+    }
   }
   return courses;
 }
 
 function renderStudyCourseSwitcher(preferredCourse = currentCourse) {
   const switcher = document.querySelector("#courseSwitcher");
-  if (!switcher) return;
-  const courses = availableStudyCourses();
-  if (preferredCourse && !courses.some((course) => course.code === preferredCourse)) {
-    courses.unshift({ code: preferredCourse, title: preferredCourse });
-  }
-  switcher.replaceChildren(...courses.map((course) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = `course-choice cs${course.code === currentCourse ? " is-selected" : ""}`;
-    button.dataset.course = course.code;
-    button.setAttribute("aria-pressed", String(course.code === currentCourse));
-    const code = document.createElement("strong");
-    const title = document.createElement("small");
-    code.textContent = course.code;
-    title.textContent = course.title || "Course";
-    button.append(code, title);
-    return button;
+  const select = document.querySelector("#savedPathSelect");
+  if (!switcher || !select) return;
+  const paths = Object.keys(studyProgress.studyPaths || {})
+    .filter((code) => studyProgress.studyPaths[code]?.length)
+    .map((code) => ({ code, title: studyProgress.studyPathTitles?.[code] || courseTitleFor(code) }))
+    .sort((a, b) => a.title.localeCompare(b.title));
+  switcher.hidden = paths.length === 0;
+  select.replaceChildren(...paths.map((path) => {
+    const option = document.createElement("option");
+    option.value = path.code;
+    option.textContent = `${path.code} · ${path.title}`;
+    return option;
   }));
+  if (paths.some((path) => path.code === preferredCourse)) select.value = preferredCourse;
 }
 
 function courseTitleFor(courseCode) {
-  return studyProgress.courseTitles?.[courseCode]
-    || availableStudyCourses().find((course) => course.code === courseCode)?.title || courseCode;
+  const savedTitle = studyProgress?.studyPathTitles?.[courseCode];
+  if (savedTitle) return savedTitle;
+  return availableStudyCourses().find((course) => course.code === courseCode)?.title || courseCode;
+}
+
+function courseSemester(courseCode) {
+  const digits = String(courseCode || "").match(/(\d{3,4})[A-Z]?$/)?.[1] || "";
+  if (digits[1] === "1") return "first";
+  if (digits[1] === "2") return "second";
+  return "other";
+}
+
+function renderProfileCourses() {
+  const groups = {
+    first: ["#firstSemesterCourses", "#firstSemesterCount"],
+    second: ["#secondSemesterCourses", "#secondSemesterCount"],
+    other: ["#otherSemesterCourses", "#otherSemesterCount"],
+  };
+  const courses = [...coursesForLevel(S.user?.level || currentStudentLevel)]
+    .sort((a, b) => a.code.localeCompare(b.code));
+  const grouped = { first: [], second: [], other: [] };
+  for (const course of courses) grouped[courseSemester(course.code)].push(course);
+  for (const [semester, [listSelector, countSelector]] of Object.entries(groups)) {
+    const list = document.querySelector(listSelector);
+    const count = document.querySelector(countSelector);
+    if (!list || !count) continue;
+    count.textContent = `${grouped[semester].length} courses`;
+    list.replaceChildren(...grouped[semester].map((course) => {
+      const row = document.createElement("div");
+      row.className = "profile-course-item";
+      const code = document.createElement("strong");
+      const title = document.createElement("span");
+      code.textContent = course.code;
+      title.textContent = course.title || "Course title pending";
+      row.append(code, title);
+      return row;
+    }));
+  }
+  document.querySelector("#otherSemesterGroup").hidden = grouped.other.length === 0;
 }
 
 function setStudentRegistration(registration) {
@@ -280,7 +310,6 @@ function applyStudentLevel(level) {
   }
   updateChatCourseDropdown(chatCourseCode);
   renderStudyCourseSwitcher(currentCourse);
-  renderProfileCourses();
 }
 
 async function refreshLiveCourseCatalog(preferredLevel = currentStudentLevel) {
@@ -297,6 +326,7 @@ async function refreshLiveCourseCatalog(preferredLevel = currentStudentLevel) {
       })),
     ]));
     applyStudentLevel(preferredLevel);
+    renderProfileCourses();
     return true;
   } catch (error) {
     console.warn("Live course catalog refresh failed:", error.message);
@@ -316,7 +346,7 @@ function freshStudyProgress() {
     activityDays: [],
     studyPaths: {},
     studyPathSources: {},
-    courseTitles: {},
+    studyPathTitles: {},
     learnerProfile: null,
     onboardingComplete: false,
   };
@@ -358,9 +388,9 @@ function loadStudyProgress(storageKey = STUDY_PROGRESS_KEY) {
       course,
       studyPaths,
       studyPathSources: parsed.studyPathSources && typeof parsed.studyPathSources === "object" ? parsed.studyPathSources : {},
-      courseTitles: parsed.courseTitles && typeof parsed.courseTitles === "object"
-        ? Object.fromEntries(Object.entries(parsed.courseTitles).filter(([code, title]) => COURSE_CODE_PATTERN.test(code) && typeof title === "string").slice(0, 100))
-        : {},
+      studyPathTitles: Object.fromEntries(Object.entries(parsed.studyPathTitles && typeof parsed.studyPathTitles === "object" ? parsed.studyPathTitles : {})
+        .filter(([code, title]) => COURSE_CODE_PATTERN.test(code) && typeof title === "string" && title.trim())
+        .map(([code, title]) => [code, title.trim().slice(0, 120)])),
       learnerProfile: parsed.learnerProfile && typeof parsed.learnerProfile === "object" ? parsed.learnerProfile : null,
       onboardingComplete: parsed.onboardingComplete === true,
       activityDays: Array.isArray(parsed.activityDays) ? parsed.activityDays.filter((day) => /^\d{4}-\d{2}-\d{2}$/.test(day)) : [],
@@ -463,16 +493,7 @@ async function loadSyncedLearningProfile() {
         ? { ...serverModule, questions: localModule.questions }
         : serverModule;
     });
-    if (!code || !modules.length) return false;
-    const savedTitle = typeof profile.course_title === "string" ? profile.course_title.trim().slice(0, 100) : "";
-    if (savedTitle) {
-      studyProgress.courseTitles[code] = savedTitle;
-      if (!coursesForLevel(currentStudentLevel).some((course) => course.code === code)
-        && !studentCustomCourses.some((course) => course.code === code)) {
-        studentCustomCourses.push({ code, title: savedTitle });
-      }
-    }
-    if (!availableStudyCourses().some((course) => course.code === code)) return false;
+    if (!code || !modules.length || !/^GEN\s\d{3}$/.test(code) && !availableStudyCourses().some((course) => course.code === code)) return false;
     studyProgress.learnerProfile = {
       goal: typeof profile.learner_goal === "string" ? profile.learner_goal : "",
       difficulties: typeof profile.difficulty_topics === "string" ? profile.difficulty_topics : "",
@@ -482,6 +503,7 @@ async function loadSyncedLearningProfile() {
     studyProgress.studyPace = studyProgress.learnerProfile.pace;
     studyProgress.studyPaths[code] = modules;
     studyProgress.studyPathSources[code] = typeof profile.path_source === "string" ? profile.path_source : "";
+    if (typeof profile.course_title === "string" && profile.course_title.trim()) studyProgress.studyPathTitles[code] = profile.course_title.trim();
     studyProgress.courseCompleted[code] = Array.isArray(profile.completed_module_ids)
       ? profile.completed_module_ids.filter((id) => modules.some((module) => module.id === id)) : [];
     if (profile.module_attempts && typeof profile.module_attempts === "object") {
@@ -1361,7 +1383,7 @@ function activateTab(tab) {
 
 const studentTourSteps = [
   { title: "Welcome to your study space", copy: "I’m Dr. Eco. Let’s take a quick look around so you know where to learn, ask questions and track your progress.", target: "#courseTitle", tab: "home", progress: "WELCOME · 1 OF 5" },
-  { title: "Your learning path", copy: "Choose a course, then work through its short modules. Each lesson unlocks the next and adds to your course progress.", target: "#courseSwitcher", tab: "home", progress: "YOUR PATH · 2 OF 5" },
+  { title: "Your learning path", copy: "Build a route for a course or a broader topic, then work through short lessons and practice at your pace.", target: "#personalizePathButton", tab: "home", progress: "YOUR PATH · 2 OF 5" },
   { title: "Ask Dr. Eco", copy: "Open chat whenever you need an explanation, quiz or help with a course question. You can also talk with Dr. Eco using voice.", target: "#navChat", tab: "chat", progress: "STUDY TOGETHER · 3 OF 5" },
   { title: "Bring your own materials", copy: "Use the camera to photograph a question, or the paperclip to attach a PDF or saved photo. Choose a course and save it for Dr. Eco to use.", target: "#cameraUploadButton", tab: "chat", progress: "YOUR MATERIALS · 4 OF 5" },
   { title: "Make it feel like your tutor", copy: "Set Dr. Eco’s tone and explanation pace in chat settings. Your profile also keeps your study identity and preferences on this device.", target: "#chatSettingsToggle", tab: "chat", progress: "MAKE IT YOURS · 5 OF 5" },
@@ -1558,10 +1580,7 @@ function syncCourseControls() {
   renderStudyCourseSwitcher(currentCourse);
 }
 
-document.querySelector("#courseSwitcher")?.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-course]");
-  if (button) setCourse(button.dataset.course);
-});
+document.querySelector("#savedPathSelect").addEventListener("change", (event) => setCourse(event.currentTarget.value));
 document.querySelector("#chatCourse").addEventListener("change", (event) => {
   chatCourseCode = event.currentTarget.value;
   if (chatCourseCode !== currentCourse) setCourse(chatCourseCode);
@@ -1692,71 +1711,6 @@ function renderUserAvatar(container, user, className = "") {
     renderLottieInto(container, user.avatarLottie, fallback.textContent || "S", "Profile character");
   } else {
     container.append(fallback);
-  }
-}
-
-function semesterForCourse(courseCode) {
-  if (isGeneralTopicCode(courseCode)) return "other";
-  const digits = String(courseCode || "").match(/\d{3,4}/)?.[0] || "";
-  if (digits[1] === "1") return "first";
-  if (digits[1] === "2") return "second";
-  return "other";
-}
-
-function renderProfileCourses() {
-  const container = document.querySelector("#profileCourseList");
-  const section = document.querySelector("#profileCoursesSection");
-  if (!container || !section) return;
-  section.hidden = !currentStudent || isMasterAdmin;
-  container.replaceChildren();
-  const groups = [
-    { id: "first", title: "First semester" },
-    { id: "second", title: "Second semester" },
-    { id: "other", title: "Other courses and topics" },
-  ];
-  const courses = [
-    ...coursesForLevel(currentStudentLevel),
-    ...studentCustomCourses.filter((course) => levelForCourseCode(course.code) === currentStudentLevel),
-    ...Object.entries(studyProgress.courseTitles || {})
-      .filter(([code]) => isGeneralTopicCode(code))
-      .map(([code, title]) => ({ code, title })),
-  ].filter((course, index, all) => all.findIndex((item) => item.code === course.code) === index);
-  for (const group of groups) {
-    const items = courses.filter((course) => semesterForCourse(course.code) === group.id);
-    const details = document.createElement("details");
-    details.className = "profile-course-group";
-    details.open = group.id === "first";
-    const summary = document.createElement("summary");
-    summary.textContent = `${group.title} · ${items.length}`;
-    details.append(summary);
-    if (items.length) {
-      const grid = document.createElement("div");
-      grid.className = "profile-course-grid";
-      for (const course of items) {
-        const row = document.createElement("div");
-        row.className = "profile-course-row";
-        const label = document.createElement("span");
-        const code = document.createElement("strong");
-        const title = document.createElement("small");
-        code.textContent = course.code;
-        title.textContent = course.title || "Course title pending";
-        label.append(code, title);
-        const action = document.createElement("button");
-        action.type = "button";
-        action.className = "card-secondary-button";
-        action.dataset.profileCourse = course.code;
-        action.textContent = studyProgress.studyPaths?.[course.code]?.length ? "Open path" : "Build path";
-        row.append(label, action);
-        grid.append(row);
-      }
-      details.append(grid);
-    } else {
-      const empty = document.createElement("p");
-      empty.className = "profile-course-empty";
-      empty.textContent = "No courses are listed in this semester yet.";
-      details.append(empty);
-    }
-    container.append(details);
   }
 }
 
@@ -2391,14 +2345,14 @@ function parsePersonalizedStudyPath(text, courseCode) {
   return modules.map((module, index) => ({ ...module, id: `${courseCode.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${version}-${index + 1}` }));
 }
 
-async function generatePersonalizedStudyPath(courseCode, profile) {
+async function generatePersonalizedStudyPath(courseCode, profile, displayTitle = courseTitleFor(courseCode)) {
   let courseNotes = "";
   try {
     courseNotes = await retrieveCourseMaterialContext(
       courseCode,
       currentStudentLevel,
       8,
-      `${courseCode} ${profile.goal} ${profile.difficulties} ${profile.note}`.trim(),
+      `${courseCode} ${displayTitle} ${profile.goal} ${profile.difficulties} ${profile.note}`.trim(),
     );
   } catch (error) {
     console.info("No indexed course notes for personalized path:", error.message);
@@ -2420,7 +2374,7 @@ async function generatePersonalizedStudyPath(courseCode, profile) {
   };
   courseNotes = trimContext(courseNotes);
   studentNotes = trimContext(studentNotes);
-  const prompt = `Build a unique seven-step learning journey for this ${currentStudentLevel} student studying ${courseCode} (${courseTitleFor(courseCode)}).
+  const prompt = `Build a unique seven-step learning journey for this ${currentStudentLevel} student studying ${courseCode} (${displayTitle}).
 Their goal: ${profile.goal}.
 Topics they find difficult: ${profile.difficulties || "They are not sure yet; gently diagnose through examples."}
 Anything else they shared: ${profile.note || "Nothing else shared."}
@@ -2463,19 +2417,32 @@ STUDENT'S OWN MATERIALS:\n${studentNotes || "(No personal materials saved for th
 function fillLearningPathCourseOptions(selectedCourse = currentCourse) {
   const select = document.querySelector("#learningPathCourse");
   if (!select) return;
-  const courses = availableStudyCourses();
-  select.replaceChildren(...courses.map((course) => {
-    const option = document.createElement("option");
-    option.value = course.code;
-    option.textContent = `${course.code} · ${course.title || "Course"}`;
-    option.selected = course.code === selectedCourse;
-    return option;
-  }));
+  const courses = [...coursesForLevel(currentStudentLevel)].sort((a, b) => a.code.localeCompare(b.code));
+  const first = courses.filter((course) => courseSemester(course.code) === "first");
+  const second = courses.filter((course) => courseSemester(course.code) === "second");
+  const other = courses.filter((course) => courseSemester(course.code) === "other");
+  const groups = [["First semester", first], ["Second semester", second], ["Semester to confirm", other]]
+    .filter(([, group]) => group.length)
+    .map(([label, group]) => {
+      const optgroup = document.createElement("optgroup");
+      optgroup.label = label;
+      optgroup.append(...group.map((course) => {
+        const option = document.createElement("option");
+        option.value = course.code;
+        option.textContent = `${course.code} · ${course.title || "Course"}`;
+        option.selected = course.code === selectedCourse;
+        return option;
+      }));
+      return optgroup;
+    });
+  select.replaceChildren(...groups);
+  if (courses.some((course) => course.code === selectedCourse)) select.value = selectedCourse;
+  else select.value = courses[0]?.code || "";
 }
 
 let learningPathWizardStep = 0;
 const learningPathDialogue = [
-  "Hey! I’m Dr. Eco. First, tell me which course you want us to work on. I’ll meet you where you are.",
+  "Hey! I’m Dr. Eco. We can focus on a course from your level or build a route around any topic you want to explore.",
   "Nice choice. What are we aiming for together? This helps me choose the right mix of lessons and practice.",
   "Every learner has a sticky spot. What topic or idea has been giving you trouble? If you’re not sure, that’s completely fine.",
   "One more thing: what helps an idea click for you? You can mention examples, slower explanations, or anything else.",
@@ -2487,43 +2454,48 @@ function renderLearningPathWizardStep() {
   steps.forEach((step, index) => { step.hidden = index !== learningPathWizardStep; });
   document.querySelector("#learningPathStepCount").textContent = `${learningPathWizardStep + 1} of ${steps.length}`;
   document.querySelector("#learningPathStepProgress").style.width = `${((learningPathWizardStep + 1) / steps.length) * 100}%`;
-  const dialogue = learningPathWizardStep === 0 && document.querySelector("#learningPathStudyMode").value === "topic"
-    ? "Curious about something outside your courses? Name it, and I’ll build a route from your goal and what you already know."
-    : learningPathDialogue[learningPathWizardStep];
-  document.querySelector("#learningPathDialogue").textContent = dialogue;
+  document.querySelector("#learningPathDialogue").textContent = learningPathDialogue[learningPathWizardStep];
   document.querySelector("#learningPathBack").hidden = learningPathWizardStep === 0;
   document.querySelector("#learningPathNext").hidden = learningPathWizardStep === steps.length - 1;
   document.querySelector("#buildLearningPathSubmit").hidden = learningPathWizardStep !== steps.length - 1;
   document.querySelector("#learningPathSetupStatus").textContent = "";
-  const activeField = steps[learningPathWizardStep]?.querySelector("select:not([hidden]),textarea:not([hidden]),input:not([hidden])");
+  const activeField = steps[learningPathWizardStep]?.querySelector("select,textarea");
   activeField?.focus({ preventScroll: true });
 }
 
-function updateLearningPathStudyMode() {
-  const topicMode = document.querySelector("#learningPathStudyMode").value === "topic";
-  const courseSelect = document.querySelector("#learningPathCourse");
-  const courseLabel = document.querySelector("#learningPathCourseLabel");
-  const topicInput = document.querySelector("#learningPathTopic");
-  const topicLabel = document.querySelector("#learningPathTopicLabel");
-  courseSelect.hidden = topicMode;
-  courseLabel.hidden = topicMode;
-  topicInput.hidden = !topicMode;
-  topicLabel.hidden = !topicMode;
-  if (learningPathWizardStep === 0) renderLearningPathWizardStep();
+function updateLearningPathScope() {
+  const topicMode = document.querySelector("#learningPathScope").value === "topic";
+  document.querySelector("#learningPathCourseChoice").hidden = topicMode;
+  document.querySelector("#learningPathTopicChoice").hidden = !topicMode;
 }
 
-function openLearningPathSetup(selectedCourse = currentCourse) {
-  fillLearningPathCourseOptions(selectedCourse);
-  const isCatalogCourse = !isGeneralTopicCode(selectedCourse)
-    && availableStudyCourses().some((course) => course.code === selectedCourse);
-  document.querySelector("#learningPathStudyMode").value = isCatalogCourse ? "course" : "topic";
-  document.querySelector("#learningPathTopic").value = isCatalogCourse ? "" : (studyProgress.courseTitles?.[selectedCourse] || "");
-  updateLearningPathStudyMode();
+function generalTopicCourseCode(topic) {
+  const normalizedTopic = topic.trim().toLocaleLowerCase();
+  let hash = 0;
+  for (const character of normalizedTopic) hash = ((hash * 31) + character.charCodeAt(0)) >>> 0;
+  let suffix = 100 + (hash % 900);
+  for (let attempt = 0; attempt < 900; attempt += 1) {
+    const code = `GEN ${suffix}`;
+    const savedTitle = studyProgress.studyPathTitles?.[code] || "";
+    if (!savedTitle || savedTitle.replace(/^Open Study:\s*/i, "").trim().toLocaleLowerCase() === normalizedTopic) return code;
+    suffix = 100 + ((suffix - 99) % 900);
+  }
+  return `GEN ${100 + (Date.now() % 900)}`;
+}
+
+function openLearningPathSetup() {
+  fillLearningPathCourseOptions(currentCourse);
   const profile = studyProgress.learnerProfile || {};
+  const savedTopic = /^GEN\s\d{3}$/i.test(currentCourse)
+    ? (studyProgress.studyPathTitles?.[currentCourse] || "").replace(/^Open Study:\s*/i, "")
+    : "";
   document.querySelector("#learningPathGoal").value = profile.goal || "Prepare for an exam";
   document.querySelector("#learningPathDifficulty").value = profile.difficulties || "";
   document.querySelector("#learningPathNote").value = profile.note || "";
   document.querySelector("#learningPathPace").value = profile.pace || studyProgress.studyPace || "balanced";
+  document.querySelector("#learningPathScope").value = savedTopic ? "topic" : "course";
+  document.querySelector("#learningPathTopic").value = savedTopic;
+  updateLearningPathScope();
   document.querySelector("#learningPathSetupStatus").textContent = "";
   document.querySelector("#learningPathSetup").hidden = false;
   learningPathWizardStep = 0;
@@ -2532,15 +2504,16 @@ function openLearningPathSetup(selectedCourse = currentCourse) {
 }
 
 document.querySelector("#personalizePathButton").addEventListener("click", openLearningPathSetup);
-document.querySelector("#learningPathStudyMode").addEventListener("change", updateLearningPathStudyMode);
+document.querySelector("#learningPathScope").addEventListener("change", updateLearningPathScope);
 document.querySelector("#learningPathNext").addEventListener("click", () => {
   if (learningPathWizardStep === 0) {
-    const topicMode = document.querySelector("#learningPathStudyMode").value === "topic";
-    if ((!topicMode && !document.querySelector("#learningPathCourse").value)
-      || (topicMode && !document.querySelector("#learningPathTopic").value.trim())) {
-      document.querySelector("#learningPathSetupStatus").textContent = topicMode
-        ? "Give your study topic a name so I can shape a route around it."
-        : "Choose a course so I know where to start.";
+    const topicMode = document.querySelector("#learningPathScope").value === "topic";
+    if (topicMode && !document.querySelector("#learningPathTopic").value.trim()) {
+      document.querySelector("#learningPathSetupStatus").textContent = "Tell me the topic you want to explore.";
+      return;
+    }
+    if (!topicMode && !document.querySelector("#learningPathCourse").value) {
+      document.querySelector("#learningPathSetupStatus").textContent = "Choose a course so I know where to start.";
       return;
     }
   }
@@ -2564,18 +2537,20 @@ document.querySelector("#skipLearningPathSetup").addEventListener("click", () =>
 });
 document.querySelector("#learningPathSetupForm").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const topicMode = document.querySelector("#learningPathStudyMode").value === "topic";
-  const topicTitle = document.querySelector("#learningPathTopic").value.trim().slice(0, 100);
-  const courseCode = topicMode ? makeGeneralTopicCode(topicTitle) : document.querySelector("#learningPathCourse").value;
+  const topicMode = document.querySelector("#learningPathScope").value === "topic";
+  const topic = document.querySelector("#learningPathTopic").value.trim().slice(0, 100);
+  const topicCode = topicMode ? generalTopicCourseCode(topic) : "";
+  const courseCode = topicMode ? topicCode : document.querySelector("#learningPathCourse").value;
+  const displayTitle = topicMode ? `Open Study: ${topic}`.slice(0, 120) : courseTitleFor(courseCode);
   const profile = {
     goal: document.querySelector("#learningPathGoal").value,
     difficulties: document.querySelector("#learningPathDifficulty").value.trim().slice(0, 600),
-    note: document.querySelector("#learningPathNote").value.trim().slice(0, 600),
+    note: `${topicMode ? `Open topic: ${topic}. ` : ""}${document.querySelector("#learningPathNote").value.trim()}`.slice(0, 600),
     pace: document.querySelector("#learningPathPace").value,
-    topic: topicMode ? topicTitle : "",
+    ...(topicMode ? { topic } : {}),
   };
-  if (!COURSE_CODE_PATTERN.test(courseCode) || (topicMode && !topicTitle)) {
-    document.querySelector("#learningPathSetupStatus").textContent = topicMode ? "Name the topic you want to study." : "Choose a valid course from your level.";
+  if (!COURSE_CODE_PATTERN.test(courseCode)) {
+    document.querySelector("#learningPathSetupStatus").textContent = "Choose a valid course from your level.";
     return;
   }
   const submit = document.querySelector("#buildLearningPathSubmit");
@@ -2584,12 +2559,12 @@ document.querySelector("#learningPathSetupForm").addEventListener("submit", asyn
   document.querySelector("#learningPathSetupStatus").textContent = "Finding course notes, then asking Gemini to shape a route around your goal…";
   document.querySelector("#learningPathDialogue").textContent = "I’m putting your route together now — checking the course notes and choosing a good first step. This can take a few seconds.";
   try {
-    if (topicMode) studyProgress.courseTitles[courseCode] = topicTitle;
     studyProgress.learnerProfile = profile;
     studyProgress.studyPace = profile.pace;
-    const result = await generatePersonalizedStudyPath(courseCode, profile);
+    const result = await generatePersonalizedStudyPath(courseCode, profile, displayTitle);
     studyProgress.studyPaths[courseCode] = result.modules;
     studyProgress.studyPathSources[courseCode] = result.sourceNote;
+    studyProgress.studyPathTitles[courseCode] = displayTitle;
     studyProgress.courseCompleted[courseCode] = [];
     studyProgress.completed = [];
     studyProgress.course = courseCode;
@@ -2618,19 +2593,6 @@ document.querySelector("#learningPathSetupForm").addEventListener("submit", asyn
     submit.textContent = "Build my path";
   }
 });
-
-function makeGeneralTopicCode(topicTitle) {
-  let hash = 0;
-  for (const character of topicTitle.toLocaleLowerCase()) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
-  let suffix = 1000 + (hash % 9000);
-  for (let attempt = 0; attempt < 9000; attempt += 1) {
-    const code = `GEN ${suffix}`;
-    const existingTitle = studyProgress.courseTitles?.[code];
-    if (!existingTitle || existingTitle.toLocaleLowerCase() === topicTitle.toLocaleLowerCase()) return code;
-    suffix = 1000 + ((suffix - 999) % 9000);
-  }
-  return `GEN ${Date.now() % 9000 + 1000}`;
-}
 
 let chatRequestInProgress = false;
 let voiceCallActive = false;
@@ -4279,9 +4241,13 @@ const WHATSAPP_BOT_DEFAULTS = {
   evening_time: "19:00",
   min_interval_hours: 10,
   audience: "all",
-  morning_message: "☀️ Good morning, {{name}}! {{streak}}. Your next mini-quest: {{activity}} on {{course}} — {{focus}}. One small step toward {{goal}}.\n\nOpen FoldBook → {{link}}\nReply STOP any time to pause reminders.",
-  evening_message: "🌙 Evening checkpoint, {{name}}! {{streak}}. Take one small step: {{activity}} on {{focus}} for {{course}}. You’re moving toward {{goal}}.\n\nOpen FoldBook → {{link}}\nReply STOP any time to pause reminders.",
+  morning_message: "☀️ Good morning, {{name}}! {{streak}}. Your next mini-quest: {{activity}} on {{course}} — {{focus}}. One small step toward {{goal}}.\n\nOpen FoldBook → {{link}}",
+  evening_message: "🌙 Evening checkpoint, {{name}}! {{streak}}. Take one small step: {{activity}} on {{focus}} for {{course}}. You’re moving toward {{goal}}.\n\nOpen FoldBook → {{link}}",
 };
+
+function cleanReminderTemplate(message) {
+  return String(message || "").replace(/\n?\s*Reply\s+(?:STOP|UNSUBSCRIBE)\b[^\n]*/gi, "").trim();
+}
 
 function readWhatsAppBotForm() {
   return {
@@ -4290,8 +4256,8 @@ function readWhatsAppBotForm() {
     evening_time: document.querySelector("#whatsappEveningTime").value,
     min_interval_hours: Number(document.querySelector("#whatsappMinInterval").value),
     audience: document.querySelector("#whatsappAudience").value,
-    morning_message: document.querySelector("#whatsappMorningMessage").value,
-    evening_message: document.querySelector("#whatsappEveningMessage").value,
+    morning_message: cleanReminderTemplate(document.querySelector("#whatsappMorningMessage").value),
+    evening_message: cleanReminderTemplate(document.querySelector("#whatsappEveningMessage").value),
   };
 }
 
@@ -4301,8 +4267,8 @@ function setWhatsAppBotForm(settings = WHATSAPP_BOT_DEFAULTS) {
   document.querySelector("#whatsappEveningTime").value = settings.evening_time || "19:00";
   document.querySelector("#whatsappMinInterval").value = String(settings.min_interval_hours || 10);
   document.querySelector("#whatsappAudience").value = settings.audience || "all";
-  document.querySelector("#whatsappMorningMessage").value = settings.morning_message || WHATSAPP_BOT_DEFAULTS.morning_message;
-  document.querySelector("#whatsappEveningMessage").value = settings.evening_message || WHATSAPP_BOT_DEFAULTS.evening_message;
+  document.querySelector("#whatsappMorningMessage").value = cleanReminderTemplate(settings.morning_message || WHATSAPP_BOT_DEFAULTS.morning_message);
+  document.querySelector("#whatsappEveningMessage").value = cleanReminderTemplate(settings.evening_message || WHATSAPP_BOT_DEFAULTS.evening_message);
 }
 
 function renderWhatsAppDeliveryLog(deliveries) {
@@ -4315,7 +4281,7 @@ function renderWhatsAppDeliveryLog(deliveries) {
   }
   for (const delivery of deliveries) {
     const item = document.createElement("p");
-    const label = delivery.session === "preview" ? "Preview" : `${delivery.session} reminder`;
+    const label = delivery.session === "preview" ? "Preview" : delivery.session === "test" ? "Test reminder" : `${delivery.session} reminder`;
     const count = Number(delivery.recipient_count) || 0;
     item.textContent = `${delivery.status === "sent" ? "✅" : "⚠️"} ${label} · ${count} student${count === 1 ? "" : "s"} · ${new Date(delivery.created_at).toLocaleString()}${delivery.detail ? ` · ${delivery.detail}` : ""}`;
     container.append(item);
@@ -4365,9 +4331,9 @@ document.querySelector("#previewWhatsAppMessage")?.addEventListener("click", asy
   const status = document.querySelector("#whatsappBotStatus");
   const preview = document.querySelector("#whatsappMessagePreview");
   const session = document.querySelector("#whatsappPreviewSession").value;
-  const template = session === "evening"
+  const template = cleanReminderTemplate(session === "evening"
     ? document.querySelector("#whatsappEveningMessage").value
-    : document.querySelector("#whatsappMorningMessage").value;
+    : document.querySelector("#whatsappMorningMessage").value);
   preview.textContent = template
     .replace(/\{\{name\}\}/g, "Ada")
     .replace(/\{\{course\}\}/g, "ECO 128")
@@ -4740,16 +4706,6 @@ document.querySelector("#profileButton").addEventListener("click", () => {
   document.querySelector("#profileLevelStatus").textContent = "";
   document.querySelector("#profileModal").hidden = false;
   document.querySelector("#closeProfile").focus();
-});
-document.querySelector("#profileCourseList").addEventListener("click", (event) => {
-  const button = event.target.closest("[data-profile-course]");
-  if (!button) return;
-  const courseCode = button.dataset.profileCourse;
-  const hasPath = Boolean(studyProgress.studyPaths?.[courseCode]?.length);
-  if (currentCourse !== courseCode) setCourse(courseCode);
-  document.querySelector("#profileModal").hidden = true;
-  if (hasPath) activateTab("home");
-  else openLearningPathSetup(courseCode);
 });
 document.querySelector("#closeProfile").addEventListener("click", () => {
   document.querySelector("#profileModal").hidden = true;
