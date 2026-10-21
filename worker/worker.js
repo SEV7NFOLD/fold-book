@@ -45,7 +45,6 @@ const supabase = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
 let socket;
 let connected = false;
 let reconnectTimer;
-let pairingCodeTimer;
 let reconnectDelayMs = 5000;
 let dispatchInProgress = false;
 let testDispatchInProgress = false;
@@ -478,27 +477,29 @@ async function connectToWhatsApp() {
         }
       }
     });
-    if (BOT_PHONE_NUMBER && !state.creds.registered) {
-      pairingCodeTimer = setTimeout(async () => {
-        pairingCodeTimer = null;
-        if (shuttingDown || socket !== activeSocket) return;
-        try {
-          if (typeof activeSocket.requestPairingCode !== "function") {
-            throw new Error("This Baileys version does not support pairing codes.");
-          }
-          const phoneNumber = BOT_PHONE_NUMBER.replace(/\D/g, "");
-          const pairingCode = await activeSocket.requestPairingCode(phoneNumber);
-          console.log("\n==================================================");
-          console.log(`YOUR WHATSAPP PAIRING CODE IS: ${pairingCode}`);
-          console.log("==================================================\n");
-          console.warn("Treat this pairing code as a password; do not share or publish worker logs.");
-        } catch (error) {
-          console.error("Could not request a WhatsApp pairing code:", error.message);
-        }
-      }, 4000);
-    }
+    let pairingCodeRequested = false;
     activeSocket.ev.on("connection.update", (update) => {
       const { connection, lastDisconnect, qr } = update;
+      if (qr && BOT_PHONE_NUMBER && !state.creds.registered && !pairingCodeRequested) {
+        pairingCodeRequested = true;
+        void (async () => {
+          try {
+            if (typeof activeSocket.requestPairingCode !== "function") {
+              throw new Error("This Baileys version does not support pairing codes.");
+            }
+            const phoneNumber = BOT_PHONE_NUMBER.replace(/\D/g, "");
+            const pairingCode = await activeSocket.requestPairingCode(phoneNumber);
+            if (shuttingDown || socket !== activeSocket) return;
+            console.log("\n==================================================");
+            console.log(`YOUR WHATSAPP PAIRING CODE IS: ${pairingCode}`);
+            console.log("==================================================\n");
+            console.warn("Treat this pairing code as a password; do not share or publish worker logs.");
+          } catch (error) {
+            pairingCodeRequested = false;
+            console.error("Could not request a WhatsApp pairing code:", error.message);
+          }
+        })();
+      }
       if (qr && !BOT_PHONE_NUMBER) {
         console.log("\n==================================================");
         console.log("SCAN THIS QR CODE WITH YOUR WHATSAPP BOT PHONE:");
@@ -515,12 +516,9 @@ async function connectToWhatsApp() {
         void updateWorkerHeartbeat(false);
         const statusCode = lastDisconnect?.error?.output?.statusCode;
         const shouldResetAuth = statusCode === DisconnectReason.loggedOut || statusCode === 401;
-        if (pairingCodeTimer) {
-          clearTimeout(pairingCodeTimer);
-          pairingCodeTimer = null;
-        }
         if (socket === activeSocket) socket = null;
-        console.warn(`WhatsApp connection closed (status: ${statusCode}).`);
+        const disconnectMessage = lastDisconnect?.error?.message;
+        console.warn(`WhatsApp connection closed (status: ${statusCode ?? "unknown"}${disconnectMessage ? `, reason: ${disconnectMessage}` : ""}).`);
         if (shouldResetAuth) {
           try {
             fs.rmSync(AUTH_DIRECTORY, { recursive: true, force: true });
@@ -547,7 +545,6 @@ async function shutdown(signal) {
   for (const task of cronTasks) task.stop();
   clearInterval(testQueuePoll);
   if (reconnectTimer) clearTimeout(reconnectTimer);
-  if (pairingCodeTimer) clearTimeout(pairingCodeTimer);
   connected = false;
   void updateWorkerHeartbeat(false);
   if (socket) socket.end(undefined);
