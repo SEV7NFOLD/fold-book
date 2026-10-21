@@ -179,6 +179,9 @@ const S = {
 let leaderboardEntries = [];
 let practiceQuestions = [];
 let mockExamQuestions = [];
+const CHAT_GREETING = "Hey! I’m Dr. Eco 👋 What are we tackling today? Ask me about your Economics course, or say ‘quiz me’ and I’ll make practice questions from your indexed notes. We’ve got this!";
+let chatConversationHistory = [{ role: "assistant", text: CHAT_GREETING }];
+let pendingStudyChat = null;
 
 function updateChatCourseDropdown(preferredCourse = chatCourseCode) {
   const courseSelect = document.querySelector("#chatCourse");
@@ -778,7 +781,12 @@ function renderLessonActivity(module) {
       lessonPanel.hidden = true;
       activateTab("chat");
       const input = document.querySelector("#chatInput");
-      input.value = module.chatPrompt || `Help me study ${module.title} in ${currentCourse}.`;
+      const moduleIndex = activeModules.findIndex((item) => item.id === module.id);
+      const alreadyDiscussed = chatConversationHistory.some((turn) => turn.moduleId === module.id && turn.role === "assistant");
+      pendingStudyChat = module.activityType === "chat" ? { moduleId: module.id, title: module.title, index: moduleIndex, followUp: alreadyDiscussed } : null;
+      input.value = alreadyDiscussed
+        ? `We already studied ${module.title} together. Please don’t repeat the lesson. Briefly confirm I’m ready for its checkpoint and tell me to return to my path.`
+        : module.chatPrompt || `Help me study ${module.title} in ${currentCourse}.`;
       input.focus();
       if (module.activityType === "live") document.querySelector("#voiceToggle").click();
     });
@@ -1488,6 +1496,7 @@ function setCourse(course) {
   activeModules = studyProgress.studyPaths?.[course] || [];
   studyProgress.completed = [...(studyProgress.courseCompleted[course] || [])];
   chatCourseCode = course;
+  resetChatConversation();
   syncCourseControls();
   document.querySelector("#lessonPage").hidden = true;
   lessonPanel.hidden = true;
@@ -1714,6 +1723,15 @@ function appendChatMessage(text, kind) {
   chatMessages.append(article);
   chatMessages.scrollTop = chatMessages.scrollHeight;
   return article;
+}
+
+function resetChatConversation() {
+  chatConversationHistory = [{ role: "assistant", text: CHAT_GREETING }];
+  pendingStudyChat = null;
+  if (typeof chatMessages !== "undefined") {
+    chatMessages.replaceChildren();
+    appendChatMessage(CHAT_GREETING, "assistant");
+  }
 }
 
 function ensureExternalScript(url, globalName, timeoutMs = 20000) {
@@ -1993,24 +2011,33 @@ async function retrieveCourseMaterialContext(courseCode, level, count = 3, query
   return context;
 }
 
-async function callGeminiRAG(userMessage, courseCode, level) {
-  let contextText = "";
-  try {
-    contextText = await retrieveCourseMaterialContext(courseCode, level, 3, userMessage);
-  } catch (error) {
-    console.warn("Course material retrieval failed; continuing without retrieved notes:", error);
-  }
-  const personalContext = await loadStudentMaterialContext(courseCode);
+async function callGeminiRAG(userMessage, courseCode, level, conversation = [], moduleContext = null) {
+  const [contextText, personalContext] = await Promise.all([
+    retrieveCourseMaterialContext(courseCode, level, 3, userMessage)
+      .then((text) => text.slice(0, 6500))
+      .catch((error) => {
+        console.warn("Course material retrieval failed; continuing without retrieved notes:", error);
+        return "";
+      }),
+    loadStudentMaterialContext(courseCode)
+      .then((text) => text.slice(0, 4000))
+      .catch((error) => {
+        console.warn("Student material retrieval failed; continuing without private notes:", error);
+        return "";
+      }),
+  ]);
   const learner = learnerAdaptationSummary();
   const tone = { friendly: "warm and encouraging", calm: "calm, patient, and reassuring", direct: "direct, focused, and concise" }[studyProgress.studyTone] || "warm and encouraging";
   const pace = { gentle: "Explain one small step at a time, check understanding, and avoid jumping ahead.", balanced: "Give a clear explanation with enough detail and one example.", quick: "Use concise revision notes and focus on the key exam idea." }[studyProgress.studyPace] || "Give a clear explanation with enough detail and one example.";
-  const systemInstruction = `You are Dr. Eco, a sharp, fun AI Study Companion for Economics students at UNIUYO. You tutor a ${level} student in ${courseCode}. Be ${tone}. ${pace} Adapt explanations to demonstrated learning: revisit weak topics patiently with a different example, and acknowledge progress when accuracy improves. Do not label or shame the student. Keep responses conversational and structured. Ground course-specific claims in supplied notes and student materials; if they do not cover something, say so and label any general guidance.`;
-  const prompt = `Level: ${level}\nCourse: ${courseCode}\nLearner progress signals: ${learner}\nOfficial course notes:\n${contextText || "(No matching official course notes were found.)"}\n\nStudent's private materials for this course:\n${personalContext || "(No student materials saved for this course.)"}\n\nQuestion: ${userMessage}`;
+  const systemInstruction = `You are Dr. Eco, a sharp, fun AI Study Companion for Economics students at UNIUYO. You tutor a ${level} student in ${courseCode}. You have already introduced yourself in the chat; never repeat your name or greeting in later replies. Be ${tone}. ${pace} Adapt explanations to demonstrated learning: revisit weak topics patiently with a different example, and acknowledge progress when accuracy improves. Do not label or shame the student. Keep replies conversational, useful, and brief unless the student asks for detail. Ground course-specific claims in supplied notes and student materials; if they do not cover something, say so and label any general guidance.${moduleContext ? moduleContext.followUp ? ` The student has already completed the study conversation for “${moduleContext.title}.” Do not restart or repeat the lesson. Give a short readiness confirmation and direct them to the module checkpoint.` : ` This is the study conversation activity for “${moduleContext.title}.” Help with the requested focus, then let the student know they can return to the module checkpoint.` : ""}`;
+  const recentConversation = conversation.slice(-6).map((turn) => `${turn.role === "assistant" ? "Dr. Eco" : "Student"}: ${String(turn.text || "").slice(0, 900)}`).join("\n");
+  const prompt = `Level: ${level}\nCourse: ${courseCode}\nLearner progress signals: ${learner}\n${recentConversation ? `Recent conversation (continue naturally; do not repeat earlier explanations):\n${recentConversation}\n\n` : ""}Official course notes:\n${contextText || "(No matching official course notes were found.)"}\n\nStudent's private materials for this course:\n${personalContext || "(No student materials saved for this course.)"}\n\nCurrent student message: ${userMessage}`;
   const response = await fetch("/api/dr-eco", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       system_instruction: { parts: [{ text: systemInstruction }] },
+      generationConfig: { maxOutputTokens: 650, temperature: 0.65 },
       contents: [{ role: "user", parts: [{ text: prompt }] }],
     }),
   });
@@ -2757,15 +2784,38 @@ async function submitChatQuestion(question) {
   const cleaned = question.trim();
   if (!cleaned || chatRequestInProgress) return;
   if (!consumeStudyFuel(2)) return;
+  const moduleContext = pendingStudyChat;
+  pendingStudyChat = null;
+  const priorConversation = chatConversationHistory.slice();
   appendChatMessage(cleaned, "user");
   chatRequestInProgress = true;
   startLoadingSfx();
-  const responseMessage = appendChatMessage("Checking the course materials…", "assistant");
+  const responseMessage = appendChatMessage("Dr. Eco is thinking…", "assistant");
   renderLottieInto(responseMessage.querySelector(".message-avatar"), "typing-indicator.json", "💭", "Dr. Eco is thinking");
   try {
-    const answer = await callGeminiRAG(cleaned, chatCourseCode, currentStudentLevel);
+    const answer = await callGeminiRAG(cleaned, chatCourseCode, currentStudentLevel, priorConversation, moduleContext);
     renderDrEcoFormatting(responseMessage.querySelector("p"), answer);
     renderLottieInto(responseMessage.querySelector(".message-avatar"), "heart-eyes.json", "✨", "Dr. Eco response ready", { loop: false });
+    const moduleId = moduleContext?.moduleId;
+    chatConversationHistory.push(
+      { role: "user", text: cleaned, ...(moduleId ? { moduleId } : {}) },
+      { role: "assistant", text: answer, ...(moduleId ? { moduleId } : {}) },
+    );
+    chatConversationHistory = chatConversationHistory.slice(-12);
+    if (moduleContext && moduleContext.index >= 0) {
+      const returnButton = document.createElement("button");
+      returnButton.type = "button";
+      returnButton.className = "card-secondary-button module-return-button";
+      returnButton.textContent = "Return to the module checkpoint →";
+      responseMessage.classList.add("has-module-return");
+      returnButton.addEventListener("click", () => {
+        const moduleIndex = activeModules.findIndex((module) => module.id === moduleContext.moduleId);
+        if (moduleIndex < 0) return;
+        activateTab("home");
+        showStudyLesson(moduleIndex);
+      });
+      responseMessage.append(returnButton);
+    }
     sfx.msg();
     if (/generate|quiz|10.?q/i.test(cleaned)) {
       try {
@@ -3032,7 +3082,7 @@ renderMascot("person", "chatMascot");
 renderLottieInto(document.querySelector("#streakAnimation"), "streak-flame.json", "🔥", "Daily streak");
 renderInviteProgress();
 chatMessages.replaceChildren();
-appendChatMessage("Hey! I’m Dr. Eco 👋 What are we tackling today? Ask me about your Economics course, or say “quiz me” and I’ll make practice questions from your indexed notes. We’ve got this!", "assistant");
+appendChatMessage(CHAT_GREETING, "assistant");
 setNavigationAvailable(false);
 
 const SUPABASE_URL = "https://fdutgltyptcqeyajsnua.supabase.co";

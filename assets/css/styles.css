@@ -930,6 +930,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .chat-messages { min-height: 300px; max-height: min(52vh, 520px); gap: 12px; padding: 18px; border: 1px solid var(--fb-color-border); border-radius: 16px; background: var(--fb-color-surface); }
 .chat-message { max-width: min(82%, 600px); padding: 12px 14px; border: 1px solid var(--fb-color-border); border-radius: 14px; background: var(--fb-color-surface-2); }
 .chat-message p { color: var(--fb-color-text); font-size: 15px; line-height: 1.5; }
+.chat-message.has-module-return { flex-wrap: wrap; }
+.module-return-button { flex: 0 1 auto; margin-left: 38px; }
 .user-message { border-color: var(--fb-color-purple-edge); background: #291d43; }
 .listen-button { color: var(--fb-color-lime); font-size: 13px; }
 .chat-prompts { gap: 8px; margin: 12px 0; }

@@ -27,7 +27,7 @@ async function readBody(request) {
 
 function normalizeName(value) {
   return String(value || "").trim().toLocaleLowerCase().normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
+    .replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 module.exports = async function resultsLookupHandler(request, response) {
@@ -59,12 +59,14 @@ module.exports = async function resultsLookupHandler(request, response) {
     });
     if (!upstream.ok) throw new Error("Supabase results lookup failed.");
     const rows = await upstream.json();
-    if (!rows.length || rows.some((row) => normalizeName(row.full_name) !== normalizeName(fullName))) {
+    const normalizedInputName = normalizeName(fullName);
+    const matchingNameRow = rows.find((row) => normalizeName(row.full_name) === normalizedInputName);
+    if (!rows.length || !matchingNameRow) {
       return sendJson(response, 404, { error: "We could not find results matching those details." });
     }
     return sendJson(response, 200, {
       student: {
-        name: rows[0].full_name,
+        name: matchingNameRow.full_name,
         results: rows.map((row) => ({
           course: row.course_code,
           course_title: row.course_title,
