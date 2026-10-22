@@ -37,9 +37,22 @@ async function readBody(request) {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
-function normalizeRegistration(value) {
+function normalizeMatricRegistration(value) {
   const registration = String(value || "").trim().toUpperCase().replace(/\s+/g, "");
   return /^\d{2}\/SS\/EC\/\d{1,4}$/.test(registration) ? registration : "";
+}
+
+function normalizeJambRegistration(value) {
+  const registration = String(value || "").trim().toUpperCase().replace(/[\s-]/g, "");
+  return /^\d{12}[A-Z]{2}$/.test(registration) ? registration : "";
+}
+
+function normalizeStudentIdentifier(value) {
+  const jambRegistration = normalizeJambRegistration(value);
+  if (jambRegistration) return { registration: jambRegistration, type: "jamb" };
+  const matricRegistration = normalizeMatricRegistration(value);
+  if (matricRegistration) return { registration: matricRegistration, type: "matric" };
+  return null;
 }
 
 function nameTokens(value) {
@@ -68,6 +81,8 @@ function encodeSession(student) {
     registration: student.reg_number,
     name: student.full_name,
     phoneNumber: student.phone_number,
+    jambRegistration: student.jamb_reg_number || student.jambRegistration || "",
+    matricRegistration: student.matric_number || student.matricRegistration || "",
     level: student.academic_level || "100L",
     levelChangeCount: Number.isInteger(student.level_change_count) ? student.level_change_count : 0,
     expiresAt: Date.now() + SESSION_SECONDS * 1000,
@@ -142,7 +157,7 @@ module.exports = async function studentAuthHandler(request, response) {
     if (!session) return sendJson(response, 401, { error: "Please sign in again." });
     try {
       const rows = await supabaseRequest(config, "student_accounts",
-        `?select=reg_number,full_name,phone_number,academic_level,level_change_count&reg_number=eq.${encodeURIComponent(session.registration)}&limit=1`);
+        `?select=reg_number,full_name,phone_number,academic_level,level_change_count,jamb_reg_number,matric_number&reg_number=eq.${encodeURIComponent(session.registration)}&limit=1`);
       const account = rows?.[0];
       if (!account) return sendJson(response, 401, { error: "Please sign in again." });
       response.setHeader("Set-Cookie", cookie(encodeSession(account), request));
@@ -151,6 +166,8 @@ module.exports = async function studentAuthHandler(request, response) {
         registration: account.reg_number,
         name: account.full_name,
         phoneNumber: account.phone_number,
+        jambRegistration: account.jamb_reg_number || "",
+        matricRegistration: account.matric_number || "",
         level: account.academic_level || "100L",
         levelChangeCount: Number.isInteger(account.level_change_count) ? account.level_change_count : 0,
       } });
@@ -177,6 +194,57 @@ module.exports = async function studentAuthHandler(request, response) {
   }
   const mode = payload.mode;
 
+  if (mode === "attach-matric-number") {
+    const session = readSession(request);
+    const matricRegistration = normalizeMatricRegistration(payload.matricNumber);
+    const password = typeof payload.password === "string" ? payload.password : "";
+    if (!session) return sendJson(response, 401, { error: "Please sign in again before linking your matric number." });
+    if (!matricRegistration) return sendJson(response, 400, { error: "Enter a valid matric number, for example 25/SS/EC/001." });
+    if (password.length < 8 || password.length > 128) return sendJson(response, 400, { error: "Enter your current password to confirm this change." });
+    try {
+      const rows = await supabaseRequest(config, "student_accounts",
+        `?select=reg_number,password_salt,password_hash&reg_number=eq.${encodeURIComponent(session.registration)}&limit=1`);
+      const account = rows?.[0];
+      if (!account) return sendJson(response, 401, { error: "Your student account could not be found. Please sign in again." });
+      const candidate = await derivePassword(password, account.password_salt);
+      const stored = Buffer.from(account.password_hash, "hex");
+      if (candidate.length !== stored.length || !timingSafeEqual(candidate, stored)) {
+        return sendJson(response, 401, { error: "That password does not match this account." });
+      }
+      const result = await supabaseRequest(config, "rpc/attach_foldbook_student_matric_number", "", {
+        method: "POST",
+        body: { p_reg_number: session.registration, p_matric_number: matricRegistration },
+      });
+      const updatedAccount = {
+        reg_number: session.registration,
+        full_name: session.name,
+        phone_number: session.phoneNumber || "",
+        academic_level: session.level || "100L",
+        level_change_count: Number.isInteger(session.levelChangeCount) ? session.levelChangeCount : 0,
+        jamb_reg_number: session.jambRegistration || "",
+        matric_number: result?.matricRegistration || matricRegistration,
+      };
+      response.setHeader("Set-Cookie", cookie(encodeSession(updatedAccount), request));
+      return sendJson(response, 200, { student: {
+        role: "student",
+        registration: updatedAccount.reg_number,
+        name: updatedAccount.full_name,
+        phoneNumber: updatedAccount.phone_number,
+        jambRegistration: updatedAccount.jamb_reg_number,
+        matricRegistration: updatedAccount.matric_number,
+        level: updatedAccount.academic_level,
+        levelChangeCount: updatedAccount.level_change_count,
+      } });
+    } catch (error) {
+      const message = String(error.message || "");
+      if (/matric number already belongs to another account|duplicate key|already exists/i.test(message)) {
+        return sendJson(response, 409, { error: "That matric number is already linked to another FoldBook account." });
+      }
+      console.error("Could not link a student matric number:", message);
+      return sendJson(response, 503, { error: "Could not save your matric number right now. Please try again shortly." });
+    }
+  }
+
   if (mode === "change-level") {
     const session = readSession(request);
     const level = normalizeLevel(payload.level);
@@ -196,6 +264,8 @@ module.exports = async function studentAuthHandler(request, response) {
         phone_number: session.phoneNumber || "",
         academic_level: result.level,
         level_change_count: result.levelChangeCount,
+        jamb_reg_number: session.jambRegistration || "",
+        matric_number: session.matricRegistration || "",
       };
       response.setHeader("Set-Cookie", cookie(encodeSession(account), request));
       return sendJson(response, 200, { student: {
@@ -203,6 +273,8 @@ module.exports = async function studentAuthHandler(request, response) {
         registration: account.reg_number,
         name: account.full_name,
         phoneNumber: account.phone_number,
+        jambRegistration: account.jamb_reg_number,
+        matricRegistration: account.matric_number,
         level: account.academic_level,
         levelChangeCount: account.level_change_count,
       } });
@@ -222,10 +294,11 @@ module.exports = async function studentAuthHandler(request, response) {
     }
   }
 
-  const registration = normalizeRegistration(payload.registration);
+  const identifier = normalizeStudentIdentifier(payload.registration);
+  const registration = identifier?.registration || "";
   const password = typeof payload.password === "string" ? payload.password : "";
   if (!registration || password.length < 8 || password.length > 128) {
-    return sendJson(response, 400, { error: "Enter your registration number and a password of at least 8 characters." });
+    return sendJson(response, 400, { error: "Enter a valid JAMB registration number (14 characters) or UNIUYO matric number, and a password of at least 8 characters." });
   }
 
   try {
@@ -239,7 +312,16 @@ module.exports = async function studentAuthHandler(request, response) {
       }
       const salt = randomBytes(16).toString("hex");
       const hash = (await derivePassword(password, salt)).toString("hex");
-      account = { reg_number: registration, full_name: fullName, phone_number: phone, academic_level: level, password_salt: salt, password_hash: hash };
+      account = {
+        reg_number: registration,
+        full_name: fullName,
+        phone_number: phone,
+        academic_level: level,
+        password_salt: salt,
+        password_hash: hash,
+        jamb_reg_number: identifier.type === "jamb" ? registration : "",
+        matric_number: identifier.type === "matric" ? registration : "",
+      };
       await supabaseRequest(config, "rpc/create_foldbook_student_account", "", {
         method: "POST",
         body: {
@@ -253,16 +335,25 @@ module.exports = async function studentAuthHandler(request, response) {
       });
       response.setHeader("Set-Cookie", cookie(encodeSession(account), request));
       return sendJson(response, 200, {
-        student: { role: "student", registration, name: fullName, phoneNumber: phone, level, levelChangeCount: 0 },
+        student: {
+          role: "student", registration, name: fullName, phoneNumber: phone, level,
+          levelChangeCount: 0,
+          jambRegistration: account.jamb_reg_number,
+          matricRegistration: account.matric_number,
+        },
         contactSaved: true,
       });
     }
 
     if (mode !== "login") return sendJson(response, 400, { error: "Choose create account or log in." });
-    const found = await supabaseRequest(config, "student_accounts",
-      `?select=reg_number,full_name,phone_number,academic_level,level_change_count,password_salt,password_hash&reg_number=eq.${encodeURIComponent(registration)}&limit=1`);
+    const filters = new URLSearchParams({
+      select: "reg_number,full_name,phone_number,academic_level,level_change_count,password_salt,password_hash,jamb_reg_number,matric_number",
+      or: `(reg_number.eq.${registration},jamb_reg_number.eq.${registration},matric_number.eq.${registration})`,
+      limit: "1",
+    });
+    const found = await supabaseRequest(config, "student_accounts", `?${filters.toString()}`);
     account = found?.[0];
-    if (!account) return sendJson(response, 401, { error: "No account found for that matric number. Choose Create account first." });
+    if (!account) return sendJson(response, 401, { error: "No account found for that JAMB or matric number. Choose Create account first." });
     const candidate = await derivePassword(password, account.password_salt);
     const stored = Buffer.from(account.password_hash, "hex");
     if (candidate.length !== stored.length || !timingSafeEqual(candidate, stored)) {
@@ -270,14 +361,19 @@ module.exports = async function studentAuthHandler(request, response) {
     }
     response.setHeader("Set-Cookie", cookie(encodeSession(account), request));
     return sendJson(response, 200, {
-      student: { role: "student", registration: account.reg_number, name: account.full_name, phoneNumber: account.phone_number, level: account.academic_level || "100L", levelChangeCount: Number.isInteger(account.level_change_count) ? account.level_change_count : 0 },
+      student: {
+        role: "student", registration: account.reg_number, name: account.full_name,
+        phoneNumber: account.phone_number, jambRegistration: account.jamb_reg_number || "",
+        matricRegistration: account.matric_number || "", level: account.academic_level || "100L",
+        levelChangeCount: Number.isInteger(account.level_change_count) ? account.level_change_count : 0,
+      },
       contactSaved: true,
     });
   } catch (error) {
     console.error("Student authentication failed:", error.message);
     const message = String(error.message || "");
-    if (/duplicate key|already exists/i.test(message)) {
-      return sendJson(response, 409, { error: "An account already exists for this matric number. Choose Log in instead." });
+    if (/duplicate key|already exists|already belongs to another FoldBook account/i.test(message)) {
+      return sendJson(response, 409, { error: "An account already exists for this JAMB or matric number. Choose Log in instead." });
     }
     if (/already connected to another student/i.test(message)) {
       return sendJson(response, 409, { error: "That WhatsApp number is already connected to another student account." });
@@ -289,3 +385,4 @@ module.exports = async function studentAuthHandler(request, response) {
 module.exports.readSession = readSession;
 module.exports.isSameOriginRequest = isSameOriginRequest;
 module.exports.sendJson = sendJson;
+module.exports.normalizeStudentIdentifier = normalizeStudentIdentifier;

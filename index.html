@@ -379,8 +379,9 @@
             <input id="authFullName" name="fullName" type="text" autocomplete="name" required>
           </div>
           <div class="form-group">
-            <label for="authRegNo">Registration / Matric Number</label>
-            <input id="authRegNo" name="registration" type="text" autocomplete="off" autocapitalize="characters" required>
+            <label for="authRegNo">Matric or JAMB Registration Number</label>
+            <input id="authRegNo" name="registration" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="18" placeholder="25/SS/EC/001 or 202610012345AB" aria-describedby="authRegistrationHelp" required>
+            <p class="profile-help" id="authRegistrationHelp">Newly admitted students can use their 14-character JAMB number. Use your UNIUYO matric number if you already have one.</p>
           </div>
           <div class="form-group" id="authLevelGroup">
             <label for="authLevel">Current academic level</label>
@@ -633,6 +634,17 @@
           </div>
           <p class="profile-help" id="profileLevelLimit">You can change your level up to 6 times.</p>
           <p class="profile-status" id="profileLevelStatus" role="status" aria-live="polite"></p>
+        </section>
+        <section class="profile-level-settings" id="profileMatricSettings" aria-labelledby="profileMatricTitle" hidden>
+          <h3 id="profileMatricTitle">Link your UNIUYO matric number</h3>
+          <p class="profile-help" id="profileJambNumber"></p>
+          <label for="profileMatricNumber">Matric number</label>
+          <input id="profileMatricNumber" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="18" placeholder="25/SS/EC/001">
+          <label for="profileMatricPassword">Confirm with your current password</label>
+          <input id="profileMatricPassword" type="password" autocomplete="current-password" minlength="8">
+          <button class="card-secondary-button" id="saveProfileMatric" type="button">Save matric number</button>
+          <p class="profile-help">Your JAMB number remains linked so you can continue signing in and keep your saved study progress.</p>
+          <p class="profile-status" id="profileMatricStatus" role="status" aria-live="polite"></p>
         </section>
         <section class="profile-courses" aria-labelledby="profileCoursesTitle">
           <h3 id="profileCoursesTitle">Courses for your level</h3>

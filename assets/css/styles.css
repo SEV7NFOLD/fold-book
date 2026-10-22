@@ -1304,7 +1304,8 @@ textarea.admin-material-control { min-height: 140px; resize: vertical; }
 .profile-level-settings h3 { margin: 0 0 10px; }
 .profile-level-settings label { display: block; margin-bottom: 7px; font-size: 13px; font-weight: 700; }
 .profile-level-row { display: flex; gap: 8px; }
-.profile-level-row select { min-width: 0; flex: 1; padding: 10px 12px; border: 1px solid var(--fb-color-border); border-radius: 10px; background: var(--fb-color-surface); color: var(--fb-color-text); font: inherit; }
+.profile-level-row select, .profile-level-settings input { min-width: 0; width: 100%; padding: 10px 12px; border: 1px solid var(--fb-color-border); border-radius: 10px; background: var(--fb-color-surface); color: var(--fb-color-text); font: inherit; }
+.profile-level-settings input { margin: 0 0 10px; }
 .profile-level-row button { flex: 0 0 auto; }
 .profile-level-settings .profile-help { margin: 8px 0 0; }
 .profile-level-settings .profile-status { margin: 6px 0 0; }

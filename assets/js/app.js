@@ -1726,6 +1726,16 @@ function renderProfile() {
   const levelSave = document.querySelector("#saveProfileLevel");
   const levelStatus = document.querySelector("#profileLevelStatus");
   const levelLimit = document.querySelector("#profileLevelLimit");
+  const matricSettings = document.querySelector("#profileMatricSettings");
+  const jambNumber = document.querySelector("#profileJambNumber");
+  const matricInput = document.querySelector("#profileMatricNumber");
+  if (matricSettings && jambNumber && matricInput) {
+    matricSettings.hidden = !currentStudent?.jambRegistration || isMasterAdmin;
+    jambNumber.textContent = currentStudent?.jambRegistration
+      ? `JAMB number on this account: ${currentStudent.jambRegistration}`
+      : "";
+    if (document.activeElement !== matricInput) matricInput.value = currentStudent?.matricRegistration || "";
+  }
   const levelChangeCount = Math.max(0, Math.min(6, Math.floor(Number(user?.levelChangeCount) || 0)));
   const levelChangesRemaining = 6 - levelChangeCount;
   if (levelSettings && levelSelect && levelSave && levelLimit) {
@@ -1800,6 +1810,49 @@ document.querySelector("#saveProfileLevel").addEventListener("click", async () =
     saveButton.disabled = select.value === (S.user?.level || S.level)
       || 6 - Math.max(0, Math.min(6, Math.floor(Number(S.user?.levelChangeCount) || 0))) === 0;
     select.disabled = 6 - Math.max(0, Math.min(6, Math.floor(Number(S.user?.levelChangeCount) || 0))) === 0;
+  }
+});
+
+document.querySelector("#saveProfileMatric").addEventListener("click", async () => {
+  if (!currentStudent?.jambRegistration || isMasterAdmin) return;
+  const matricInput = document.querySelector("#profileMatricNumber");
+  const passwordInput = document.querySelector("#profileMatricPassword");
+  const button = document.querySelector("#saveProfileMatric");
+  const status = document.querySelector("#profileMatricStatus");
+  const matricNumber = normalizeRegistration(matricInput.value);
+  if (!matricNumber) {
+    status.textContent = "Enter a valid matric number, for example 25/SS/EC/001.";
+    matricInput.focus();
+    return;
+  }
+  if (passwordInput.value.length < 8) {
+    status.textContent = "Enter your current password to confirm this change.";
+    passwordInput.focus();
+    return;
+  }
+  button.disabled = true;
+  status.textContent = "Linking your matric number…";
+  try {
+    const response = await fetch("/api/student/auth", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ mode: "attach-matric-number", matricNumber, password: passwordInput.value }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.student) throw new Error(result.error || "Could not link your matric number.");
+    currentStudent.matricRegistration = result.student.matricRegistration;
+    S.student = currentStudent;
+    if (S.user) S.user.matricRegistration = currentStudent.matricRegistration;
+    passwordInput.value = "";
+    persistAuthSession();
+    renderProfile();
+    status.textContent = "Matric number linked. Your JAMB sign-in and saved learning progress are unchanged.";
+  } catch (error) {
+    console.error("Could not link the student matric number:", error);
+    status.textContent = error.message;
+  } finally {
+    button.disabled = false;
   }
 });
 
@@ -3748,6 +3801,12 @@ function normalizeResultRegistration(value) {
   return /^\d{2}(?:\/[A-Z0-9]{2,5}){2,3}\/\d{1,4}$/.test(registration) ? registration : "";
 }
 
+function normalizeStudentIdentifier(value) {
+  const identifier = String(value || "").trim().toUpperCase().replace(/[\s-]/g, "");
+  if (/^\d{12}[A-Z]{2}$/.test(identifier)) return identifier;
+  return normalizeRegistration(value);
+}
+
 function normalizeNameTokens(value) {
   return value.trim().toLocaleLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -4687,6 +4746,8 @@ function persistAuthSession() {
       role: "student",
       name: currentStudent.name,
       registration: currentStudent.registration,
+      jambRegistration: currentStudent.jambRegistration || "",
+      matricRegistration: currentStudent.matricRegistration || "",
       phoneNumber: S.phoneNumber,
       level: S.level,
       levelChangeCount: Number.isInteger(S.user.levelChangeCount) ? S.user.levelChangeCount : 0,
@@ -4890,10 +4951,10 @@ async function handleAuthSubmit(fullName, regNumber, phone, passcode, password) 
     return;
   }
 
-  const registration = normalizeRegistration(rawRegistration);
+  const registration = normalizeStudentIdentifier(rawRegistration);
   const level = document.querySelector("#authLevel").value;
   if (!registration) {
-    status.textContent = "Enter a valid matric number, for example 25/SS/EC/001.";
+    status.textContent = "Enter a valid 14-character JAMB number or UNIUYO matric number, for example 25/SS/EC/001.";
     return;
   }
   if (typeof password !== "string" || password.length < 8 || password.length > 128) {
@@ -4927,17 +4988,27 @@ async function handleAuthSubmit(fullName, regNumber, phone, passcode, password) 
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Student sign-in failed.");
     const student = result.student;
-    if (!student || student.registration !== registration || !student.name) throw new Error("Student account details could not be loaded.");
-    const studentLevel = student.level || level || detectStudentLevel(registration);
-    switchStudyProfile(registration, { fresh: authMode === "signup" });
-    currentStudent = { name: student.name, registration, level: studentLevel, levelChangeCount: student.levelChangeCount || 0 };
+    const accountRegistration = normalizeStudentIdentifier(student?.registration);
+    if (!student || !accountRegistration || !student.name) throw new Error("Student account details could not be loaded.");
+    const studentLevel = student.level || level || "100L";
+    switchStudyProfile(accountRegistration, { fresh: authMode === "signup" });
+    currentStudent = {
+      name: student.name,
+      registration: accountRegistration,
+      jambRegistration: student.jambRegistration || "",
+      matricRegistration: student.matricRegistration || "",
+      level: studentLevel,
+      levelChangeCount: student.levelChangeCount || 0,
+    };
     isMasterAdmin = false;
     S.isAdmin = false;
     S.student = currentStudent;
-    const savedProfile = loadSavedStudentProfile(registration);
+    const savedProfile = loadSavedStudentProfile(accountRegistration);
     S.user = {
       name: student.name,
-      regNo: registration,
+      regNo: accountRegistration,
+      jambRegistration: currentStudent.jambRegistration,
+      matricRegistration: currentStudent.matricRegistration,
       phone: student.phoneNumber || "",
       level: studentLevel,
       levelChangeCount: student.levelChangeCount || 0,
@@ -4947,15 +5018,17 @@ async function handleAuthSubmit(fullName, regNumber, phone, passcode, password) 
     S.level = studentLevel;
     S.phoneNumber = student.phoneNumber || "";
     currentStudentLevel = S.level;
-    chatRegistrationInput.value = registration;
-    setStudentRegistration(registration);
+    chatRegistrationInput.value = accountRegistration;
+    setStudentRegistration(accountRegistration);
     await refreshLiveCourseCatalog(studentLevel);
     applyStudentLevel(studentLevel);
     await loadSyncedLearningProfile();
     window.localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({
       role: "student",
       name: student.name,
-      registration,
+      registration: accountRegistration,
+      jambRegistration: currentStudent.jambRegistration,
+      matricRegistration: currentStudent.matricRegistration,
       phoneNumber: S.phoneNumber,
       level: S.level,
       levelChangeCount: student.levelChangeCount || 0,
@@ -5006,7 +5079,7 @@ async function restoreAuthSession() {
     const response = await fetch("/api/student/auth", { credentials: "same-origin" });
     if (!response.ok) { window.localStorage.removeItem(AUTH_SESSION_KEY); return false; }
     const session = { ...localSession, ...(await response.json()).student };
-    const registration = normalizeRegistration(session.registration || "");
+    const registration = normalizeStudentIdentifier(session.registration || "");
     if (session.role !== "student" || !registration || typeof session.name !== "string"
       || normalizeNameTokens(session.name).length < 2) {
       window.localStorage.removeItem(AUTH_SESSION_KEY);
@@ -5015,6 +5088,8 @@ async function restoreAuthSession() {
     currentStudent = {
       name: session.name,
       registration,
+      jambRegistration: session.jambRegistration || "",
+      matricRegistration: session.matricRegistration || "",
       level: session.level || detectStudentLevel(registration),
       levelChangeCount: Number.isInteger(session.levelChangeCount) ? session.levelChangeCount : 0,
     };
@@ -5025,6 +5100,8 @@ async function restoreAuthSession() {
     S.user = {
       name: session.name,
       regNo: registration,
+      jambRegistration: currentStudent.jambRegistration,
+      matricRegistration: currentStudent.matricRegistration,
       phone: S.phoneNumber,
       level: S.level,
       levelChangeCount: currentStudent.levelChangeCount,
