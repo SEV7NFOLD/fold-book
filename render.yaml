@@ -1,0 +1,20 @@
+services:
+  - type: worker
+    name: fold-book-whatsapp-worker
+    runtime: node
+    plan: 0.5c-512mb
+    buildCommand: npm install
+    startCommand: node worker/worker.js
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: FOLDBOOK_URL
+        value: https://foldbook-beta.vercel.app
+      - key: WHATSAPP_AUTH_DIRECTORY
+        value: /var/data/whatsapp-auth
+    disk:
+      name: whatsapp-auth
+      mountPath: /var/data
+      sizeGB: 1
