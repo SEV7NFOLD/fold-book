@@ -194,6 +194,60 @@ module.exports = async function studentAuthHandler(request, response) {
   }
   const mode = payload.mode;
 
+  if (mode === "results") {
+    const session = readSession(request);
+    if (!session) return sendJson(response, 401, { error: "Sign in to your FoldBook account before checking results." });
+    try {
+      const accountQuery = new URLSearchParams({
+        select: "reg_number,full_name,matric_number",
+        reg_number: `eq.${session.registration}`,
+        limit: "1",
+      });
+      const accounts = await supabaseRequest(config, "student_accounts", `?${accountQuery}`);
+      const account = accounts?.[0];
+      if (!account) return sendJson(response, 401, { error: "Your FoldBook account could not be verified. Please sign in again." });
+      const registration = normalizeMatricRegistration(account.matric_number || account.reg_number);
+      if (!registration) {
+        return sendJson(response, 409, { error: "Results are matched by UNIUYO matric number. Link your matric number in Profile when it is issued, then try again." });
+      }
+      const resultQuery = new URLSearchParams({
+        select: "reg_number,full_name,course_code,course_title,ca,exam,total,grade,remark",
+        reg_number: `eq.${registration}`,
+        limit: "200",
+      });
+      const rows = await supabaseRequest(config, "student_results", `?${resultQuery}`);
+      const normalizeName = (value) => String(value || "").trim().toLocaleLowerCase().normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+      const accountTokens = new Set(nameTokens(account.full_name));
+      const allRows = rows || [];
+      const missingNameRowsOnly = allRows.length > 0
+        && allRows.every((row) => normalizeName(row.full_name) === "name missing");
+      const hasNameMatch = allRows.some((row) => normalizeName(row.full_name) !== "name missing"
+        && nameTokens(row.full_name).some((token) => accountTokens.has(token)));
+      if (!allRows.length || (!missingNameRowsOnly && !hasNameMatch)) {
+        return sendJson(response, 404, { error: "No published results matched your account. Check that your account uses the same matric number and name as the results record." });
+      }
+      return sendJson(response, 200, {
+        registration,
+        student: {
+          name: account.full_name,
+          results: allRows.map((row) => ({
+            course: row.course_code,
+            course_title: row.course_title,
+            ca: row.ca,
+            exam: row.exam,
+            total: row.total,
+            grade: row.grade,
+            remark: row.remark,
+          })),
+        },
+      });
+    } catch (error) {
+      console.error("Signed-in student results lookup failed:", error.message);
+      return sendJson(response, 503, { error: "Your results could not be loaded right now. Please try again shortly." });
+    }
+  }
+
   if (mode === "attach-matric-number") {
     const session = readSession(request);
     const matricRegistration = normalizeMatricRegistration(payload.matricNumber);

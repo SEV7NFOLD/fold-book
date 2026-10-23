@@ -91,7 +91,7 @@ const STUDY_PROGRESS_KEY = "foldBook.studyProgress";
 const LEGACY_STUDY_PROGRESS_KEY = "foldBookV2.studyProgress";
 let activeStudyProgressKey = STUDY_PROGRESS_KEY;
 const navButtons = [...document.querySelectorAll("[data-tab]")];
-const studyPanels = new Map(["home", "chat", "board", "invite"].map((id) => [id, document.querySelector(`#${id}`)]));
+const studyPanels = new Map(["home", "chat", "board", "invite", "results"].map((id) => [id, document.querySelector(id === "results" ? "#studentResults" : `#${id}`)]));
 const pathTree = document.querySelector("#pathTree");
 const lessonPanel = document.querySelector("#lessonPanel");
 const lessonStep = document.querySelector("#lessonStep");
@@ -1378,6 +1378,7 @@ function activateTab(tab) {
     panel.classList.toggle("hide", isHidden);
   }
   if (selectedTab === "chat") document.querySelector("#chatInput").focus();
+  if (selectedTab === "results") void loadMyResults();
   return true;
 }
 
@@ -3683,10 +3684,8 @@ async function syncLeaderboardEntry() {
   }
 }
 
-const resultsForm = document.querySelector("#lookupForm");
-const registrationInput = document.querySelector("#searchRegNo");
 const chatRegistrationInput = document.querySelector("#chatRegistration");
-const fullNameInput = document.querySelector("#searchFullName");
+const loadMyResultsButton = document.querySelector("#loadMyResults");
 const resultsStatus = document.querySelector("#results-status");
 const resultsPanel = document.querySelector("#results-panel");
 const adminPanel = document.querySelector("#adminDashboard");
@@ -3723,6 +3722,7 @@ const adminPasscodeGroup = document.querySelector("#adminPasscodeGroup");
 const adminPasscodeInput = document.querySelector("#adminPasscode");
 let activeCardContext = null;
 let verificationTrigger = null;
+let pendingResultsAfterAuth = false;
 
 async function handleIndexMaterialSubmit() {
   if (queuedMaterialFiles.some((item) => item.status === "queued")) {
@@ -3771,12 +3771,7 @@ adminLevelSelect.addEventListener("change", updateAdminCourseDropdown);
 adminMaterialSubmit.addEventListener("click", handleIndexMaterialSubmit);
 updateAdminCourseDropdown();
 chatRegistrationInput.addEventListener("input", () => {
-  registrationInput.value = chatRegistrationInput.value;
   setStudentRegistration(chatRegistrationInput.value.trim().toUpperCase());
-});
-registrationInput.addEventListener("input", () => {
-  chatRegistrationInput.value = registrationInput.value;
-  setStudentRegistration(registrationInput.value.trim().toUpperCase());
 });
 setStudentRegistration(chatRegistrationInput.value);
 
@@ -3792,13 +3787,6 @@ function normalizeRegistration(value) {
   }
 
   return /^\d{2}\/SS\/EC\/\d{1,4}$/.test(registration) ? registration : "";
-}
-
-function normalizeResultRegistration(value) {
-  const normalized = normalizeRegistration(value);
-  if (normalized) return normalized;
-  const registration = value.trim().toUpperCase().replace(/\s+/g, "");
-  return /^\d{2}(?:\/[A-Z0-9]{2,5}){2,3}\/\d{1,4}$/.test(registration) ? registration : "";
 }
 
 function normalizeStudentIdentifier(value) {
@@ -3821,14 +3809,6 @@ function gradeForScore(score) {
   if (score >= 45) return "D";
   if (score >= 40) return "E";
   return "F";
-}
-
-function setResultsMessage(message) {
-  resultsPanel.hidden = true;
-  adminPanel.hidden = true;
-  posterWrapper.hidden = true;
-  activeCardContext = null;
-  resultsStatus.textContent = message;
 }
 
 function closeVerification() {
@@ -3949,16 +3929,35 @@ function renderResults(registration, student) {
     : "";
 }
 
-async function lookupImportedStudentResults(registration, fullName) {
-  const response = await fetch("/api/results/lookup", {
+async function lookupImportedStudentResults() {
+  const response = await fetch("/api/student/auth", {
     method: "POST",
+    credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ registration, fullName }),
+    body: JSON.stringify({ mode: "results" }),
   });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.error || "Results could not be loaded.");
-  if (!payload.student) throw new Error("No matching result was found. Check the name and registration number.");
-  return payload.student;
+  if (!payload.student || !payload.registration) throw new Error("No matching result was found for your account.");
+  return payload;
+}
+
+async function loadMyResults() {
+  resultsStatus.textContent = "Loading results for your FoldBook account…";
+  resultsPanel.hidden = true;
+  posterWrapper.hidden = true;
+  loadMyResultsButton.disabled = true;
+  try {
+    const payload = await lookupImportedStudentResults();
+    chatRegistrationInput.value = payload.registration;
+    setStudentRegistration(payload.registration);
+    renderResults(payload.registration, payload.student);
+  } catch (error) {
+    resultsPanel.hidden = true;
+    resultsStatus.textContent = error.message || "Results could not be loaded right now. Please try again.";
+  } finally {
+    loadMyResultsButton.disabled = false;
+  }
 }
 
 function showAdminStudent(registration, student) {
@@ -4844,25 +4843,16 @@ document.querySelector("#profilePhotoInput").addEventListener("change", async (e
   }
 });
 
-resultsForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  resultsStatus.textContent = "";
+loadMyResultsButton.addEventListener("click", () => void loadMyResults());
 
-  const registration = normalizeResultRegistration(registrationInput.value);
-  const inputNameTokens = normalizeNameTokens(fullNameInput.value);
-  if (!registration || (fullNameInput.value.trim() && inputNameTokens.length < 1)) {
-    setResultsMessage("Check your registration number and enter at least one name as it appears on your result. Leave the name blank only if your record is labeled Name missing.");
-    registrationInput.focus();
-    return;
-  }
-
-  try {
-    const student = await lookupImportedStudentResults(registration, fullNameInput.value);
-    chatRegistrationInput.value = registration;
-    renderResults(registration, student);
-  } catch (error) {
-    setResultsMessage(error.message || "Results could not be loaded right now. Please try again.");
-  }
+document.querySelector("#landingCheckResults").addEventListener("click", () => {
+  pendingResultsAfterAuth = true;
+  setAuthMode("signup");
+  document.querySelector("#authStatus").textContent = "Create an account or log in to open your private results page.";
+  adminPasscodeGroup.hidden = true;
+  adminPasscodeInput.value = "";
+  showStage("authView");
+  document.querySelector("#authFullName").focus();
 });
 
 document.querySelector("#launchApp").addEventListener("click", () => {
@@ -4873,7 +4863,10 @@ document.querySelector("#launchApp").addEventListener("click", () => {
   showStage("authView");
   document.querySelector("#authFullName").focus();
 });
-document.querySelector("#backToLanding").addEventListener("click", () => showStage("landingView"));
+document.querySelector("#backToLanding").addEventListener("click", () => {
+  pendingResultsAfterAuth = false;
+  showStage("landingView");
+});
 
 const appAuthForm = document.querySelector("#appAuthForm");
 let authMode = "signup";
@@ -5038,9 +5031,13 @@ async function handleAuthSubmit(fullName, regNumber, phone, passcode, password) 
     }));
     showStage("studentApp");
     renderProfile();
-    activateTab("home");
-    if (!studyProgress.onboardingComplete) openLearningPathSetup();
-    else startStudentTour();
+    const showResults = pendingResultsAfterAuth;
+    pendingResultsAfterAuth = false;
+    activateTab(showResults ? "results" : "home");
+    if (!showResults) {
+      if (!studyProgress.onboardingComplete) openLearningPathSetup();
+      else startStudentTour();
+    }
     void refreshStudentMaterials().catch(() => {});
     void syncLeaderboardEntry();
     sfx.ok();

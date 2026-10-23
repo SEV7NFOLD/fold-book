@@ -21,7 +21,7 @@
     <script src="/assets/js/app.js" defer></script>
   </head>
   <body>
-    <a class="skip-link" href="#landingView">Skip to results verification</a>
+    <a class="skip-link" href="#landingView">Skip to FoldBook</a>
 
     <header class="top">
       <div class="top-inner">
@@ -57,6 +57,7 @@
         <button class="nav-item" id="navLearn" type="button" data-tab="home"><i>🗺️</i>Learn</button>
         <button class="nav-item" id="navBoard" type="button" data-tab="board"><i>🏆</i>Leaderboard</button>
         <button class="nav-item" id="navInvite" type="button" data-tab="invite"><i>👥</i>Invite Friends</button>
+        <button class="nav-item" id="navResults" type="button" data-tab="results"><i>📄</i>My Results</button>
       </nav>
     <main id="top">
       <section id="home" class="learn-section hide" hidden>
@@ -248,6 +249,62 @@
         </section>
       </section>
 
+      <section id="studentResults" class="results-section hide" hidden aria-labelledby="studentResultsTitle">
+        <div class="results-shell">
+          <div class="results-heading">
+            <span class="section-kicker"><span class="section-number">✦</span> YOUR ACADEMIC RECORD</span>
+            <span class="term-tag"><span class="status-dot" aria-hidden="true"></span> PRIVATE TO YOUR ACCOUNT</span>
+          </div>
+          <div class="results-intro">
+            <div>
+              <h2 id="studentResultsTitle">My <span>results.</span></h2>
+              <p class="section-description">Published results are matched to the matric number and name on your FoldBook account.</p>
+            </div>
+            <div>
+              <button class="results-submit" id="loadMyResults" type="button">
+                <span>Load my results</span>
+                <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M4 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <span class="results-help">If you signed up with a JAMB number, link your UNIUYO matric number in Profile when it is issued.</span>
+            </div>
+          </div>
+          <p class="results-status" id="results-status" role="status" aria-live="polite"></p>
+          <section class="result-panel" id="results-panel" aria-label="Student results" hidden>
+            <div class="result-panel-heading">
+              <div><h3 id="result-name"></h3><span class="result-registration" id="result-registration"></span></div>
+              <span class="result-summary" id="result-summary"></span>
+            </div>
+            <div class="results-table-wrap">
+              <table class="results-table">
+                <thead><tr><th scope="col">Course</th><th scope="col">CA</th><th scope="col">Exam</th><th scope="col">Total</th><th scope="col">Grade</th><th scope="col">Remark</th><th scope="col">Result card</th></tr></thead>
+                <tbody id="results-table"></tbody>
+              </table>
+            </div>
+            <p class="results-empty" id="results-empty" hidden>No course results have been published for your account yet.</p>
+          </section>
+          <section class="poster-wrapper" id="poster-wrapper" aria-label="Exportable course result card" hidden>
+            <div class="poster-actions">
+              <button class="results-submit" id="print-card" type="button">Print / Save card</button>
+              <button class="card-secondary-button" id="dismiss-card" type="button">Close card</button>
+            </div>
+            <article class="poster" id="exportCard">
+              <div class="poster-hex" aria-hidden="true"></div>
+              <header class="poster-header">
+                <div class="poster-brand-lockup"><img src="/assets/brand/SEV7N%20FOLD%20LOGO%20BLACK.svg" alt="" class="poster-logo"><div class="poster-brand">SEV7NFOLD<small>Make More</small></div></div>
+                <p class="poster-department">DEPARTMENT OF ECONOMICS <span>|</span> UNIUYO</p>
+              </header>
+              <section class="poster-body" aria-label="Student result">
+                <p class="poster-kicker">ACADEMIC EXCELLENCE</p><p class="poster-congratulations">CONGRATULATIONS!</p>
+                <h2 class="poster-student-name" id="cardStudentName"></h2><p class="poster-reg-no" id="cardRegNo"></p><div class="poster-rule"></div>
+                <div class="poster-result"><img id="gradeAsset" class="asset-3d" src="/assets/brand/trophy.png" alt="A grade trophy" hidden><div class="poster-result-details"><span class="poster-grade" id="cardGrade"></span><div class="poster-course"><p class="poster-course-code" id="cardCourse"></p><p class="poster-course-title" id="cardCourseTitle"></p></div></div><div class="poster-score-row"><span>Total Score <strong id="cardScore"></strong> / 100</span><span>Remark <strong id="cardRemark"></strong></span></div></div>
+              </section>
+              <div class="poster-footer"><p class="poster-slogan">BUILD STRONGER BRANDS. CREATE REAL VALUE.</p><p class="poster-services">STRATEGY <span>•</span> DESIGN <span>•</span> TECHNOLOGY</p><p class="poster-powered">POWERED BY SEV7NFOLD CREATIVE TECH AGENCY</p><a class="poster-url" href="https://bignssien.wixstudio.com/sev7nfold">bignssien.wixstudio.com/sev7nfold</a></div>
+            </article>
+          </section>
+          <p class="helper-text"><span class="score-note-marker" aria-hidden="true">i</span> Results are available after you sign in. JAMB-only accounts need a linked matric number before a result can be matched.</p>
+        </div>
+      </section>
+
     </main>
     </div>
 
@@ -261,104 +318,19 @@
       <section class="results-section" id="results">
         <div class="results-shell">
           <div class="results-heading">
-            <span class="section-kicker"><span class="section-number">01</span> / RESULTS LOOKUP</span>
-            <span class="term-tag"><span class="status-dot" aria-hidden="true"></span> SECOND SEMESTER</span>
+            <span class="section-kicker"><span class="section-number">01</span> / STUDENT RESULTS</span>
+            <span class="term-tag"><span class="status-dot" aria-hidden="true"></span> INSIDE FOLDBOOK</span>
           </div>
           <div class="results-intro">
             <div>
-              <h2 id="results-title">Find your <span>results.</span></h2>
-              <p class="section-description">Enter your registration number and at least one name as it appears on the results sheet.</p>
+              <h2 id="results-title">Your results, <span>in your study space.</span></h2>
+              <p class="section-description">Create a FoldBook account or log in to check your published results. Your account also keeps your study profile and progress together.</p>
             </div>
-            <form class="results-form" id="lookupForm" novalidate>
-              <div class="lookup-grid">
-                <div class="lookup-field">
-                  <label for="searchRegNo">Registration Number / Matric No.</label>
-                  <input id="searchRegNo" name="registration" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="18" placeholder="25/SS/EC/071 or 071" aria-describedby="results-help results-status" required>
-                </div>
-                <div class="lookup-field">
-                  <label for="searchFullName">Name (if listed on your result)</label>
-                  <input id="searchFullName" name="fullName" type="text" autocomplete="name" placeholder="Enter one or more names" aria-describedby="results-help results-status">
-                </div>
-              </div>
-              <button class="results-submit" type="submit">
-                <span>Access My Results</span>
-                <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M4 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              </button>
-              <span class="results-help" id="results-help">Your registration number is the main identifier. A matching first, middle, or last name is enough. Leave the name blank only if your record is labeled “Name missing.”</span>
-            </form>
+            <div>
+              <button class="results-submit" id="landingCheckResults" type="button"><span>Sign up or log in to check results</span><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M4 10h12m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+              <span class="results-help">New here? Create an account with your matric or JAMB number and choose whether to receive WhatsApp study reminders.</span>
+            </div>
           </div>
-          <p class="results-status" id="results-status" role="status" aria-live="polite"></p>
-
-          <section class="result-panel" id="results-panel" aria-label="Student results" hidden>
-            <div class="result-panel-heading">
-              <div>
-                <h3 id="result-name"></h3>
-                <span class="result-registration" id="result-registration"></span>
-              </div>
-              <span class="result-summary" id="result-summary"></span>
-            </div>
-            <div class="results-table-wrap">
-              <table class="results-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Course</th>
-                    <th scope="col">CA</th>
-                    <th scope="col">Exam</th>
-                    <th scope="col">Total</th>
-                    <th scope="col">Grade</th>
-                    <th scope="col">Remark</th>
-                    <th scope="col">Result card</th>
-                  </tr>
-                </thead>
-                <tbody id="results-table"></tbody>
-              </table>
-            </div>
-            <p class="results-empty" id="results-empty" hidden>No course results have been published for this registration number yet.</p>
-          </section>
-          <section class="poster-wrapper" id="poster-wrapper" aria-label="Exportable course result card" hidden>
-            <div class="poster-actions">
-              <button class="results-submit" id="print-card" type="button">Print / Save card</button>
-              <button class="card-secondary-button" id="dismiss-card" type="button">Close card</button>
-            </div>
-            <article class="poster" id="exportCard">
-              <div class="poster-hex" aria-hidden="true"></div>
-              <header class="poster-header">
-                <div class="poster-brand-lockup">
-                  <img src="/assets/brand/SEV7N%20FOLD%20LOGO%20BLACK.svg" alt="" class="poster-logo">
-                  <div class="poster-brand">SEV7NFOLD<small>Make More</small></div>
-                </div>
-                <p class="poster-department">DEPARTMENT OF ECONOMICS <span>|</span> UNIUYO</p>
-              </header>
-              <section class="poster-body" aria-label="Student result">
-                <p class="poster-kicker">ACADEMIC EXCELLENCE</p>
-                <p class="poster-congratulations">CONGRATULATIONS!</p>
-                <h2 class="poster-student-name" id="cardStudentName"></h2>
-                <p class="poster-reg-no" id="cardRegNo"></p>
-                <div class="poster-rule"></div>
-                <div class="poster-result">
-                  <img id="gradeAsset" class="asset-3d" src="/assets/brand/trophy.png" alt="A grade trophy" hidden>
-                  <div class="poster-result-details">
-                    <span class="poster-grade" id="cardGrade"></span>
-                    <div class="poster-course">
-                      <p class="poster-course-code" id="cardCourse"></p>
-                      <p class="poster-course-title" id="cardCourseTitle"></p>
-                    </div>
-                  </div>
-                  <div class="poster-score-row">
-                    <span>Total Score <strong id="cardScore"></strong> / 100</span>
-                    <span>Remark <strong id="cardRemark"></strong></span>
-                  </div>
-                </div>
-              </section>
-              <div class="poster-footer">
-                <p class="poster-slogan">BUILD STRONGER BRANDS. CREATE REAL VALUE.</p>
-                <p class="poster-services">STRATEGY <span>•</span> DESIGN <span>•</span> TECHNOLOGY</p>
-                <p class="poster-powered">POWERED BY SEV7NFOLD CREATIVE TECH AGENCY</p>
-                <a class="poster-url" href="https://bignssien.wixstudio.com/sev7nfold">bignssien.wixstudio.com/sev7nfold</a>
-              </div>
-            </article>
-          </section>
-          <p class="helper-text"><span class="score-note-marker" aria-hidden="true">i</span> Demo access checks the supplied name and registration number against the results sheet.</p>
           <div class="results-foot"><span>UNIUYO ECONOMICS COURSE RESULTS.</span><span>MADE WITH INTENTION BY SEV7N FOLD.</span></div>
         </div>
       </section>
@@ -368,7 +340,7 @@
       <div class="auth-screen-card">
         <span class="section-kicker">STUDENT & ADMIN ACCESS</span>
         <h1>Welcome to FoldBook</h1>
-        <p>Create a study profile to open your learning workspace. This does not verify identity for access to official results.</p>
+        <p id="authIntroCopy">Create a study profile to open your learning workspace. Sign in to check results inside FoldBook.</p>
         <div class="auth-mode-switch" role="group" aria-label="Student account access">
           <button type="button" class="auth-mode-button is-active" id="authSignupMode" aria-pressed="true">Create account</button>
           <button type="button" class="auth-mode-button" id="authLoginMode" aria-pressed="false">Log in</button>
@@ -572,6 +544,7 @@
 
     <nav class="bnav" id="studentMobileNav" aria-label="Student navigation">
       <button id="mobileLearn" type="button" data-tab="home"><i>🗺️</i>Learn</button>
+      <button id="mobileResults" type="button" data-tab="results"><i>📄</i>Results</button>
       <button id="mobileBoard" type="button" data-tab="board"><i>🏆</i>Ranks</button>
       <button class="fab" id="mobileChat" type="button" data-tab="chat" aria-label="Chat with Dr. Eco">🎓</button>
       <button id="mobileInvite" type="button" data-tab="invite"><i>👥</i>Invite</button>

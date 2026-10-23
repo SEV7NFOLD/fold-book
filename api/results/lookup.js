@@ -1,7 +1,5 @@
 "use strict";
 
-const { isSameOrigin } = require("../../lib/admin-auth.js");
-
 function sendJson(response, status, body) {
   const payload = JSON.stringify(body);
   response.writeHead(status, {
@@ -13,85 +11,8 @@ function sendJson(response, status, body) {
   response.end(payload);
 }
 
-async function readBody(request) {
-  if (request.body !== undefined) return typeof request.body === "string" ? JSON.parse(request.body) : request.body;
-  const chunks = [];
-  let size = 0;
-  for await (const chunk of request) {
-    size += chunk.length;
-    if (size > 2048) throw new RangeError("Request is too large.");
-    chunks.push(chunk);
-  }
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
-}
-
-function normalizeName(value) {
-  return String(value || "").trim().toLocaleLowerCase().normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
-}
-
-function nameTokens(value) {
-  return new Set(normalizeName(value).split(/\s+/).filter(Boolean));
-}
-
-const MISSING_NAME = "name missing";
-const REGISTRATION_PATTERN = /^\d{2}(?:\/[A-Z0-9]{2,5}){2,3}\/\d{1,4}$/;
-
 module.exports = async function resultsLookupHandler(request, response) {
-  if (request.method !== "POST") {
-    response.setHeader("Allow", "POST");
-    return sendJson(response, 405, { error: "Method not allowed." });
-  }
-  if (!isSameOrigin(request)) return sendJson(response, 403, { error: "A same-origin request is required." });
-  let payload;
-  try { payload = await readBody(request); } catch {
-    return sendJson(response, 400, { error: "Enter a registration number and full name." });
-  }
-  const registration = String(payload?.registration || "").trim().toUpperCase().replace(/\s+/g, "");
-  const fullName = String(payload?.fullName || "").trim();
-  if (!REGISTRATION_PATTERN.test(registration) || (fullName && fullName.length < 3) || fullName.length > 120) {
-    return sendJson(response, 400, { error: "Enter a valid registration number and at least one name as listed, when the result has a name." });
-  }
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return sendJson(response, 503, { error: "The results service is not configured." });
-  try {
-    const query = new URLSearchParams({
-      select: "reg_number,full_name,course_code,course_title,ca,exam,total,grade,remark",
-      reg_number: `eq.${registration}`,
-      limit: "200",
-    });
-    const upstream = await fetch(`${url.replace(/\/$/, "")}/rest/v1/student_results?${query}`, {
-      headers: { apikey: key, Authorization: `Bearer ${key}` },
-    });
-    if (!upstream.ok) throw new Error("Supabase results lookup failed.");
-    const rows = await upstream.json();
-    const normalizedInputName = normalizeName(fullName);
-    const inputTokens = nameTokens(fullName);
-    const matchingNameRow = fullName && normalizedInputName !== MISSING_NAME
-      ? rows.find((row) => [...nameTokens(row.full_name)].some((token) => inputTokens.has(token)))
-      : null;
-    const registrationOnlyAllowed = (!fullName || normalizedInputName === MISSING_NAME) && rows.length > 0
-      && rows.every((row) => normalizeName(row.full_name) === MISSING_NAME);
-    if (!rows.length || (!matchingNameRow && !registrationOnlyAllowed)) {
-      return sendJson(response, 404, { error: "We could not find results for that registration number and a matching name." });
-    }
-    return sendJson(response, 200, {
-      student: {
-        name: matchingNameRow?.full_name || "Name missing",
-        results: rows.map((row) => ({
-          course: row.course_code,
-          course_title: row.course_title,
-          ca: row.ca,
-          exam: row.exam,
-          total: row.total,
-          grade: row.grade,
-          remark: row.remark,
-        })),
-      },
-    });
-  } catch (error) {
-    console.error("Public results lookup failed:", error.message);
-    return sendJson(response, 502, { error: "Results could not be loaded. Please try again shortly." });
-  }
+  response.setHeader("Allow", "POST");
+  if (request.method !== "POST") return sendJson(response, 405, { error: "Method not allowed." });
+  return sendJson(response, 410, { error: "Public results lookup is closed. Sign in to FoldBook and open My Results." });
 };
