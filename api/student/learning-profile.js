@@ -14,14 +14,14 @@ function config() {
 async function readBody(request) {
   if (request.body !== undefined) {
     const text = typeof request.body === "string" ? request.body : JSON.stringify(request.body);
-    if (Buffer.byteLength(text) > 60000) throw new RangeError("Request is too large.");
+    if (Buffer.byteLength(text) > 500000) throw new RangeError("Request is too large.");
     return typeof request.body === "string" ? JSON.parse(request.body) : request.body;
   }
   const chunks = [];
   let size = 0;
   for await (const chunk of request) {
     size += chunk.length;
-    if (size > 60000) throw new RangeError("Request is too large.");
+    if (size > 500000) throw new RangeError("Request is too large.");
     chunks.push(chunk);
   }
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
@@ -69,10 +69,84 @@ function cleanModuleAttempts(value) {
   }));
 }
 
+function cleanStudentState(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const studyPaths = {};
+  const completedByCourse = {};
+  const attemptsByCourse = {};
+  const sources = {};
+  const titles = {};
+  const sourcePaths = value.studyPaths && typeof value.studyPaths === "object" && !Array.isArray(value.studyPaths)
+    ? Object.entries(value.studyPaths).slice(0, 30) : [];
+  for (const [rawCode, modules] of sourcePaths) {
+    const code = cleanText(rawCode, 12).toUpperCase();
+    if (!COURSE_CODE.test(code)) continue;
+    const path = cleanPath(modules, code);
+    if (!path.length) continue;
+    studyPaths[code] = path;
+    const completed = value.courseCompleted?.[rawCode] ?? value.courseCompleted?.[code];
+    completedByCourse[code] = Array.isArray(completed)
+      ? completed.filter((id) => typeof id === "string" && path.some((module) => module.id === id)).slice(0, 12) : [];
+    const attempts = value.moduleAttempts?.[rawCode] ?? value.moduleAttempts?.[code];
+    attemptsByCourse[code] = cleanModuleAttempts(attempts);
+    const source = value.studyPathSources?.[rawCode] ?? value.studyPathSources?.[code];
+    const title = value.studyPathTitles?.[rawCode] ?? value.studyPathTitles?.[code];
+    if (typeof source === "string") sources[code] = cleanText(source, 500);
+    if (typeof title === "string") titles[code] = cleanText(title, 120);
+  }
+  const activeCourse = cleanText(value.activeCourse, 12).toUpperCase();
+  const learnerProfile = value.learnerProfile && typeof value.learnerProfile === "object" && !Array.isArray(value.learnerProfile)
+    ? value.learnerProfile : {};
+  return {
+    version: 1,
+    activeCourse: COURSE_CODE.test(activeCourse) ? activeCourse : Object.keys(studyPaths)[0] || "",
+    studyPaths,
+    courseCompleted: completedByCourse,
+    moduleAttempts: attemptsByCourse,
+    studyPathSources: sources,
+    studyPathTitles: titles,
+    learnerProfile: {
+      goal: cleanText(learnerProfile.goal, 100),
+      difficulties: cleanText(learnerProfile.difficulties, 600),
+      note: cleanText(learnerProfile.note, 600),
+      pace: ["gentle", "balanced", "quick"].includes(learnerProfile.pace) ? learnerProfile.pace : "balanced",
+    },
+    onboardingComplete: value.onboardingComplete === true || Object.keys(studyPaths).length > 0,
+    migrationComplete: value.migrationComplete === true,
+  };
+}
+
+function mergeStudentState(existing, mode, courseCode, completed, attempts, path, payload) {
+  const current = cleanStudentState(existing) || {
+    version: 1, activeCourse: "", studyPaths: {}, courseCompleted: {}, moduleAttempts: {},
+    studyPathSources: {}, studyPathTitles: {},
+    learnerProfile: { goal: "", difficulties: "", note: "", pace: "balanced" }, onboardingComplete: false, migrationComplete: false,
+  };
+  if (mode === "finish_import") return { ...current, activeCourse: courseCode, migrationComplete: true };
+  const next = { ...current, activeCourse: courseCode };
+  if (path.length) next.studyPaths = { ...current.studyPaths, [courseCode]: path };
+  next.courseCompleted = { ...current.courseCompleted, [courseCode]: completed };
+  next.moduleAttempts = { ...current.moduleAttempts, [courseCode]: attempts };
+  if (mode === "path" || mode === "import_path") {
+    next.studyPathSources = { ...current.studyPathSources, [courseCode]: cleanText(payload.pathSource, 500) };
+    next.studyPathTitles = { ...current.studyPathTitles, [courseCode]: cleanText(payload.courseTitle, 120) };
+    const learnerProfile = payload.learnerProfile && typeof payload.learnerProfile === "object" ? payload.learnerProfile : {};
+    next.learnerProfile = {
+      goal: cleanText(learnerProfile.goal, 100),
+      difficulties: cleanText(learnerProfile.difficulties, 600),
+      note: cleanText(learnerProfile.note, 600),
+      pace: ["gentle", "balanced", "quick"].includes(learnerProfile.pace) ? learnerProfile.pace : "balanced",
+    };
+  }
+  next.onboardingComplete = next.onboardingComplete || path.length > 0;
+  if (mode === "path") next.migrationComplete = true;
+  return next;
+}
+
 function cleanPath(path, courseCode) {
   if (!Array.isArray(path) || path.length > 12) return [];
   return path.filter((item) => item && typeof item === "object" && !Array.isArray(item)
-    && typeof item.id === "string" && item.id.length <= 100
+    && typeof item.id === "string" && /^[a-z0-9-]{2,100}$/i.test(item.id)
     && typeof item.title === "string" && item.title.trim().length > 0 && item.title.length <= 120
     && ALLOWED_TYPES.has(item.activityType))
     .map((item) => ({
@@ -126,29 +200,37 @@ module.exports = async function learningProfileHandler(request, response) {
   const completed = Array.isArray(payload.completedModuleIds)
     ? payload.completedModuleIds.filter((id) => typeof id === "string" && id.length <= 100).slice(0, 12)
     : [];
+  const mode = payload.mode;
+  if (!["path", "progress", "import_path", "finish_import"].includes(mode)) return sendJson(response, 400, { error: "Choose a valid profile update." });
+  const path = cleanPath(payload.studyPath, courseCode);
+  if (["path", "import_path"].includes(mode) && !path.length) return sendJson(response, 400, { error: "A valid personalized path is required." });
+  const attempts = cleanModuleAttempts(payload.moduleAttempts);
   const row = {
     reg_number: session.registration,
     course_code: courseCode,
     course_title: cleanText(payload.courseTitle, 120),
     completed_module_ids: completed,
-    module_attempts: cleanModuleAttempts(payload.moduleAttempts),
     updated_at: new Date().toISOString(),
   };
-  if (payload.mode === "path") {
+  if (mode === "path" || mode === "import_path") {
     const learnerProfile = payload.learnerProfile && typeof payload.learnerProfile === "object" ? payload.learnerProfile : {};
-    const path = cleanPath(payload.studyPath, courseCode);
-    if (!path.length) return sendJson(response, 400, { error: "A valid personalized path is required." });
     row.learner_goal = cleanText(learnerProfile.goal, 100);
     row.difficulty_topics = cleanText(learnerProfile.difficulties, 600);
     row.learner_note = cleanText(learnerProfile.note, 600);
     row.pace = ["gentle", "balanced", "quick"].includes(learnerProfile.pace) ? learnerProfile.pace : "balanced";
     row.study_path = path;
     row.path_source = cleanText(payload.pathSource, 500);
-  } else if (payload.mode !== "progress") {
-    return sendJson(response, 400, { error: "Choose a valid profile update." });
+  } else if (mode === "progress") {
+    if (path.length) row.study_path = path;
+    if (typeof payload.pathSource === "string") row.path_source = cleanText(payload.pathSource, 500);
   }
 
   try {
+    const existingRows = await databaseRequest(database, `?select=study_state&reg_number=eq.${regNumber}&limit=1`);
+    const currentState = existingRows?.[0]?.study_state;
+    const nextState = mergeStudentState(currentState, mode, courseCode, completed, attempts, path, payload);
+    row.study_state = nextState;
+    row.module_attempts = attempts;
     await databaseRequest(database, "?on_conflict=reg_number", { method: "POST", body: row });
     return sendJson(response, 200, { ok: true });
   } catch (error) {

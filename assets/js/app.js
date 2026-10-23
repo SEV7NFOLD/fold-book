@@ -445,36 +445,114 @@ function saveStudyProgress() {
   }
 }
 
-async function syncLearningProfile(mode = "progress", courseCode = currentCourse) {
-  if (!currentStudent || !COURSE_CODE_PATTERN.test(courseCode || "")) return false;
-  const payload = {
-    mode,
-    courseCode,
-    courseTitle: courseTitleFor(courseCode),
-    completedModuleIds: studyProgress.courseCompleted[courseCode] || [],
-    moduleAttempts: Object.fromEntries((studyProgress.studyPaths[courseCode] || []).map((module) => [module.id, studyProgress.attempts[module.id] || { attempts: 0, correct: 0, wrong: 0, questionResults: [], questionWrongAttempts: [] }]).filter(([, record]) => record.attempts > 0)),
-  };
-  if (mode === "path") {
-    payload.learnerProfile = studyProgress.learnerProfile || {};
-    payload.studyPath = studyProgress.studyPaths[courseCode] || [];
-    payload.pathSource = studyProgress.studyPathSources[courseCode] || "";
-  }
-  try {
-    const response = await fetch("/api/student/learning-profile", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify(payload),
+let learningProfileSyncQueue = Promise.resolve();
+let learningProfileSyncNoticeShown = false;
+
+function applySyncedStudyState(state, { preserveLocal = false } = {}) {
+  if (!state || state.version !== 1) return false;
+  const paths = {};
+  for (const [rawCode, items] of Object.entries(state.studyPaths || {})) {
+    const code = rawCode.toUpperCase();
+    if (!COURSE_CODE_PATTERN.test(code)) continue;
+    const modules = sanitizeStudyModules(items, code).map((module) => {
+      const localModule = preserveLocal
+        ? studyProgress.studyPaths?.[code]?.find((candidate) => candidate.id === module.id)
+        : null;
+      return localModule?.questions?.length > module.questions.length
+        ? { ...module, questions: localModule.questions }
+        : module;
     });
-    if (!response.ok) {
-      const result = await response.json().catch(() => ({}));
-      throw new Error(result.error || "Could not sync the learning profile.");
-    }
-    return true;
-  } catch (error) {
-    console.warn("Could not sync the WhatsApp learning focus:", error.message);
-    return false;
+    if (modules.length) paths[code] = modules;
   }
+  studyProgress.studyPaths = preserveLocal ? { ...studyProgress.studyPaths, ...paths } : paths;
+  studyProgress.studyPathSources = preserveLocal
+    ? { ...studyProgress.studyPathSources, ...(state.studyPathSources || {}) }
+    : (state.studyPathSources || {});
+  studyProgress.studyPathTitles = preserveLocal
+    ? { ...studyProgress.studyPathTitles, ...(state.studyPathTitles || {}) }
+    : (state.studyPathTitles || {});
+  studyProgress.courseCompleted = preserveLocal ? { ...studyProgress.courseCompleted } : {};
+  studyProgress.attempts = preserveLocal ? { ...studyProgress.attempts } : {};
+  for (const [code, modules] of Object.entries(paths)) {
+    const validIds = new Set(modules.map((module) => module.id));
+    const remoteCompleted = Array.isArray(state.courseCompleted?.[code])
+      ? state.courseCompleted[code].filter((id) => validIds.has(id)) : [];
+    const localCompleted = preserveLocal && Array.isArray(studyProgress.courseCompleted[code])
+      ? studyProgress.courseCompleted[code].filter((id) => validIds.has(id)) : [];
+    studyProgress.courseCompleted[code] = [...new Set([...remoteCompleted, ...localCompleted])];
+    const records = state.moduleAttempts?.[code] && typeof state.moduleAttempts[code] === "object"
+      ? state.moduleAttempts[code] : {};
+    for (const module of modules) {
+      const remote = records[module.id];
+      const safeRemote = remote && typeof remote === "object" ? remote : {};
+      const local = preserveLocal ? studyProgress.attempts[module.id] || {} : {};
+      const remoteResults = Array.isArray(safeRemote.questionResults) ? safeRemote.questionResults : [];
+      const localResults = Array.isArray(local.questionResults) ? local.questionResults : [];
+      const remoteWrong = Array.isArray(safeRemote.questionWrongAttempts) ? safeRemote.questionWrongAttempts : [];
+      const localWrong = Array.isArray(local.questionWrongAttempts) ? local.questionWrongAttempts : [];
+      studyProgress.attempts[module.id] = {
+        attempts: Math.max(Number(safeRemote.attempts) || 0, Number(local.attempts) || 0),
+        correct: Math.max(Number(safeRemote.correct) || 0, Number(local.correct) || 0),
+        wrong: Math.max(Number(safeRemote.wrong) || 0, Number(local.wrong) || 0),
+        questionResults: Array.from({ length: Math.max(remoteResults.length, localResults.length) }, (_, index) => remoteResults[index] === true || localResults[index] === true),
+        questionWrongAttempts: Array.from({ length: Math.max(remoteWrong.length, localWrong.length) }, (_, index) => Math.max(Number(remoteWrong[index]) || 0, Number(localWrong[index]) || 0)),
+      };
+    }
+  }
+  if (state.learnerProfile && typeof state.learnerProfile === "object") {
+    studyProgress.learnerProfile = {
+      goal: typeof state.learnerProfile.goal === "string" ? state.learnerProfile.goal : "",
+      difficulties: typeof state.learnerProfile.difficulties === "string" ? state.learnerProfile.difficulties : "",
+      note: typeof state.learnerProfile.note === "string" ? state.learnerProfile.note : "",
+      pace: ["gentle", "balanced", "quick"].includes(state.learnerProfile.pace) ? state.learnerProfile.pace : "balanced",
+    };
+    studyProgress.studyPace = studyProgress.learnerProfile.pace;
+  }
+  studyProgress.onboardingComplete = state.onboardingComplete === true || Object.keys(studyProgress.studyPaths).length > 0;
+  return true;
+}
+
+function syncLearningProfile(mode = "progress", courseCode = currentCourse) {
+  if (!currentStudent || !COURSE_CODE_PATTERN.test(courseCode || "")) return Promise.resolve(false);
+  const run = async () => {
+    const path = studyProgress.studyPaths[courseCode] || [];
+    const payload = {
+      mode,
+      courseCode,
+      courseTitle: studyProgress.studyPathTitles?.[courseCode] || courseTitleFor(courseCode),
+      completedModuleIds: studyProgress.courseCompleted[courseCode] || [],
+      moduleAttempts: Object.fromEntries(path.map((module) => [module.id, studyProgress.attempts[module.id] || {}])
+        .filter(([, record]) => Number(record.attempts) > 0)),
+      studyPath: path,
+      pathSource: studyProgress.studyPathSources[courseCode] || "",
+      activeCourse: courseCode,
+    };
+    if (mode === "path" || mode === "import_path") payload.learnerProfile = studyProgress.learnerProfile || {};
+    try {
+      const response = await fetch("/api/student/learning-profile", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.error || "Could not sync the learning profile.");
+      }
+      learningProfileSyncNoticeShown = false;
+      return true;
+    } catch (error) {
+      console.warn("Could not sync the student learning path:", error.message);
+      if (!learningProfileSyncNoticeShown) {
+        learningProfileSyncNoticeShown = true;
+        showNotice("Your progress is saved on this device, but hasn’t synced to your account yet. Keep FoldBook online and try again shortly.");
+      }
+      return false;
+    }
+  };
+  const task = learningProfileSyncQueue.then(run, run);
+  learningProfileSyncQueue = task.catch(() => false);
+  return task;
 }
 
 async function loadSyncedLearningProfile() {
@@ -482,59 +560,89 @@ async function loadSyncedLearningProfile() {
   try {
     const response = await fetch("/api/student/learning-profile", { credentials: "same-origin", headers: { Accept: "application/json" } });
     const result = await response.json().catch(() => ({}));
-    if (!response.ok || !result.profile) return false;
+    if (!response.ok) throw new Error(result.error || "Could not load your saved learning path.");
     const profile = result.profile;
-    const code = typeof profile.course_code === "string" && COURSE_CODE_PATTERN.test(profile.course_code) ? profile.course_code : "";
-    const serverModules = code ? sanitizeStudyModules(profile.study_path, code) : [];
-    const localModules = code ? studyProgress.studyPaths?.[code] || [] : [];
-    const modules = serverModules.map((serverModule) => {
-      const localModule = localModules.find((item) => item.id === serverModule.id);
-      return localModule?.questions?.length > serverModule.questions.length
-        ? { ...serverModule, questions: localModule.questions }
-        : serverModule;
-    });
-    if (!code || !modules.length || !/^GEN\s\d{3}$/.test(code) && !availableStudyCourses().some((course) => course.code === code)) return false;
-    studyProgress.learnerProfile = {
-      goal: typeof profile.learner_goal === "string" ? profile.learner_goal : "",
-      difficulties: typeof profile.difficulty_topics === "string" ? profile.difficulty_topics : "",
-      note: typeof profile.learner_note === "string" ? profile.learner_note : "",
-      pace: ["gentle", "balanced", "quick"].includes(profile.pace) ? profile.pace : "balanced",
-    };
-    studyProgress.studyPace = studyProgress.learnerProfile.pace;
-    studyProgress.studyPaths[code] = modules;
-    studyProgress.studyPathSources[code] = typeof profile.path_source === "string" ? profile.path_source : "";
-    if (typeof profile.course_title === "string" && profile.course_title.trim()) studyProgress.studyPathTitles[code] = profile.course_title.trim();
-    studyProgress.courseCompleted[code] = Array.isArray(profile.completed_module_ids)
-      ? profile.completed_module_ids.filter((id) => modules.some((module) => module.id === id)) : [];
-    if (profile.module_attempts && typeof profile.module_attempts === "object") {
-      for (const [moduleId, record] of Object.entries(profile.module_attempts)) {
-        if (modules.some((module) => module.id === moduleId) && record && typeof record === "object") {
-          const localRecord = studyProgress.attempts[moduleId] || {};
-          const serverResults = Array.isArray(record.questionResults) ? record.questionResults.slice(0, 15).map((answer) => answer === true) : [];
-          const localResults = Array.isArray(localRecord.questionResults) ? localRecord.questionResults : [];
-          const serverWrongAttempts = Array.isArray(record.questionWrongAttempts) ? record.questionWrongAttempts : [];
-          const localWrongAttempts = Array.isArray(localRecord.questionWrongAttempts) ? localRecord.questionWrongAttempts : [];
-          studyProgress.attempts[moduleId] = {
-            attempts: Math.max(Number(record.attempts) || 0, Number(localRecord.attempts) || 0),
-            correct: Math.max(Number(record.correct) || 0, Number(localRecord.correct) || 0),
-            wrong: Math.max(Number(record.wrong) || 0, Number(localRecord.wrong) || 0),
-            questionResults: Array.from({ length: Math.max(serverResults.length, localResults.length) }, (_, index) => serverResults[index] === true || localResults[index] === true),
-            questionWrongAttempts: Array.from({ length: Math.max(serverWrongAttempts.length, localWrongAttempts.length) }, (_, index) => Math.max(Number(serverWrongAttempts[index]) || 0, Number(localWrongAttempts[index]) || 0)),
-          };
+    const state = profile?.study_state;
+    let cachedCloudCourses = [];
+    if (state?.version === 1 && state.migrationComplete === true) {
+      const cloudCourses = new Set(Object.keys(state.studyPaths || {}));
+      const localCourses = Object.keys(studyProgress.studyPaths || {});
+      const localOnlyCourses = localCourses.filter((course) => !cloudCourses.has(course));
+      cachedCloudCourses = localCourses.filter((course) => cloudCourses.has(course));
+      // The account copy wins for paths already synced. Keep any path found
+      // only in this browser, plus its completion data, and upload that cache.
+      applySyncedStudyState(state, { preserveLocal: true });
+      let localOnlySynced = true;
+      for (const course of localOnlyCourses) {
+        if (!await syncLearningProfile("path", course)) localOnlySynced = false;
+      }
+      if (!localOnlySynced) console.warn("Some browser-only study paths are still waiting to sync to this account.");
+    } else {
+      if (state?.version === 1) applySyncedStudyState(state, { preserveLocal: true });
+      // Import existing browser progress once; keep the older server-side path
+      // as a fallback when no local copy of that course exists.
+      const legacyCode = typeof profile?.course_code === "string" && COURSE_CODE_PATTERN.test(profile.course_code)
+        ? profile.course_code.toUpperCase() : "";
+      if (legacyCode && !studyProgress.studyPaths[legacyCode]) {
+        const legacyPath = sanitizeStudyModules(profile.study_path, legacyCode);
+        if (legacyPath.length) {
+          studyProgress.studyPaths[legacyCode] = legacyPath;
+          studyProgress.studyPathSources[legacyCode] = typeof profile.path_source === "string" ? profile.path_source : "";
+          studyProgress.studyPathTitles[legacyCode] = typeof profile.course_title === "string" ? profile.course_title : courseTitleFor(legacyCode);
+          studyProgress.courseCompleted[legacyCode] = Array.isArray(profile.completed_module_ids)
+            ? profile.completed_module_ids.filter((id) => legacyPath.some((module) => module.id === id)) : [];
+          for (const [moduleId, record] of Object.entries(profile.module_attempts || {})) {
+            if (legacyPath.some((module) => module.id === moduleId)) studyProgress.attempts[moduleId] = record;
+          }
         }
       }
+      if (profile) {
+        studyProgress.learnerProfile = {
+          goal: typeof profile.learner_goal === "string" ? profile.learner_goal : "",
+          difficulties: typeof profile.difficulty_topics === "string" ? profile.difficulty_topics : "",
+          note: typeof profile.learner_note === "string" ? profile.learner_note : "",
+          pace: ["gentle", "balanced", "quick"].includes(profile.pace) ? profile.pace : "balanced",
+        };
+      }
+      // Migrate one course at a time so long paths fit comfortably within the
+      // serverless request limit and an interrupted migration can be retried.
+      let imported = true;
+      for (const course of Object.keys(studyProgress.studyPaths || {})) {
+        if (!await syncLearningProfile("import_path", course)) imported = false;
+      }
+      const importCourse = COURSE_CODE_PATTERN.test(currentCourse || "") && studyProgress.studyPaths[currentCourse]
+        ? currentCourse : Object.keys(studyProgress.studyPaths || {})[0];
+      if (imported && importCourse) {
+        imported = await syncLearningProfile("finish_import", importCourse);
+      }
+      if (!imported) console.warn("Some saved study paths are still waiting to sync to this account.");
     }
-    studyProgress.course = code;
-    studyProgress.completed = [...studyProgress.courseCompleted[code]];
-    studyProgress.onboardingComplete = true;
-    currentCourse = code;
-    chatCourseCode = code;
-    activeModules = modules;
-    syncCourseControls();
+    const paths = studyProgress.studyPaths || {};
+    const activeCode = state?.version === 1 && paths[state.activeCourse]
+      ? state.activeCourse
+      : (profile?.course_code && paths[profile.course_code] ? profile.course_code : studyProgress.course);
+    const code = COURSE_CODE_PATTERN.test(activeCode || "") && paths[activeCode] ? activeCode : Object.keys(paths)[0];
+    if (code && paths[code]) {
+      studyProgress.course = code;
+      studyProgress.completed = [...(studyProgress.courseCompleted[code] || [])];
+      studyProgress.onboardingComplete = true;
+      currentCourse = code;
+      chatCourseCode = code;
+      activeModules = paths[code];
+      syncCourseControls();
+    }
     saveStudyProgress();
-    return true;
+    for (const course of cachedCloudCourses) {
+      await syncLearningProfile("progress", course);
+    }
+    if (code && cachedCloudCourses.length) await syncLearningProfile("progress", code);
+    return Boolean(code);
   } catch (error) {
-    console.warn("Could not load the server-synced learning profile:", error.message);
+    console.warn("Could not load the account-synced learning paths:", error.message);
+    if (!learningProfileSyncNoticeShown) {
+      learningProfileSyncNoticeShown = true;
+      showNotice("Couldn’t load your account progress right now. Your saved progress on this device is still here; try again when you’re online.");
+    }
     return false;
   }
 }
@@ -1571,6 +1679,7 @@ function setCourse(course) {
   saveStudyProgress();
   renderStudyPath();
   updateStudySummary();
+  if (studyProgress.studyPaths?.[course]) void syncLearningProfile("progress", course);
 }
 
 function syncCourseControls() {
