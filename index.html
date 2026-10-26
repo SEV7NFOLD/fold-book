@@ -120,10 +120,18 @@
           </div>
           <section class="lesson-panel" id="lessonPanel" aria-live="polite" hidden>
             <div class="lesson-panel-heading"><h1 id="lessonTitle"></h1></div>
+            <section class="path-activity-screen" id="lessonActivity" aria-labelledby="lessonActivityTitle" hidden>
+              <div class="path-activity-mascot" id="lessonActivityMascot" aria-hidden="true"></div>
+              <span class="section-kicker" id="lessonActivityKicker">YOUR NEXT STUDY STEP</span>
+              <h2 id="lessonActivityTitle">Learn with Dr. Eco</h2>
+              <p id="lessonActivityText"></p>
+              <div class="path-activity-actions" id="lessonActivityActions"></div>
+              <button class="results-submit" id="lessonActivityDone" type="button">I’m done · Start checkpoint →</button>
+            </section>
             <p class="lesson-body" id="lessonBody"></p>
-            <div class="lesson-activity" id="lessonActivity" hidden></div>
             <p class="lesson-question" id="lessonQuestion"></p>
             <p class="lesson-assessment-progress" id="lessonAssessmentProgress" aria-live="polite"></p>
+            <div class="lesson-question-progress" id="lessonQuestionProgress" role="progressbar" aria-label="Question set loading" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><i></i></div>
             <div class="answer-options" id="answerOptions"></div>
             <div class="lesson-feedback-row"><div class="feedback-animation" id="lessonFeedbackAnimation" aria-hidden="true" hidden></div>
               <p class="lesson-feedback" id="lessonFeedback" role="status"></p>
@@ -140,6 +148,11 @@
                 <p id="moduleCompletionSummary" class="module-completion-summary" role="status"></p>
                 <canvas id="moduleCompletionCanvas" width="1080" height="1350" aria-hidden="true"></canvas>
                 <button class="results-submit" id="exportModuleCompletion" type="button">Download my recap card ↓</button>
+                <div class="path-complete-actions" id="pathCompleteActions" hidden>
+                  <p>Your path is complete. Celebrate with Dr. Eco or build a fresh route.</p>
+                  <button class="results-submit" id="pathCompleteCall" type="button">Call Dr. Eco to celebrate 🎉</button>
+                  <button class="card-secondary-button" id="pathCompleteBuild" type="button">Build another learning path</button>
+                </div>
               </section>
             </section>
             <button class="results-submit" id="lessonNextQuestion" type="button" hidden>Next question →</button>
@@ -546,7 +559,7 @@
       <button id="mobileLearn" type="button" data-tab="home"><i>🗺️</i>Learn</button>
       <button id="mobileResults" type="button" data-tab="results"><i>📄</i>Results</button>
       <button id="mobileBoard" type="button" data-tab="board"><i>🏆</i>Ranks</button>
-      <button class="fab" id="mobileChat" type="button" data-tab="chat" aria-label="Chat with Dr. Eco">🎓</button>
+      <button class="fab" id="mobileChat" type="button" data-tab="chat" aria-label="Chat with Dr. Eco"><i>🎓</i><small>Dr. Eco</small></button>
       <button id="mobileInvite" type="button" data-tab="invite"><i>👥</i>Invite</button>
     </nav>
 
@@ -558,6 +571,7 @@
         </div>
         <div class="test-controls"><label for="questionCount">Questions</label><select id="questionCount"><option value="5">5 Questions</option><option value="10">10 Questions</option><option value="20">20 Questions</option></select><strong id="testHearts">❤️❤️❤️</strong></div>
         <div class="test-progress"><div class="fuel-track"><i id="testBar"></i></div><span class="mono" id="testProgress">0 / 5</span></div>
+        <div class="quick-test-loading" id="quickTestLoading" role="status" hidden><i></i><span id="quickTestLoadingText">Gathering your course notes…</span></div>
         <h3 id="testQuestion"></h3>
         <div class="test-options" id="testOptions"></div>
         <aside class="lecturer-tip"><strong>UNIUYO marking tip</strong><p id="lecturerTip">Read the command word and define the key economic concept before explaining it.</p></aside>
@@ -566,7 +580,18 @@
           <div class="feedback-animation" id="testFeedbackAnimation" aria-hidden="true"></div>
           <p class="test-feedback" id="testFeedback" role="status"></p>
           <button class="results-submit" id="nextTestQuestion" type="button" disabled>Continue</button>
+          <button class="card-secondary-button path-test-return" id="pathTestReturn" type="button" hidden>Return to module checkpoint</button>
         </section>
+      </div>
+    </section>
+
+    <section class="question-milestone" id="questionMilestone" role="dialog" aria-modal="true" aria-labelledby="questionMilestoneTitle" hidden>
+      <div class="question-milestone-card">
+        <div class="question-milestone-animation" id="questionMilestoneAnimation" aria-hidden="true"></div>
+        <span class="section-kicker">FIVE ANSWERS MASTERED</span>
+        <h2 id="questionMilestoneTitle">You’re on a roll!</h2>
+        <p id="questionMilestoneCopy">Five correct answers—your Economics thinking is clicking.</p>
+        <button class="results-submit" id="questionMilestoneContinue" type="button">Keep going →</button>
       </div>
     </section>
 

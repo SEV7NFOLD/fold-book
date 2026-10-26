@@ -65,6 +65,9 @@ function cleanModuleAttempts(value) {
       questionWrongAttempts: Array.isArray(record.questionWrongAttempts)
         ? record.questionWrongAttempts.slice(0, 15).map((attempts) => Math.max(0, Math.min(1000, Math.floor(Number(attempts) || 0))))
         : [],
+      questionFirstPassDone: Array.isArray(record.questionFirstPassDone) ? record.questionFirstPassDone.slice(0, 15).map((done) => done === true) : [],
+      correctionMode: record.correctionMode === true,
+      activityComplete: record.activityComplete === true,
     }]];
   }));
 }
