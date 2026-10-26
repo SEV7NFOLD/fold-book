@@ -1173,11 +1173,12 @@ textarea.admin-material-control { min-height: 140px; resize: vertical; }
   .shell { display: block; width: calc(100% - 24px); min-height: calc(100vh - 120px); padding: 12px 0 0; }
   .side { display: none; }
   .shell > main { padding: 8px 0 110px; }
-  .bnav { position: fixed; z-index: 15; right: 0; bottom: 0; left: 0; display: flex; justify-content: space-around; align-items: center; padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--fb-color-border); background: var(--fb-color-nav-glass); backdrop-filter: blur(10px); }
-  .bnav button { display: flex; min-width: 52px; flex-direction: column; align-items: center; gap: 2px; padding: 6px 10px; border: 0; border-radius: 10px; background: transparent; color: var(--fb-color-muted); font-size: 11px; font-weight: 700; }
+  .bnav { position: fixed; z-index: 15; right: 0; bottom: 0; left: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); justify-content: normal; align-items: center; padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--fb-color-border); background: var(--fb-color-nav-glass); backdrop-filter: blur(10px); }
+  .bnav button { display: flex; width: 100%; min-width: 0; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px; border: 0; border-radius: 10px; background: transparent; color: var(--fb-color-muted); font-size: 11px; font-weight: 700; }
   .bnav button i { font-size: 20px; font-style: normal; }
   .bnav button.on { color: var(--fb-color-lime); }
-  .bnav .fab { display: grid; width: 58px; height: 58px; min-width: 58px; margin-top: -28px; place-items: center; border-radius: 50%; background: var(--fb-color-lime); color: #111; font-size: 26px; box-shadow: 0 5px 0 var(--fb-color-lime-edge); }
+  .bnav .fab { display: flex; width: 58px; height: 58px; min-width: 58px; justify-self: center; flex-direction: column; justify-content: center; gap: 1px; margin-top: -28px; padding: 0; border-radius: 50%; background: var(--fb-color-lime); color: #111; font-size: 25px; box-shadow: 0 5px 0 var(--fb-color-lime-edge); }
+  .bnav .fab small { color: #111; font-size: 8px; font-weight: 850; line-height: 1; white-space: nowrap; }
   .bnav .fab:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--fb-color-lime-edge); }
   .learn-section, .leaderboard-section { width: 100%; }
   .study-sidebar { grid-template-columns: repeat(2, minmax(0, 1fr)); }

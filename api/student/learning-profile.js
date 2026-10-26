@@ -100,6 +100,8 @@ function cleanStudentState(value) {
   const activeCourse = cleanText(value.activeCourse, 12).toUpperCase();
   const learnerProfile = value.learnerProfile && typeof value.learnerProfile === "object" && !Array.isArray(value.learnerProfile)
     ? value.learnerProfile : {};
+  const accountStats = value.accountStats && typeof value.accountStats === "object" && !Array.isArray(value.accountStats)
+    ? value.accountStats : {};
   return {
     version: 1,
     activeCourse: COURSE_CODE.test(activeCourse) ? activeCourse : Object.keys(studyPaths)[0] || "",
@@ -116,6 +118,20 @@ function cleanStudentState(value) {
     },
     onboardingComplete: value.onboardingComplete === true || Object.keys(studyPaths).length > 0,
     migrationComplete: value.migrationComplete === true,
+    accountStatsReady: value.accountStatsReady === true || Boolean(value.accountStats && typeof value.accountStats === "object"),
+    accountStats: {
+      xp: Math.max(0, Math.min(100000000, Math.floor(Number(accountStats.xp) || 0))),
+      gems: Math.max(0, Math.min(100000000, Math.floor(Number(accountStats.gems) || 0))),
+      streak: Math.max(0, Math.min(100000, Math.floor(Number(accountStats.streak) || 0))),
+      fuel: Math.max(0, Math.min(100, Math.floor(Number.isFinite(Number(accountStats.fuel)) ? Number(accountStats.fuel) : 100))),
+      referralCount: Math.max(0, Math.min(1000000, Math.floor(Number(accountStats.referralCount) || 0))),
+      referralRewardClaimed: accountStats.referralRewardClaimed === true,
+      demoPassExpiresAt: Math.max(0, Math.floor(Number(accountStats.demoPassExpiresAt) || 0)),
+      examRewardClaimed: accountStats.examRewardClaimed === true,
+      lastStudyDate: /^\d{4}-\d{2}-\d{2}$/.test(accountStats.lastStudyDate || "") ? accountStats.lastStudyDate : "",
+      activityDays: Array.isArray(accountStats.activityDays)
+        ? accountStats.activityDays.filter((day) => typeof day === "string" && /^\d{4}-\d{2}-\d{2}$/.test(day)).slice(-35) : [],
+    },
   };
 }
 
@@ -124,9 +140,16 @@ function mergeStudentState(existing, mode, courseCode, completed, attempts, path
     version: 1, activeCourse: "", studyPaths: {}, courseCompleted: {}, moduleAttempts: {},
     studyPathSources: {}, studyPathTitles: {},
     learnerProfile: { goal: "", difficulties: "", note: "", pace: "balanced" }, onboardingComplete: false, migrationComplete: false,
+    accountStatsReady: false,
+    accountStats: { xp: 0, gems: 0, streak: 0, fuel: 100, referralCount: 0, referralRewardClaimed: false, demoPassExpiresAt: 0, examRewardClaimed: false, lastStudyDate: "", activityDays: [] },
   };
   if (mode === "finish_import") return { ...current, activeCourse: courseCode, migrationComplete: true };
   const next = { ...current, activeCourse: courseCode };
+  if (payload.accountStats && typeof payload.accountStats === "object" && !Array.isArray(payload.accountStats)) {
+    next.accountStats = cleanStudentState({ accountStats: payload.accountStats }).accountStats;
+    next.accountStatsReady = true;
+  }
+  if (mode === "account_stats") return next;
   if (path.length) next.studyPaths = { ...current.studyPaths, [courseCode]: path };
   next.courseCompleted = { ...current.courseCompleted, [courseCode]: completed };
   next.moduleAttempts = { ...current.moduleAttempts, [courseCode]: attempts };
@@ -204,15 +227,22 @@ module.exports = async function learningProfileHandler(request, response) {
     ? payload.completedModuleIds.filter((id) => typeof id === "string" && id.length <= 100).slice(0, 12)
     : [];
   const mode = payload.mode;
-  if (!["path", "progress", "import_path", "finish_import"].includes(mode)) return sendJson(response, 400, { error: "Choose a valid profile update." });
+  if (!["path", "progress", "import_path", "finish_import", "account_stats"].includes(mode)) return sendJson(response, 400, { error: "Choose a valid profile update." });
   const path = cleanPath(payload.studyPath, courseCode);
   if (["path", "import_path"].includes(mode) && !path.length) return sendJson(response, 400, { error: "A valid personalized path is required." });
   const attempts = cleanModuleAttempts(payload.moduleAttempts);
   const row = {
     reg_number: session.registration,
+    learner_goal: "",
+    difficulty_topics: "",
+    learner_note: "",
+    pace: "balanced",
     course_code: courseCode,
     course_title: cleanText(payload.courseTitle, 120),
+    study_path: path,
     completed_module_ids: completed,
+    path_source: "",
+    module_attempts: attempts,
     updated_at: new Date().toISOString(),
   };
   if (mode === "path" || mode === "import_path") {
@@ -224,13 +254,27 @@ module.exports = async function learningProfileHandler(request, response) {
     row.study_path = path;
     row.path_source = cleanText(payload.pathSource, 500);
   } else if (mode === "progress") {
-    if (path.length) row.study_path = path;
     if (typeof payload.pathSource === "string") row.path_source = cleanText(payload.pathSource, 500);
   }
 
   try {
-    const existingRows = await databaseRequest(database, `?select=study_state&reg_number=eq.${regNumber}&limit=1`);
-    const currentState = existingRows?.[0]?.study_state;
+    const existingRows = await databaseRequest(database, `?select=*&reg_number=eq.${regNumber}&limit=1`);
+    const existingProfile = existingRows?.[0];
+    if (existingProfile) {
+      const unchangedColumns = ["learner_goal", "difficulty_topics", "learner_note", "pace"];
+      for (const column of unchangedColumns) {
+        if (mode !== "path" && mode !== "import_path") row[column] = existingProfile[column] ?? row[column];
+      }
+      if (mode === "account_stats" || (!path.length && mode === "progress")) {
+        for (const column of ["course_code", "course_title", "study_path", "completed_module_ids", "path_source", "module_attempts"]) {
+          row[column] = existingProfile[column] ?? row[column];
+        }
+      } else if (mode === "finish_import") {
+        row.study_path = existingProfile.study_path ?? row.study_path;
+        row.path_source = existingProfile.path_source ?? row.path_source;
+      }
+    }
+    const currentState = existingProfile?.study_state;
     const nextState = mergeStudentState(currentState, mode, courseCode, completed, attempts, path, payload);
     row.study_state = nextState;
     row.module_attempts = attempts;
