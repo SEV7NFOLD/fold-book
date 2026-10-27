@@ -146,6 +146,7 @@
               <section class="module-completion-card" id="moduleCompletionCard" aria-labelledby="moduleCompletionHeading" hidden>
                 <h2 id="moduleCompletionHeading">Dr. Eco’s recap</h2>
                 <p id="moduleCompletionSummary" class="module-completion-summary" role="status"></p>
+                <button class="results-submit" id="continueNextModule" type="button" hidden>Continue to the next module →</button>
                 <canvas id="moduleCompletionCanvas" width="1080" height="1350" aria-hidden="true"></canvas>
                 <button class="results-submit" id="exportModuleCompletion" type="button">Download my recap card ↓</button>
                 <div class="path-complete-actions" id="pathCompleteActions" hidden>
@@ -208,13 +209,13 @@
         <div class="chat-messages" id="chatMessages" aria-live="polite"></div>
         <div class="chat-prompts" id="chatPrompts">
           <button type="button" class="prompt-chip" data-prompt="Explain Peak-Load Pricing">Explain Peak-Load Pricing</button>
-          <button type="button" class="prompt-chip" data-prompt="Generate 10-Q Quiz">Generate 10-Q Quiz</button>
+          <button type="button" class="prompt-chip" data-action="generate-quiz">Build a 10-question course quiz</button>
           <button type="button" class="prompt-chip" data-prompt="What's on this week?">What's on this week?</button>
         </div>
         <form class="chat-composer" id="chatForm">
           <button type="button" class="chat-icon-button" id="micButton" aria-label="Speak your question">🎤</button>
-          <button type="button" class="chat-icon-button" id="cameraUploadButton" aria-label="Take a photo with your camera" title="Take a photo">📷</button>
-          <button type="button" class="chat-icon-button" id="fileUploadButton" aria-label="Attach a PDF or photo" title="Attach a PDF or photo">📎</button>
+          <button type="button" class="chat-icon-button" id="cameraUploadButton" aria-label="Take a photo to add to your study materials" title="Take a photo · Add it to your study materials">📷</button>
+          <button type="button" class="chat-icon-button" id="fileUploadButton" aria-label="Add a PDF or photo to your study materials" title="Attach a PDF or photo · Save it to your study materials">📎</button>
           <input id="chatMaterialPicker" class="chat-material-picker" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp" aria-label="Choose a PDF or photo to add as study material">
           <input id="cameraMaterialPicker" class="chat-material-picker" type="file" accept="image/*" capture="environment" aria-label="Take a photo of study material">
           <input id="chatInput" type="text" placeholder="Ask Dr. Eco about your course" autocomplete="off" aria-label="Your question">
@@ -314,7 +315,7 @@
               <div class="poster-footer"><p class="poster-slogan">BUILD STRONGER BRANDS. CREATE REAL VALUE.</p><p class="poster-services">STRATEGY <span>•</span> DESIGN <span>•</span> TECHNOLOGY</p><p class="poster-powered">POWERED BY SEV7NFOLD CREATIVE TECH AGENCY</p><a class="poster-url" href="https://bignssien.wixstudio.com/sev7nfold">bignssien.wixstudio.com/sev7nfold</a></div>
             </article>
           </section>
-          <p class="helper-text"><span class="score-note-marker" aria-hidden="true">i</span> Results are available after you sign in. JAMB-only accounts need a linked matric number before a result can be matched.</p>
+          <p class="helper-text" id="resultsSignInHelp"><span class="score-note-marker" aria-hidden="true">i</span> Results are available after you sign in. JAMB-only accounts need a linked matric number before a result can be matched.</p>
         </div>
       </section>
 
@@ -566,7 +567,7 @@
     <section class="test-drawer" id="tdr" role="dialog" aria-modal="true" aria-labelledby="testTitle" hidden>
       <div class="test-drawer-card">
         <div class="test-drawer-header">
-          <div><span class="section-kicker">PRACTICE SESSION</span><h2 id="testTitle">Quick Test</h2></div>
+          <div><span class="section-kicker">PRACTICE SESSION</span><h2 id="testTitle">Course practice</h2></div>
           <button class="card-secondary-button" id="closeTest" type="button" aria-label="Close test">×</button>
         </div>
         <div class="test-controls"><label for="questionCount">Questions</label><select id="questionCount"><option value="5">5 Questions</option><option value="10">10 Questions</option><option value="20">20 Questions</option></select><strong id="testHearts">❤️❤️❤️</strong></div>
@@ -574,7 +575,7 @@
         <div class="quick-test-loading" id="quickTestLoading" role="status" hidden><i></i><span id="quickTestLoadingText">Gathering your course notes…</span></div>
         <h3 id="testQuestion"></h3>
         <div class="test-options" id="testOptions"></div>
-        <aside class="lecturer-tip"><strong>UNIUYO marking tip</strong><p id="lecturerTip">Read the command word and define the key economic concept before explaining it.</p></aside>
+        <aside class="lecturer-tip"><strong id="lecturerTipHeading">Test tip</strong><p id="lecturerTip">Read each question carefully. The explanation appears after you answer.</p></aside>
         <section class="answer-drawer" id="testAnswerDrawer" aria-live="polite">
           <h3 id="testFeedbackHeading"></h3>
           <div class="feedback-animation" id="testFeedbackAnimation" aria-hidden="true"></div>

@@ -187,6 +187,7 @@ function cleanPath(path, courseCode) {
           question: cleanText(question.question, 500),
           answers: Array.isArray(question.answers) ? question.answers.slice(0, 4).map((answer) => cleanText(answer, 250)) : [],
           correctAnswer: Number.isInteger(question.correctAnswer) && question.correctAnswer >= 0 && question.correctAnswer <= 3 ? question.correctAnswer : 0,
+          explanation: cleanText(question.explanation, 600),
         })).filter((question) => question.question && question.answers.length >= 2 && question.answers.every(Boolean) && question.correctAnswer < question.answers.length) : [],
       activityType: item.activityType,
       activityText: cleanText(item.activityText, 1200),
