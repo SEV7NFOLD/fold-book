@@ -46,7 +46,7 @@
         <h2 id="foldbookInstallTitle">Use FoldBook on mobile</h2>
         <p class="foldbook-install-copy">Keep your courses, Dr. Eco, and learning streak close by. Add FoldBook to your home screen for a focused, app-like experience.</p>
         <div class="foldbook-install-streak"><span aria-hidden="true">⚡</span><span><strong>Small steps count.</strong> Pick up your next study quest whenever you’re ready.</span></div>
-        <p class="foldbook-reminder-copy">One friendly study nudge each evening. You can switch it off whenever you like.</p>
+        <p class="foldbook-reminder-copy">Up to two short study nudges a day, set by FoldBook Admin. Pause anytime.</p>
         <button class="foldbook-reminder-cta" type="button">Turn on daily reminders</button>
         <p class="foldbook-install-help" id="foldbookInstallHelp" hidden></p>
         <p class="foldbook-install-status" role="status" aria-live="polite"></p>
@@ -98,13 +98,12 @@
     }
     button.disabled = true;
     try {
-      let permission = Notification.permission;
-      if (permission === "default") permission = await Notification.requestPermission();
-      if (permission !== "granted") {
-        status.textContent = "Notifications are off in your browser settings. Allow them there whenever you want FoldBook reminders.";
+      if (/iphone|ipad|ipod/i.test(navigator.userAgent) && !isInstalled()) {
+        status.textContent = "On iPhone, first use Share → Add to Home Screen, then open FoldBook from your home screen to turn on reminders.";
         return;
       }
-
+      let permission = Notification.permission;
+      if (permission === "default") permission = await Notification.requestPermission();
       const serviceWorker = await navigator.serviceWorker.ready;
       const existing = await serviceWorker.pushManager.getSubscription();
       if (existing) {
@@ -120,9 +119,8 @@
         status.textContent = "Reminders paused. You can turn them back on whenever you’re ready.";
         return;
       }
-
-      if (/iphone|ipad|ipod/i.test(navigator.userAgent) && !isInstalled()) {
-        status.textContent = "On iPhone, first use Share → Add to Home Screen, then open FoldBook from your home screen to turn on reminders.";
+      if (permission !== "granted") {
+        status.textContent = "Notifications are off in your browser settings. Allow them there whenever you want FoldBook reminders.";
         return;
       }
       const keyResponse = await fetch("/api/student/reminders", { credentials: "same-origin" });
@@ -143,7 +141,7 @@
         throw new Error("We couldn’t save your reminder setting. Please try again.");
       }
       updateReminderButton(true);
-      status.textContent = "You’re in! We’ll send one gentle study nudge each evening. Keep your streak growing 🌱";
+      status.textContent = "You’re in! We’ll send up to two gentle study nudges a day. Keep your streak growing 🌱";
     } catch (error) {
       status.textContent = error.message || "Could not update reminders right now. Please try again shortly.";
     } finally {
@@ -221,7 +219,7 @@
     if (enabled) return;
     const banner = document.createElement("aside");
     banner.className = "foldbook-reminder-banner";
-    banner.innerHTML = '<span aria-hidden="true">🔥</span><span><strong>Keep your study streak warm</strong><small>Get one friendly reminder each evening.</small></span><button type="button">Set reminder</button>';
+    banner.innerHTML = '<span aria-hidden="true">🔥</span><span><strong>Keep your study streak warm</strong><small>Get friendly reminders set by FoldBook Admin.</small></span><button type="button">Set reminder</button>';
     banner.querySelector("button").addEventListener("click", async () => {
       if (!modal) createModal();
       await toggleStudyReminders();
