@@ -19,7 +19,10 @@ const sfxFiles = fs.readdirSync(sfxDirectory, { withFileTypes: true })
   .map((entry) => `assets/sfx/${entry.name}`);
 const lottieManifest = "assets/lottie/manifest.json";
 const allowedFiles = [
-  "index.html",\n  "manifest.webmanifest",\n  "sw.js",\n  "assets/js/pwa.js",
+  "index.html",
+  "manifest.webmanifest",
+  "sw.js",
+  "assets/js/pwa.js",
   ...brandFiles,
   ...lottieFiles,
   ...sfxFiles,
