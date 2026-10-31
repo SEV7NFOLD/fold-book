@@ -28,7 +28,7 @@ const allowedFiles = [
   ...sfxFiles,
   lottieManifest,
   "assets/css/design-tokens.css",
-  "assets/css/styles.css",
+  "assets/css/styles.css",\n  "assets/css/pwa.css",
   "assets/js/app.js",
   "data/announcements.csv",
   "data/timetable.csv",
