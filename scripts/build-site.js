@@ -20,12 +20,16 @@ const sfxFiles = fs.readdirSync(sfxDirectory, { withFileTypes: true })
 const lottieManifest = "assets/lottie/manifest.json";
 const allowedFiles = [
   "index.html",
+  "manifest.webmanifest",
+  "sw.js",
+  "assets/js/pwa.js",
   ...brandFiles,
   ...lottieFiles,
   ...sfxFiles,
   lottieManifest,
   "assets/css/design-tokens.css",
   "assets/css/styles.css",
+  "assets/css/pwa.css",
   "assets/js/app.js",
   "data/announcements.csv",
   "data/timetable.csv",

@@ -1,0 +1,137 @@
+.foldbook-install-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(0 0 0 / 78%);
+  backdrop-filter: blur(10px);
+}
+.foldbook-install-overlay[hidden] { display: none; }
+.foldbook-install-card {
+  position: relative;
+  width: min(100%, 430px);
+  padding: 30px 24px 22px;
+  overflow: hidden;
+  color: #f2efe8;
+  background: linear-gradient(155deg, #1b1b1e 0%, #101012 76%);
+  border: 1px solid #38383e;
+  border-radius: 28px;
+  box-shadow: 0 24px 90px rgb(0 0 0 / 60%), 0 0 44px rgb(217 240 124 / 9%);
+  font-family: var(--fb-font-body, system-ui, sans-serif);
+}
+.foldbook-install-card::before {
+  position: absolute;
+  top: -110px;
+  right: -76px;
+  width: 230px;
+  height: 230px;
+  content: "";
+  background: radial-gradient(circle, rgb(217 240 124 / 17%), transparent 68%);
+  pointer-events: none;
+}
+.foldbook-install-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 1;
+  width: 38px;
+  height: 38px;
+  color: #c5c5cb;
+  background: #29292d;
+  border: 1px solid #3a3a40;
+  border-radius: 50%;
+  font-size: 24px;
+  cursor: pointer;
+}
+.foldbook-install-badge {
+  position: relative;
+  display: grid;
+  width: 76px;
+  height: 76px;
+  margin-bottom: 22px;
+  place-items: center;
+  color: #090909;
+  background: linear-gradient(145deg, #e8fa9f, #b8d850);
+  border: 4px solid #f4ffd1;
+  border-radius: 24px;
+  box-shadow: 0 7px 0 #718d2b, 0 14px 32px rgb(217 240 124 / 18%);
+  transform: rotate(-5deg);
+}
+.foldbook-install-badge span { font-size: 38px; transform: rotate(5deg); }
+.foldbook-install-badge i {
+  position: absolute;
+  top: 5px;
+  right: 3px;
+  color: #fff;
+  font-size: 19px;
+  font-style: normal;
+}
+.foldbook-install-kicker {
+  margin: 0 0 10px;
+  color: #d9f07c;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .16em;
+}
+.foldbook-install-card h2 {
+  max-width: 330px;
+  margin: 0 0 12px;
+  font-size: clamp(27px, 7vw, 34px);
+  font-weight: 800;
+  letter-spacing: -.04em;
+  line-height: 1.04;
+}
+.foldbook-install-copy {
+  margin: 0;
+  color: #c2c2c9;
+  font-size: 15px;
+  line-height: 1.5;
+}
+.foldbook-install-streak {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 20px 0 12px;
+  padding: 13px 14px;
+  color: #e5e6de;
+  background: #181a13;
+  border: 1px solid #3b4324;
+  border-radius: 16px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.foldbook-install-streak > span:first-child { font-size: 23px; }
+.foldbook-install-streak strong { display: block; color: #e5f7ad; }
+.foldbook-install-help,.foldbook-install-status {
+  margin: 12px 2px;
+  color: #d9f07c;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.foldbook-install-status:empty { display: none; }
+.foldbook-install-actions { display: grid; grid-template-columns: 1fr 1.35fr; gap: 10px; margin-top: 20px; }
+.foldbook-install-actions button {
+  min-height: 50px;
+  border-radius: 15px;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.foldbook-install-later { color: #dedee2; background: #29292d; border: 1px solid #414147; }
+.foldbook-install-cta {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  align-items: center;
+  color: #111;
+  background: linear-gradient(180deg, #e6fa9b, #c8e66b);
+  border: 1px solid #f1ffc5;
+  box-shadow: 0 4px 0 #829c37;
+}
+.foldbook-install-actions button:focus-visible,.foldbook-install-close:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+@media (max-width: 360px) {
+  .foldbook-install-card { padding: 26px 18px 20px; }
+  .foldbook-install-actions { grid-template-columns: 1fr; }
+}
