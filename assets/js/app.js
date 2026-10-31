@@ -4955,8 +4955,8 @@ document.querySelector("#saveMobileReminderSettings")?.addEventListener("click",
       settings: mobileReminderSettingsPayload(),
     });
     setMobileReminderForm(result.settings);
-    status.textContent = "Saved. FoldBook will use these times, messages, and audience within about a minute.";
     await loadMobileReminderSettings();
+    status.textContent = "Saved. FoldBook will use these times, messages, and audience within about a minute."
   } catch (error) {
     status.textContent = error.message || "Mobile reminder settings could not be saved.";
   } finally {
