@@ -19,12 +19,115 @@ async function databaseRequest(database, path, options = {}) {
     },
     ...(options.body ? { body: JSON.stringify(options.body) } : {}),
   });
-  if (!response.ok) throw new Error("Reminder delivery state could not be updated.");
-  return response;
+  const text = await response.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { /* PostgREST may return no body. */ }
+  if (!response.ok) throw new Error("Reminder database request failed with " + response.status + ".");
+  return data;
 }
 
-function lagosDate(value) {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Lagos", year: "numeric", month: "2-digit", day: "2-digit" }).format(value);
+function lagosClock(date) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Africa/Lagos",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    date: values.year + "-" + values.month + "-" + values.day,
+    minute: Number(values.hour) * 60 + Number(values.minute),
+  };
+}
+
+function dueNow(scheduledTime, clock) {
+  if (typeof scheduledTime !== "string" || !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(scheduledTime)) return false;
+  const parts = scheduledTime.split(":").map(Number);
+  const difference = clock.minute - parts[0] * 60 - parts[1];
+  return difference >= 0 && difference <= 2;
+}
+
+function renderMessage(template, student) {
+  const name = String(student?.full_name || "student").trim().split(/\s+/)[0] || "student";
+  return String(template || "")
+    .replace(/\{\{\s*name\s*\}\}/gi, name)
+    .replace(/\{\{\s*link\s*\}\}/gi, "https://foldbook-beta.vercel.app");
+}
+
+async function loadProfiles(database) {
+  const rows = await databaseRequest(database, "student_accounts?select=reg_number,full_name&limit=10000");
+  return new Map((rows || []).map((row) => [row.reg_number, row]));
+}
+
+async function loadSubscriptions(database) {
+  return databaseRequest(database, "student_push_subscriptions?select=endpoint,registration,subscription,last_sent_at,last_morning_sent_date,last_evening_sent_date&limit=10000");
+}
+
+async function deleteSubscription(database, endpoint) {
+  await databaseRequest(database, "student_push_subscriptions?endpoint=eq." + encodeURIComponent(endpoint), { method: "DELETE" });
+}
+
+async function deliver(database, row, message, profile, occasion) {
+  try {
+    const response = await sendWebPush(row.subscription, {
+      title: occasion === "custom" ? "A FoldBook note for you ✨" : "Your FoldBook streak is waiting 🔥",
+      body: renderMessage(message, profile),
+      url: "/",
+      tag: occasion === "morning" ? "foldbook-morning-study" : occasion === "evening" ? "foldbook-evening-study" : "foldbook-custom-study",
+    });
+    if (response.status === 404 || response.status === 410) {
+      await deleteSubscription(database, row.endpoint);
+      return "removed";
+    }
+    if (!response.ok) return "failed";
+    const patch = { last_sent_at: new Date().toISOString() };
+    if (occasion === "morning") patch.last_morning_sent_date = lagosClock(new Date()).date;
+    if (occasion === "evening") patch.last_evening_sent_date = lagosClock(new Date()).date;
+    await databaseRequest(database, "student_push_subscriptions?endpoint=eq." + encodeURIComponent(row.endpoint), {
+      method: "PATCH",
+      prefer: "return=minimal",
+      body: patch,
+    });
+    return "sent";
+  } catch (error) {
+    console.error("Mobile reminder delivery failed:", error.message);
+    return "failed";
+  }
+}
+
+async function deliverScheduled(database, subscriptions, profiles, settings, occasion, clock) {
+  if (!settings.enabled || !settings[occasion + "_enabled"] || !dueNow(settings[occasion + "_time"], clock)) return 0;
+  const dateField = occasion === "morning" ? "last_morning_sent_date" : "last_evening_sent_date";
+  const message = settings[occasion + "_message"];
+  const minimumGap = Math.max(1, Number(settings.min_interval_hours) || 6) * 60 * 60 * 1000;
+  let delivered = 0;
+  for (const row of subscriptions) {
+    if (row[dateField] === clock.date) continue;
+    if (settings.audience === "selected" && !(settings.selected_registrations || []).includes(row.registration)) continue;
+    if (row.last_sent_at && Date.now() - Date.parse(row.last_sent_at) < minimumGap) continue;
+    const result = await deliver(database, row, message, profiles.get(row.registration), occasion);
+    if (result === "sent") delivered += 1;
+  }
+  return delivered;
+}
+
+async function deliverCustomCampaign(database, campaign, subscriptions, profiles) {
+  const targets = campaign.target_type === "selected" ? new Set(campaign.registrations || []) : null;
+  let sent = 0;
+  for (const row of subscriptions) {
+    if (targets && !targets.has(row.registration)) continue;
+    const result = await deliver(database, row, campaign.message, profiles.get(row.registration), "custom");
+    if (result === "sent") sent += 1;
+  }
+  await databaseRequest(database, "student_push_campaigns?id=eq." + encodeURIComponent(String(campaign.id)), {
+    method: "PATCH",
+    prefer: "return=minimal",
+    body: { status: "sent", sent_count: sent, processed_at: new Date().toISOString() },
+  });
+  return sent;
 }
 
 module.exports = async function studyRemindersHandler(request, response) {
@@ -32,54 +135,50 @@ module.exports = async function studyRemindersHandler(request, response) {
   if (!cronSecret || request.headers.authorization !== "Bearer " + cronSecret) {
     return response.status(401).json({ error: "Unauthorized" });
   }
-  if (request.method !== "GET") return response.status(405).json({ error: "Method not allowed." });
+  if (request.method !== "POST") return response.status(405).json({ error: "Method not allowed." });
   const database = config();
   if (!database || !process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
     return response.status(503).json({ error: "Reminder delivery is not configured." });
   }
 
   try {
-    const rows = await databaseRequest(database, "student_push_subscriptions?select=endpoint,subscription,last_sent_at&limit=500");
-    const subscriptions = await rows.json();
-    const today = lagosDate(new Date());
-    let sent = 0;
-    let removed = 0;
-    let skipped = 0;
+    const settingsRows = await databaseRequest(database, "student_push_settings?select=*&id=eq.1&limit=1");
+    const settings = settingsRows?.[0] || { enabled: false };
+    const [subscriptions, profiles] = await Promise.all([loadSubscriptions(database), loadProfiles(database)]);
+    const clock = lagosClock(new Date());
+    const morningSent = await deliverScheduled(database, subscriptions, profiles, settings, "morning", clock);
+    const eveningSent = await deliverScheduled(database, subscriptions, profiles, settings, "evening", clock);
 
-    for (const row of subscriptions) {
-      if (row.last_sent_at && lagosDate(new Date(row.last_sent_at)) === today) {
-        skipped += 1;
-        continue;
-      }
-      const nudge = {
-        title: "Your FoldBook streak is waiting 🔥",
-        body: "Just five minutes can move you forward. Ready for today’s mini-quest?",
-        url: "/",
-        tag: "foldbook-daily-study",
-      };
+    const campaigns = await databaseRequest(database, "rpc/claim_foldbook_push_campaign", {
+      method: "POST",
+      prefer: "return=representation",
+      body: {},
+    });
+    let campaignSent = 0;
+    const campaign = Array.isArray(campaigns) ? campaigns[0] : campaigns;
+    if (campaign?.id) {
       try {
-        const delivery = await sendWebPush(row.subscription, nudge);
-        if (delivery.status === 404 || delivery.status === 410) {
-          await databaseRequest(database, "student_push_subscriptions?endpoint=eq." + encodeURIComponent(row.endpoint), { method: "DELETE" });
-          removed += 1;
-        } else if (!delivery.ok) {
-          skipped += 1;
-        } else {
-          await databaseRequest(database, "student_push_subscriptions?endpoint=eq." + encodeURIComponent(row.endpoint), {
-            method: "PATCH",
-            prefer: "return=minimal",
-            body: { last_sent_at: new Date().toISOString() },
-          });
-          sent += 1;
-        }
+        campaignSent = await deliverCustomCampaign(database, campaign, subscriptions, profiles);
       } catch (error) {
-        console.error("Study reminder delivery failed:", error.message);
-        skipped += 1;
+        console.error("Queued mobile reminder could not finish:", error.message);
+        await databaseRequest(database, "student_push_campaigns?id=eq." + encodeURIComponent(String(campaign.id)), {
+          method: "PATCH",
+          prefer: "return=minimal",
+          body: { status: "failed", processed_at: new Date().toISOString() },
+        }).catch(() => {});
       }
     }
-    return response.status(200).json({ ok: true, sent, removed, skipped });
+    return response.status(200).json({
+      ok: true,
+      lagosTime: clock.date + " " + String(Math.floor(clock.minute / 60)).padStart(2, "0") + ":" + String(clock.minute % 60).padStart(2, "0"),
+      morningSent,
+      eveningSent,
+      customSent: campaignSent,
+    });
   } catch (error) {
-    console.error("Scheduled study reminders could not run:", error.message);
-    return response.status(503).json({ error: "Study reminders could not run." });
+    console.error("Scheduled FoldBook reminders could not run:", error.message);
+    return response.status(503).json({ error: "Scheduled FoldBook reminders could not run." });
   }
 };
+
+module.exports.config = { maxDuration: 60 };
