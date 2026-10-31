@@ -29,11 +29,5 @@
         }
       ]
     }
-  ],
-  "crons": [
-    {
-      "path": "/api/study-reminders",
-      "schedule": "0 17 * * *"
-    }
   ]
 }
