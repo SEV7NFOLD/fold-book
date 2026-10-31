@@ -19,7 +19,7 @@ const host = "127.0.0.1";
 const port = Number(process.env.PORT || 4173);
 const files = new Map([
   ["/", "index.html"],
-  ["/index.html", "index.html"],
+  ["/index.html", "index.html"],\n  ["/manifest.webmanifest", "manifest.webmanifest"],\n  ["/sw.js", "sw.js"],\n  ["/assets/js/pwa.js", "assets/js/pwa.js"],
   ["/assets/css/design-tokens.css", "assets/css/design-tokens.css"],
   ["/assets/css/styles.css", "assets/css/styles.css"],
   ["/assets/js/app.js", "assets/js/app.js"],
@@ -52,7 +52,7 @@ const contentTypes = new Map([
   [".html", "text/html; charset=utf-8"],
   [".jpeg", "image/jpeg"],
   [".js", "text/javascript; charset=utf-8"],
-  [".json", "application/json; charset=utf-8"],
+  [".json", "application/json; charset=utf-8"],\n  [".webmanifest", "application/manifest+json; charset=utf-8"],
   [".jpg", "image/jpeg"],
   [".png", "image/png"],
   [".svg", "image/svg+xml"],
