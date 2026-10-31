@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "foldbook-shell-v1";
+const CACHE_NAME = "foldbook-shell-v2";
 const SHELL_FILES = [
   "/",
   "/index.html",
@@ -47,5 +47,34 @@ self.addEventListener("fetch", (event) => {
       if (cached) return cached;
       throw error;
     }
+  })());
+});
+
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try { payload = event.data ? event.data.json() : {}; } catch { payload = { body: event.data?.text() || "" }; }
+  const title = payload.title || "Your FoldBook streak is waiting 🔥";
+  event.waitUntil(self.registration.showNotification(title, {
+    body: payload.body || "Ready for a quick study quest?",
+    icon: "/assets/brand/foldbook-pwa-icon.svg",
+    badge: "/assets/brand/foldbook-pwa-icon.svg",
+    tag: payload.tag || "foldbook-study-reminder",
+    data: { url: payload.url || "/" },
+    vibrate: [120, 60, 120]
+  }));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = new URL(event.notification.data?.url || "/", self.location.origin).href;
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    const existing = windows.find((client) => client.url.startsWith(self.location.origin));
+    if (existing) {
+      await existing.focus();
+      if ("navigate" in existing && existing.url !== target) await existing.navigate(target);
+      return;
+    }
+    await self.clients.openWindow(target);
   })());
 });
