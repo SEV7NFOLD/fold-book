@@ -537,8 +537,10 @@
             <p>Manage FoldBook app notifications here. Students choose to opt in on their own phones; only opted-in devices receive reminders.</p>
             <div class="admin-material-fields">
               <div class="whatsapp-toggle-field"><span>Daily schedule</span><label><input type="checkbox" id="mobileRemindersEnabled"> Enable mobile reminders</label></div>
-              <label><span><input type="checkbox" id="mobileMorningEnabled" checked> Morning reminder</span><input type="time" id="mobileMorningTime" value="07:00"></label>
-              <label><span><input type="checkbox" id="mobileEveningEnabled" checked> Evening reminder</span><input type="time" id="mobileEveningTime" value="19:00"></label>
+              <label><span><input type="checkbox" id="mobileMorningEnabled" checked> Send morning reminder</span></label>
+              <label>Morning send time (Lagos)<input type="time" id="mobileMorningTime" value="07:00"></label>
+              <label><span><input type="checkbox" id="mobileEveningEnabled" checked> Send evening reminder</span></label>
+              <label>Evening send time (Lagos)<input type="time" id="mobileEveningTime" value="19:00"></label>
               <label>Minimum hours between scheduled reminders<input type="number" id="mobileReminderGap" min="1" max="48" value="6"></label>
               <label>Scheduled audience<select id="mobileReminderAudience"><option value="all">All students who enabled reminders</option><option value="selected">Selected students only</option></select></label>
               <label>Selected registration numbers<textarea id="mobileReminderRegistrations" class="admin-material-control" rows="3" maxlength="3000" placeholder="Paste JAMB or matric numbers, separated by commas or new lines" aria-describedby="mobileReminderAudienceHelp"></textarea></label>
@@ -554,7 +556,7 @@
             <h3>Send a custom reminder now</h3>
             <div class="admin-material-fields">
               <label>Send to<select id="mobileCampaignAudience"><option value="all">All students who enabled reminders</option><option value="selected">Specific students</option></select></label>
-              <label>Registration numbers<textarea id="mobileCampaignRegistrations" class="admin-material-control" rows="3" maxlength="3000" placeholder="Paste JAMB or matric numbers, separated by commas or new lines"></textarea></label>
+              <label>Registration numbers<textarea id="mobileCampaignRegistrations" class="admin-material-control" rows="3" maxlength="3000" disabled placeholder="Paste JAMB or matric numbers, separated by commas or new lines"></textarea></label>
             </div>
             <label for="mobileCampaignMessage">Custom message<textarea id="mobileCampaignMessage" class="admin-material-control" rows="4" maxlength="500" placeholder="Write a short, friendly study nudge…"></textarea></label>
             <div class="admin-material-fields">
