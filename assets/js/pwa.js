@@ -98,6 +98,13 @@
     }
     button.disabled = true;
     try {
+      let permission = Notification.permission;
+      if (permission === "default") permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        status.textContent = "Notifications are off in your browser settings. Allow them there whenever you want FoldBook reminders.";
+        return;
+      }
+
       const serviceWorker = await navigator.serviceWorker.ready;
       const existing = await serviceWorker.pushManager.getSubscription();
       if (existing) {
@@ -118,13 +125,6 @@
         status.textContent = "On iPhone, first use Share → Add to Home Screen, then open FoldBook from your home screen to turn on reminders.";
         return;
       }
-      let permission = Notification.permission;
-      if (permission === "default") permission = await Notification.requestPermission();
-      if (permission !== "granted") {
-        status.textContent = "Notifications are off in your browser settings. Allow them there whenever you want FoldBook reminders.";
-        return;
-      }
-
       const keyResponse = await fetch("/api/student/reminders", { credentials: "same-origin" });
       if (!keyResponse.ok) throw new Error("Reminders are not ready yet. Please try again shortly.");
       const { publicKey } = await keyResponse.json();
