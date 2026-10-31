@@ -4867,6 +4867,150 @@ document.querySelector("#sendWhatsAppTest")?.addEventListener("click", async (ev
   }
 });
 
+
+function readMobileReminderRegistrations(id) {
+  return document.querySelector(id).value.split(/[\s,;]+/).map((value) => value.trim().toUpperCase()).filter(Boolean);
+}
+
+function renderMobileReminderHistory(campaigns) {
+  const container = document.querySelector("#mobileCampaignHistory");
+  container.replaceChildren();
+  if (!campaigns.length) {
+    container.textContent = "No custom mobile reminders have been queued yet.";
+    return;
+  }
+  for (const campaign of campaigns) {
+    const item = document.createElement("p");
+    const audience = campaign.target_type === "selected" ? "Selected students" : "All opted-in students";
+    const state = campaign.status === "queued" ? "Queued" : campaign.status === "processing" ? "Sending" : campaign.status === "sent" ? "Sent" : "Failed";
+    const count = Number(campaign.sent_count) || 0;
+    item.textContent = state + " · " + audience + " · " + count + " device" + (count === 1 ? "" : "s") + " · " + new Date(campaign.created_at).toLocaleString();
+    container.append(item);
+  }
+}
+
+function setMobileReminderForm(settings) {
+  document.querySelector("#mobileRemindersEnabled").checked = settings.enabled === true;
+  document.querySelector("#mobileMorningEnabled").checked = settings.morning_enabled === true;
+  document.querySelector("#mobileEveningEnabled").checked = settings.evening_enabled === true;
+  document.querySelector("#mobileMorningTime").value = settings.morning_time || "07:00";
+  document.querySelector("#mobileEveningTime").value = settings.evening_time || "19:00";
+  document.querySelector("#mobileReminderGap").value = String(settings.min_interval_hours || 6);
+  document.querySelector("#mobileReminderAudience").value = settings.audience || "all";
+  document.querySelector("#mobileReminderRegistrations").value = (settings.selected_registrations || []).join("\n");
+  document.querySelector("#mobileMorningMessage").value = settings.morning_message || "";
+  document.querySelector("#mobileEveningMessage").value = settings.evening_message || "";
+  document.querySelector("#mobileReminderRegistrations").disabled = settings.audience !== "selected";
+}
+
+function mobileReminderSettingsPayload() {
+  return {
+    enabled: document.querySelector("#mobileRemindersEnabled").checked,
+    morning_enabled: document.querySelector("#mobileMorningEnabled").checked,
+    evening_enabled: document.querySelector("#mobileEveningEnabled").checked,
+    morning_time: document.querySelector("#mobileMorningTime").value,
+    evening_time: document.querySelector("#mobileEveningTime").value,
+    min_interval_hours: Number(document.querySelector("#mobileReminderGap").value),
+    audience: document.querySelector("#mobileReminderAudience").value,
+    selected_registrations: readMobileReminderRegistrations("#mobileReminderRegistrations"),
+    morning_message: document.querySelector("#mobileMorningMessage").value.trim(),
+    evening_message: document.querySelector("#mobileEveningMessage").value.trim(),
+  };
+}
+
+async function loadMobileReminderSettings() {
+  const status = document.querySelector("#mobileRemindersStatus");
+  const campaignStatus = document.querySelector("#mobileCampaignStatus");
+  if (!S.isAdmin) return showAccessRestrictedNotice();
+  status.textContent = "Loading mobile reminder settings…";
+  try {
+    const result = await requestAdminApi("/api/admin/mobile-reminders", { action: "status" });
+    if (!result.settings) throw new Error("Mobile reminders are not configured. Apply the mobile reminders migration in Supabase first.");
+    setMobileReminderForm(result.settings);
+    campaignStatus.textContent = result.subscribedStudents + " students · " + result.subscribedDevices + " opted-in devices. Schedule changes take effect within about a minute.";
+    renderMobileReminderHistory(result.campaigns || []);
+    status.textContent = "Mobile reminder settings loaded.";
+  } catch (error) {
+    status.textContent = error.message || "Mobile reminder settings could not be loaded.";
+  }
+}
+
+document.querySelector("#mobileReminderAudience")?.addEventListener("change", (event) => {
+  document.querySelector("#mobileReminderRegistrations").disabled = event.currentTarget.value !== "selected";
+});
+
+document.querySelector("#mobileCampaignAudience")?.addEventListener("change", (event) => {
+  document.querySelector("#mobileCampaignRegistrations").disabled = event.currentTarget.value !== "selected";
+});
+
+document.querySelector("#saveMobileReminderSettings")?.addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const status = document.querySelector("#mobileRemindersStatus");
+  if (!S.isAdmin) return showAccessRestrictedNotice();
+  button.disabled = true;
+  status.textContent = "Saving mobile reminder settings…";
+  try {
+    const result = await requestAdminApi("/api/admin/mobile-reminders", {
+      action: "save",
+      settings: mobileReminderSettingsPayload(),
+    });
+    setMobileReminderForm(result.settings);
+    status.textContent = "Saved. FoldBook will use these times, messages, and audience within about a minute.";
+    await loadMobileReminderSettings();
+  } catch (error) {
+    status.textContent = error.message || "Mobile reminder settings could not be saved.";
+  } finally {
+    button.disabled = false;
+  }
+});
+
+document.querySelector("#previewMobileReminder")?.addEventListener("click", () => {
+  const preview = document.querySelector("#mobileCampaignPreview");
+  const message = document.querySelector("#mobileCampaignMessage").value.trim();
+  preview.textContent = message
+    .replace(/\{\{\s*name\s*\}\}/gi, "Amara")
+    .replace(/\{\{\s*link\s*\}\}/gi, "https://foldbook-beta.vercel.app");
+  preview.hidden = false;
+  document.querySelector("#mobileCampaignStatus").textContent = "Preview only. Nothing has been sent.";
+});
+
+document.querySelector("#sendMobileReminder")?.addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const status = document.querySelector("#mobileCampaignStatus");
+  const targetType = document.querySelector("#mobileCampaignAudience").value;
+  const recipients = readMobileReminderRegistrations("#mobileCampaignRegistrations");
+  const message = document.querySelector("#mobileCampaignMessage").value.trim();
+  if (!S.isAdmin) return showAccessRestrictedNotice();
+  if (targetType === "selected" && recipients.length === 0) {
+    status.textContent = "Add at least one student registration number.";
+    document.querySelector("#mobileCampaignRegistrations").focus();
+    return;
+  }
+  if (!message) {
+    status.textContent = "Write a short message before queuing the reminder.";
+    document.querySelector("#mobileCampaignMessage").focus();
+    return;
+  }
+  if (targetType === "all" && !window.confirm("Queue this custom reminder for every student who enabled FoldBook mobile reminders?")) return;
+  button.disabled = true;
+  status.textContent = "Queuing the custom reminder…";
+  try {
+    const result = await requestAdminApi("/api/admin/mobile-reminders", {
+      action: "queue",
+      target_type: targetType,
+      registrations: recipients,
+      message,
+    });
+    status.textContent = result.message || "Custom reminder queued.";
+    document.querySelector("#mobileCampaignMessage").value = "";
+    await loadMobileReminderSettings();
+  } catch (error) {
+    status.textContent = error.message || "The custom mobile reminder could not be queued.";
+  } finally {
+    button.disabled = false;
+  }
+});
+
 async function loadAdminCourseMaterials() {
   const status = document.querySelector("#adminMaterialsStatus");
   const list = document.querySelector("#adminMaterialsList");
@@ -5603,6 +5747,7 @@ document.querySelectorAll("[data-admin-view]").forEach((button) => {
     }
     if (button.dataset.adminView === "students") loadStudentRecords();
     if (button.dataset.adminView === "whatsapp") void loadWhatsAppBotSettings();
+    if (button.dataset.adminView === "mobile-reminders") void loadMobileReminderSettings();
   });
 });
 
