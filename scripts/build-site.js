@@ -18,12 +18,18 @@ const sfxFiles = fs.readdirSync(sfxDirectory, { withFileTypes: true })
   .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".mp3"))
   .map((entry) => `assets/sfx/${entry.name}`);
 const lottieManifest = "assets/lottie/manifest.json";
+const pwaIconSources = {
+  "assets/brand/foldbook-pwa-icon-192.png": "scripts/foldbook-pwa-icon-192.png.b64",
+  "assets/brand/foldbook-pwa-icon-512.png": "scripts/foldbook-pwa-icon-512.png.b64",
+};
+const pwaIconFiles = Object.keys(pwaIconSources);
 const allowedFiles = [
   "index.html",
   "manifest.webmanifest",
   "sw.js",
   "assets/js/pwa.js",
   ...brandFiles,
+  ...pwaIconFiles,
   ...lottieFiles,
   ...sfxFiles,
   lottieManifest,
@@ -195,7 +201,7 @@ function serializeForJavaScript(value) {
 function writePublicSite() {
   for (const relativePath of allowedFiles) {
     const source = path.join(root, relativePath);
-    if (relativePath === lottieManifest) continue;
+    if (relativePath === lottieManifest || pwaIconFiles.includes(relativePath)) continue;
     if (!fs.existsSync(source) || !fs.statSync(source).isFile()) {
       throw new Error(`Required public site file is missing: ${relativePath}`);
     }
@@ -216,6 +222,8 @@ function writePublicSite() {
       content = sourceApp;
     } else if (relativePath === lottieManifest) {
       content = `${JSON.stringify(lottieFiles.map((file) => `/${file}`))}\n`;
+    } else if (pwaIconFiles.includes(relativePath)) {
+      content = Buffer.from(fs.readFileSync(path.join(root, pwaIconSources[relativePath]), "utf8").trim(), "base64");
     } else {
       content = fs.readFileSync(path.join(root, relativePath));
     }
