@@ -5,6 +5,7 @@ const routes = {
   "course-catalog": require("../lib/api-handlers/admin/course-catalog.js"),
   "course-materials": require("../lib/api-handlers/admin/course-materials.js"),
   materials: require("../lib/api-handlers/admin/materials.js"),
+  "mobile-reminders": require("../lib/api-handlers/admin/mobile-reminders.js"),
   results: require("../lib/api-handlers/admin/results.js"),
   session: require("../lib/api-handlers/admin/session.js"),
   "student-materials": require("../lib/api-handlers/admin/student-materials.js"),

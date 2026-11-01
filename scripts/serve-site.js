@@ -7,6 +7,7 @@ const drEcoHandler = require("../api/dr-eco.js");
 const geminiLiveTokenHandler = require("../api/gemini/live-token.js");
 const adminApiRouter = require("../api/admin.js");
 const studentAuthHandler = require("../api/student/auth.js");
+const studentRemindersHandler = require("../api/student/reminders.js");
 const studentLearningProfileHandler = require("../api/student/learning-profile.js");
 const courseCatalogHandler = require("../api/course-catalog.js");
 const searchCourseMaterialsHandler = require("../api/course-materials/search.js");
@@ -81,6 +82,10 @@ const server = http.createServer((request, response) => {
   if (pathname.startsWith("/api/admin/")) {
     request.query = { route: pathname.slice("/api/admin/".length) };
     void adminApiRouter(request, response);
+    return;
+  }
+  if (pathname === "/api/student/reminders") {
+    void studentRemindersHandler(request, response);
     return;
   }
   if (pathname === "/api/student/auth") {

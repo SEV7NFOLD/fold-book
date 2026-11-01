@@ -135,3 +135,60 @@
   .foldbook-install-card { padding: 26px 18px 20px; }
   .foldbook-install-actions { grid-template-columns: 1fr; }
 }
+
+.foldbook-reminder-copy { margin: 10px 2px 8px; color: #b9b9c1; font-size: 12px; line-height: 1.45; }
+.foldbook-reminder-cta {
+  display: block;
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 14px;
+  color: #e9f8b4;
+  background: #202319;
+  border: 1px solid #647a32;
+  border-radius: 14px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.foldbook-reminder-cta:disabled { opacity: .65; cursor: wait; }
+.foldbook-reminder-cta[hidden] { display: none; }
+.foldbook-reminder-banner {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 0 0 14px;
+  padding: 13px 14px;
+  color: #f2efe8;
+  background: linear-gradient(110deg, #202319, #141512);
+  border: 1px solid #647a32;
+  border-radius: 16px;
+  box-shadow: 0 8px 26px rgb(0 0 0 / 20%);
+  font-family: var(--fb-font-body, system-ui, sans-serif);
+}
+.foldbook-reminder-banner > span:first-child { font-size: 22px; }
+.foldbook-reminder-banner > span:nth-child(2) { display: grid; gap: 3px; flex: 1; }
+.foldbook-reminder-banner strong { color: #e9f8b4; font-size: 13px; }
+.foldbook-reminder-banner small { color: #c2c2c9; font-size: 11px; }
+.foldbook-reminder-banner button {
+  min-height: 40px;
+  padding: 8px 11px;
+  color: #111;
+  background: #d9f07c;
+  border: 0;
+  border-radius: 12px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+@media (max-width: 420px) {
+  .foldbook-reminder-banner { gap: 8px; padding: 11px; }
+  .foldbook-reminder-banner strong { font-size: 12px; }
+  .foldbook-reminder-banner button { padding-inline: 8px; }
+}
+
+.foldbook-reminder-banner-status:empty { display: none; }
+.foldbook-reminder-banner-status { color: #e9f8b4 !important; font-size: 11px !important; line-height: 1.4; }
