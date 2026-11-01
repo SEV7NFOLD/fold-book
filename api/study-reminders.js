@@ -85,8 +85,36 @@ async function deleteSubscription(database, endpoint) {
   await databaseRequest(database, "student_push_subscriptions?endpoint=eq." + encodeURIComponent(endpoint), { method: "DELETE" });
 }
 
+async function claimScheduledSend(database, row, occasion) {
+  const field = occasion === "morning" ? "last_morning_sent_date" : "last_evening_sent_date";
+  const today = lagosClock(new Date()).date;
+  const filter = encodeURIComponent("(" + field + ".is.null," + field + ".lt." + today + ")");
+  const claimed = await databaseRequest(
+    database,
+    "student_push_subscriptions?endpoint=eq." + encodeURIComponent(row.endpoint) + "&or=" + filter,
+    { method: "PATCH", prefer: "return=representation", body: { [field]: today } }
+  );
+  return Array.isArray(claimed) && claimed.length > 0;
+}
+
+async function releaseScheduledSend(database, row, occasion) {
+  const field = occasion === "morning" ? "last_morning_sent_date" : "last_evening_sent_date";
+  const today = lagosClock(new Date()).date;
+  await databaseRequest(
+    database,
+    "student_push_subscriptions?endpoint=eq." + encodeURIComponent(row.endpoint) + "&" + field + "=eq." + today,
+    { method: "PATCH", prefer: "return=minimal", body: { [field]: null } }
+  ).catch(() => {});
+}
+
 async function deliver(database, row, message, profile, occasion) {
+  const scheduled = occasion === "morning" || occasion === "evening";
+  let claimed = false;
   try {
+    if (scheduled) {
+      claimed = await claimScheduledSend(database, row, occasion);
+      if (!claimed) return "already";
+    }
     const response = await sendWebPush(row.subscription, {
       title: occasion === "custom" ? "A FoldBook note for you ✨" : "Your FoldBook streak is waiting 🔥",
       body: renderMessage(message, profile),
@@ -97,17 +125,18 @@ async function deliver(database, row, message, profile, occasion) {
       await deleteSubscription(database, row.endpoint);
       return "removed";
     }
-    if (!response.ok) return "failed";
-    const patch = { last_sent_at: new Date().toISOString() };
-    if (occasion === "morning") patch.last_morning_sent_date = lagosClock(new Date()).date;
-    if (occasion === "evening") patch.last_evening_sent_date = lagosClock(new Date()).date;
+    if (!response.ok) {
+      if (claimed) await releaseScheduledSend(database, row, occasion);
+      return "failed";
+    }
     await databaseRequest(database, "student_push_subscriptions?endpoint=eq." + encodeURIComponent(row.endpoint), {
       method: "PATCH",
       prefer: "return=minimal",
-      body: patch,
+      body: { last_sent_at: new Date().toISOString() },
     });
     return "sent";
   } catch (error) {
+    if (claimed) await releaseScheduledSend(database, row, occasion);
     console.error("Mobile reminder delivery failed:", error.message);
     return "failed";
   }
