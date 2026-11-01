@@ -1,0 +1,46 @@
+plugins {
+    id "com.android.application"
+}
+
+def appVersion = providers.environmentVariable("APP_VERSION").getOrElse("1.0.0")
+def appVersionCode = providers.environmentVariable("APP_VERSION_CODE").getOrElse("1").toInteger()
+def signingStore = providers.environmentVariable("ANDROID_KEYSTORE_PATH").getOrNull()
+def signingPassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").getOrNull()
+
+android {
+    namespace "com.sev7nfold.foldbook"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.sev7nfold.foldbook"
+        minSdk 24
+        targetSdk 35
+        versionCode appVersionCode
+        versionName appVersion
+    }
+
+    signingConfigs {
+        release {
+            if (signingStore && signingPassword) {
+                storeFile file(signingStore)
+                storeType "JKS"
+                storePassword signingPassword
+                keyAlias "foldbook"
+                keyPassword signingPassword
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            if (signingStore && signingPassword) {
+                signingConfig signingConfigs.release
+            }
+            minifyEnabled false
+        }
+    }
+}
+
+dependencies {
+    implementation "com.google.androidbrowserhelper:androidbrowserhelper:2.7.3"
+}
