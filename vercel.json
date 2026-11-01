@@ -33,7 +33,7 @@
   "redirects": [
     {
       "source": "/download/android",
-      "destination": "https://github.com/SEV7NFOLD/fold-book/releases/latest/download/foldbook.apk",
+      "destination": "https://github.com/SEV7NFOLD/fold-book/releases/download/android-v1.0.5/foldbook.apk",
       "permanent": false
     }
   ]
