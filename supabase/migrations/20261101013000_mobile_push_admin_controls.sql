@@ -61,23 +61,3 @@ grant execute on function public.claim_foldbook_push_campaign() to service_role;
 
 create extension if not exists pg_cron with schema pg_catalog;
 create extension if not exists pg_net;
-
-select cron.schedule(
-  'foldbook-mobile-push-minute',
-  '* * * * *',
-  $$
-    select net.http_post(
-      url := 'https://foldbook-beta.vercel.app/api/study-reminders',
-      headers := jsonb_build_object(
-        'Content-Type', 'application/json',
-        'Authorization', 'Bearer ' || (
-          select decrypted_secret
-          from vault.decrypted_secrets
-          where name = 'foldbook_push_cron_secret'
-        )
-      ),
-      body := '{}'::jsonb,
-      timeout_milliseconds := 8000
-    );
-  $$
-);
