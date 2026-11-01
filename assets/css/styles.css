@@ -1199,15 +1199,15 @@ textarea.admin-material-control { min-height: 140px; resize: vertical; }
   .fuel-meter { width: 22px; }
   .sound-toggle { min-width: 32px; }
   .student-header-widgets { gap: 4px; }
-  .shell { width: calc(100% - 20px);     .landing-hero { width: calc(100% - 32px); padding-top: 42px; }
-    .landing-hero h1 { font-size: clamp(34px, 10vw, 48px); }
-    .admin-portal { width: calc(100% - 24px); padding-top: 18px; }
-    .admin-portal-header { flex-wrap: wrap; }
-    .admin-portal-header > div { flex-basis: 100%; }
-    .admin-portal-layout { padding-top: 14px; }
-    .admin-portal-nav { grid-template-columns: 1fr 1fr; }
-    .admin-portal-content { padding: 14px; }
-  }
+  .shell { width: calc(100% - 20px); }
+  .landing-hero { width: calc(100% - 32px); padding-top: 42px; }
+  .landing-hero h1 { font-size: clamp(34px, 10vw, 48px); }
+  .admin-portal { width: calc(100% - 24px); padding-top: 18px; }
+  .admin-portal-header { flex-wrap: wrap; }
+  .admin-portal-header > div { flex-basis: 100%; }
+  .admin-portal-layout { padding-top: 14px; }
+  .admin-portal-nav { grid-template-columns: 1fr 1fr; }
+  .admin-portal-content { padding: 14px; }
   .course-header-card { padding: 14px; }
   .course-switcher { gap: 8px; margin-bottom: 12px; }
   .course-choice { min-width: 138px; padding: 8px 12px; }
@@ -1424,4 +1424,29 @@ textarea.admin-material-control { min-height: 140px; resize: vertical; }
   .voice-call-content { width: min(100%, 600px); margin-block: auto; }
   .voice-call-orbit { width: min(58vw, 260px); }
   .voice-call-caption { min-height: 74px; padding: 14px 16px; }
+}
+
+
+.landing-download-link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  margin: 12px 0 0 10px;
+  padding: 10px 16px;
+  border: 1px solid rgb(217 240 124 / 45%);
+  border-radius: 12px;
+  color: var(--fb-color-lime);
+  font-size: 14px;
+  font-weight: 750;
+  text-decoration: none;
+}
+.landing-download-link:hover { background: rgb(217 240 124 / 8%); }
+@media (max-width: 520px) {
+  .landing-download-link {
+    display: flex;
+    width: fit-content;
+    max-width: 100%;
+    margin: 10px 0 0;
+  }
 }
