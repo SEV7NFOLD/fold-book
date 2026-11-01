@@ -80,8 +80,8 @@
     return Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
   }
 
-  function updateReminderButton(enabled) {
-    const button = modal?.querySelector(".foldbook-reminder-cta");
+  function updateReminderButton(enabled, buttonOverride) {
+    const button = buttonOverride || modal?.querySelector(".foldbook-reminder-cta");
     if (button) button.textContent = enabled ? "Pause daily reminders" : "Turn on daily reminders";
     try {
       if (enabled) localStorage.setItem("foldbook-study-reminders-enabled", "1");
@@ -89,9 +89,9 @@
     } catch { /* Storage may be unavailable. */ }
   }
 
-  async function toggleStudyReminders() {
-    const button = modal?.querySelector(".foldbook-reminder-cta");
-    const status = modal?.querySelector(".foldbook-install-status");
+  async function toggleStudyReminders(statusOverride, buttonOverride) {
+    const button = buttonOverride || modal?.querySelector(".foldbook-reminder-cta");
+    const status = statusOverride || modal?.querySelector(".foldbook-install-status");
     if (!button || !status || !("Notification" in window) || !("PushManager" in window)) {
       if (status) status.textContent = "This browser does not support mobile reminders. Try the latest Chrome or Safari.";
       return;
@@ -115,7 +115,7 @@
         });
         if (!removed.ok) throw new Error("Your reminder setting could not be updated.");
         await existing.unsubscribe();
-        updateReminderButton(false);
+        updateReminderButton(false, buttonOverride);
         status.textContent = "Reminders paused. You can turn them back on whenever you’re ready.";
         return;
       }
@@ -140,7 +140,7 @@
         await subscription.unsubscribe();
         throw new Error("We couldn’t save your reminder setting. Please try again.");
       }
-      updateReminderButton(true);
+      updateReminderButton(true, buttonOverride);
       status.textContent = "You’re in! We’ll send up to two gentle study nudges a day. Keep your streak growing 🌱";
     } catch (error) {
       status.textContent = error.message || "Could not update reminders right now. Please try again shortly.";
@@ -219,11 +219,15 @@
     if (enabled) return;
     const banner = document.createElement("aside");
     banner.className = "foldbook-reminder-banner";
-    banner.innerHTML = '<span aria-hidden="true">🔥</span><span><strong>Keep your study streak warm</strong><small>Get friendly reminders set by FoldBook Admin.</small></span><button type="button">Set reminder</button>';
-    banner.querySelector("button").addEventListener("click", async () => {
+    banner.innerHTML = '<span aria-hidden="true">🔥</span><span><strong>Keep your study streak warm</strong><small>Get friendly reminders set by FoldBook Admin.</small><small class="foldbook-reminder-banner-status" role="status" aria-live="polite"></small></span><button type="button">Set reminder</button>';
+    const bannerButton = banner.querySelector("button");
+    const bannerStatus = banner.querySelector(".foldbook-reminder-banner-status");
+    bannerButton.addEventListener("click", async () => {
       if (!modal) createModal();
-      await toggleStudyReminders();
-      if (localStorage.getItem("foldbook-study-reminders-enabled") === "1") banner.remove();
+      await toggleStudyReminders(bannerStatus, bannerButton);
+      try {
+        if (localStorage.getItem("foldbook-study-reminders-enabled") === "1") banner.remove();
+      } catch { /* Storage may be unavailable. */ }
     });
     dashboard.prepend(banner);
   }
