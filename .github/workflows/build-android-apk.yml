@@ -6,17 +6,17 @@ on:
       app_version:
         description: App version (for example 1.0.0)
         required: true
-        default: "1.0.2"
+        default: "1.0.3"
         type: string
       app_version_code:
         description: Increasing integer for each APK release
         required: true
-        default: "3"
+        default: "4"
         type: string
       release_tag:
         description: New GitHub release tag (for example android-v1.0.0)
         required: true
-        default: "android-v1.0.2"
+        default: "android-v1.0.3"
         type: string
 
 permissions:
@@ -121,12 +121,12 @@ jobs:
           cp android/app/build/outputs/apk/release/app-release.apk foldbook.apk
 
       - name: Launch APK on a clean Android emulator
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@v2.37.0
         with:
           api-level: 35
           target: google_apis_playstore
           arch: x86_64
-          profile: pixel_6
+          profile: pixel_2
           disable-animations: true
           script: |
             set -euo pipefail
