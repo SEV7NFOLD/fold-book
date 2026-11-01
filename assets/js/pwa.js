@@ -44,7 +44,7 @@
         <div class="foldbook-install-badge" aria-hidden="true"><span>🔥</span><i>✦</i></div>
         <p class="foldbook-install-kicker">YOUR STUDY SPACE, ONE TAP AWAY</p>
         <h2 id="foldbookInstallTitle">Use FoldBook on mobile</h2>
-        <p class="foldbook-install-copy">Keep your courses, Dr. Eco, and learning streak close by. Add FoldBook to your home screen for a focused, app-like experience.</p>
+        <p class="foldbook-install-copy">Keep your courses, Dr. Eco, and learning streak one tap away.</p>
         <div class="foldbook-install-streak"><span aria-hidden="true">⚡</span><span><strong>Small steps count.</strong> Pick up your next study quest whenever you’re ready.</span></div>
         <p class="foldbook-reminder-copy">Up to two short study nudges a day, set by FoldBook Admin. Pause anytime.</p>
         <button class="foldbook-reminder-cta" type="button">Turn on daily reminders</button>
@@ -161,15 +161,18 @@
     const reminderButton = panel.querySelector(".foldbook-reminder-cta");
     const help = panel.querySelector(".foldbook-install-help");
     reminderButton.hidden = !("Notification" in window && "PushManager" in window && "serviceWorker" in navigator);
+    const isAndroid = /android/i.test(navigator.userAgent);
+    const isAppleMobile = /iphone|ipad|ipod/i.test(navigator.userAgent);
     const status = panel.querySelector(".foldbook-install-status");
     status.textContent = "";
-    help.hidden = Boolean(installPromptEvent);
-    button.querySelector("span").textContent = installPromptEvent ? "Install FoldBook" : "How to install";
-    if (!installPromptEvent) {
-      const isAppleMobile = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    help.hidden = !isAndroid && Boolean(installPromptEvent);
+    button.querySelector("span").textContent = isAndroid ? "Download Android app" : installPromptEvent ? "Install FoldBook" : "How to install";
+    if (isAndroid) {
+      help.textContent = "Download the APK, then open it from Downloads to install FoldBook. Android may ask you to allow Chrome to install apps.";
+    } else if (!installPromptEvent) {
       help.textContent = isAppleMobile
         ? "In Safari, tap Share, then Add to Home Screen."
-        : "In Chrome, open the ⋮ menu and choose Install app or Add to Home screen.";
+        : "In your browser menu, choose Install app or Add to Home screen.";
     }
     panel.hidden = false;
     button.focus({ preventScroll: true });
@@ -177,6 +180,10 @@
 
   async function installOrExplain() {
     const status = modal.querySelector(".foldbook-install-status");
+    if (/android/i.test(navigator.userAgent)) {
+      window.location.assign("/download/android");
+      return;
+    }
     if (!installPromptEvent) {
       status.textContent = "Open your browser menu and choose “Install app” or “Add to Home screen.”";
       return;
@@ -210,6 +217,32 @@
     hideModal();
   });
 
+  function showReminderArrival() {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("from") !== "reminder" || !isStudentDashboardVisible()) return;
+    const dashboard = document.querySelector("#studentApp");
+    if (!dashboard || dashboard.querySelector(".foldbook-reminder-arrival")) return;
+
+    const card = document.createElement("aside");
+    card.className = "foldbook-reminder-arrival";
+    card.setAttribute("role", "status");
+    card.innerHTML = '<div class="foldbook-reminder-arrival-art" aria-hidden="true">🔥</div><div class="foldbook-reminder-arrival-copy"><strong>Your next quick win is ready.</strong><small>Five minutes can move your study path forward.</small></div><button type="button">Let’s study</button>';
+    const art = card.querySelector(".foldbook-reminder-arrival-art");
+    const animation = document.createElement("dotlottie-player");
+    animation.setAttribute("src", "/assets/lottie/streak-flame.json");
+    animation.setAttribute("autoplay", "");
+    animation.setAttribute("loop", "");
+    animation.setAttribute("aria-hidden", "true");
+    art.replaceChildren(animation);
+    card.querySelector("button").addEventListener("click", () => {
+      dashboard.querySelector("#navLearn")?.click();
+      card.remove();
+    });
+    dashboard.prepend(card);
+    url.searchParams.delete("from");
+    window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+  }
+
   function addInstalledReminderBanner() {
     if (!isInstalled() || !isStudentDashboardVisible()) return;
     const dashboard = document.querySelector("#studentApp");
@@ -237,12 +270,14 @@
     if (!dashboard || dashboardObserver) return;
     dashboardObserver = new MutationObserver(() => {
       if (isStudentDashboardVisible()) {
+        showReminderArrival();
         addInstalledReminderBanner();
         window.setTimeout(showModal, 1600);
       }
     });
     dashboardObserver.observe(dashboard, { attributes: true, attributeFilter: ["hidden", "class"] });
     if (isStudentDashboardVisible()) {
+      showReminderArrival();
       addInstalledReminderBanner();
       window.setTimeout(showModal, 1600);
     }
