@@ -23,6 +23,7 @@ android {
         release {
             if (signingStore && signingPassword) {
                 storeFile file(signingStore)
+                storeType "JKS"
                 storePassword signingPassword
                 keyAlias "foldbook"
                 keyPassword signingPassword
