@@ -29,5 +29,12 @@
         }
       ]
     }
+  ],
+  "redirects": [
+    {
+      "source": "/download/android",
+      "destination": "https://github.com/SEV7NFOLD/fold-book/releases/latest/download/foldbook.apk",
+      "permanent": false
+    }
   ]
 }
