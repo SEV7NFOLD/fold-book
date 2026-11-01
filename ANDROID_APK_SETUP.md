@@ -6,7 +6,11 @@ FoldBook is packaged as a Trusted Web Activity (TWA): an Android APK that opens 
 
 The APK needs a permanent signing key. Keep the keystore and its password private; do not commit them or send them in chat. Android Studio includes the Java key tool used to create one.
 
-Create a keystore named `foldbook-release.jks` with alias `foldbook`, RSA 2048, and a long validity period. Use the same password for the keystore and key.
+Create the JKS keystore with alias `foldbook`, RSA 2048, and a long validity period. Use the same password for the keystore and key. Run this on your own computer using Android Studio’s bundled Java tools; do not upload the file to chat:
+
+```text
+keytool -genkeypair -v -keystore foldbook-release.jks -storetype JKS -alias foldbook -keyalg RSA -keysize 2048 -validity 10000
+```
 
 In GitHub, open **Settings → Secrets and variables → Actions** and add:
 
