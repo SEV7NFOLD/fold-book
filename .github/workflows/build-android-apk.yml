@@ -55,6 +55,8 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
 
       - name: Restore Android signing key
         env:
@@ -94,7 +96,7 @@ jobs:
         env:
           APP_VERSION: ${{ inputs.app_version }}
           APP_VERSION_CODE: ${{ inputs.app_version_code }}
-          ANDROID_KEYSTORE_PATH: foldbook-release.jks
+          ANDROID_KEYSTORE_PATH: ../foldbook-release.jks
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.FOLDBOOK_ANDROID_KEYSTORE_PASSWORD }}
         run: |
           gradle --no-daemon --stacktrace -p android assembleRelease
