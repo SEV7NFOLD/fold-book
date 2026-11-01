@@ -50,6 +50,21 @@ function dueNow(scheduledTime, clock) {
   return difference >= 0 && difference <= 2;
 }
 
+async function mapLimit(items, limit, worker) {
+  const results = new Array(items.length);
+  let next = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (true) {
+      const index = next;
+      next += 1;
+      if (index >= items.length) return;
+      results[index] = await worker(items[index]);
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
 function renderMessage(template, student) {
   const name = String(student?.full_name || "student").trim().split(/\s+/)[0] || "student";
   return String(template || "")
@@ -103,25 +118,21 @@ async function deliverScheduled(database, subscriptions, profiles, settings, occ
   const dateField = occasion === "morning" ? "last_morning_sent_date" : "last_evening_sent_date";
   const message = settings[occasion + "_message"];
   const minimumGap = Math.max(1, Number(settings.min_interval_hours) || 6) * 60 * 60 * 1000;
-  let delivered = 0;
-  for (const row of subscriptions) {
-    if (row[dateField] === clock.date) continue;
-    if (settings.audience === "selected" && !(settings.selected_registrations || []).includes(row.registration)) continue;
-    if (row.last_sent_at && Date.now() - Date.parse(row.last_sent_at) < minimumGap) continue;
-    const result = await deliver(database, row, message, profiles.get(row.registration), occasion);
-    if (result === "sent") delivered += 1;
-  }
-  return delivered;
+  const eligible = subscriptions.filter((row) => {
+    if (row[dateField] === clock.date) return false;
+    if (settings.audience === "selected" && !(settings.selected_registrations || []).includes(row.registration)) return false;
+    if (row.last_sent_at && Date.now() - Date.parse(row.last_sent_at) < minimumGap) return false;
+    return true;
+  });
+  const outcomes = await mapLimit(eligible, 20, (row) => deliver(database, row, message, profiles.get(row.registration), occasion));
+  return outcomes.filter((result) => result === "sent").length;
 }
 
 async function deliverCustomCampaign(database, campaign, subscriptions, profiles) {
   const targets = campaign.target_type === "selected" ? new Set(campaign.registrations || []) : null;
-  let sent = 0;
-  for (const row of subscriptions) {
-    if (targets && !targets.has(row.registration)) continue;
-    const result = await deliver(database, row, campaign.message, profiles.get(row.registration), "custom");
-    if (result === "sent") sent += 1;
-  }
+  const eligible = subscriptions.filter((row) => !targets || targets.has(row.registration));
+  const outcomes = await mapLimit(eligible, 20, (row) => deliver(database, row, campaign.message, profiles.get(row.registration), "custom"));
+  const sent = outcomes.filter((result) => result === "sent").length;
   await databaseRequest(database, "student_push_campaigns?id=eq." + encodeURIComponent(String(campaign.id)), {
     method: "PATCH",
     prefer: "return=minimal",
