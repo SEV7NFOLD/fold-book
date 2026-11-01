@@ -30,8 +30,8 @@ permissions:
   contents: write
 
 concurrency:
-  group: foldbook-android-apk
-  cancel-in-progress: true
+  group: foldbook-android-apk-${{ github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   build-and-release:
