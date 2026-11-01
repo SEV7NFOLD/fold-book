@@ -110,6 +110,7 @@ async function releaseScheduledSend(database, row, occasion) {
 async function deliver(database, row, message, profile, occasion) {
   const scheduled = occasion === "morning" || occasion === "evening";
   let claimed = false;
+  let delivered = false;
   try {
     if (scheduled) {
       claimed = await claimScheduledSend(database, row, occasion);
@@ -129,6 +130,7 @@ async function deliver(database, row, message, profile, occasion) {
       if (claimed) await releaseScheduledSend(database, row, occasion);
       return "failed";
     }
+    delivered = true;
     await databaseRequest(database, "student_push_subscriptions?endpoint=eq." + encodeURIComponent(row.endpoint), {
       method: "PATCH",
       prefer: "return=minimal",
@@ -136,7 +138,7 @@ async function deliver(database, row, message, profile, occasion) {
     });
     return "sent";
   } catch (error) {
-    if (claimed) await releaseScheduledSend(database, row, occasion);
+    if (claimed && !delivered) await releaseScheduledSend(database, row, occasion);
     console.error("Mobile reminder delivery failed:", error.message);
     return "failed";
   }
