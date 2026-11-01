@@ -129,6 +129,7 @@ jobs:
 
       - name: Launch APK on a clean Android emulator
         id: emulator_smoke
+        timeout-minutes: 5
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2.37.0
         with:
