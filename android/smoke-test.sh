@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+smoke_result=failed
+trap 'printf "smoke_result=%s\\n" "$smoke_result" >> "$GITHUB_OUTPUT"' EXIT
+
 adb install foldbook.apk
 adb logcat -c
 adb shell am start -W -n com.sev7nfold.foldbook/com.google.androidbrowserhelper.trusted.LauncherActivity
@@ -19,3 +22,5 @@ if ! printf '%s' "$resumed_activity" | grep -Eq 'com\.android\.chrome|WebViewFal
   adb logcat -d -s AndroidRuntime:E ActivityTaskManager:E
   exit 1
 fi
+
+smoke_result=passed
