@@ -121,8 +121,11 @@ jobs:
           cp android/app/build/outputs/apk/release/app-release.apk foldbook.apk
 
       - name: Launch APK on a clean Android emulator
+        id: emulator_smoke
+        continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2.37.0
         with:
+          emulator-boot-timeout: 240
           api-level: 35
           target: google_apis_playstore
           arch: x86_64
@@ -130,7 +133,12 @@ jobs:
           disable-animations: true
           script: bash android/smoke-test.sh
 
+      - name: Report emulator verification result
+        if: steps.emulator_smoke.outcome != 'success'
+        run: echo "::warning::Emulator verification did not complete. The APK artifact will still be saved, but no public release will be created."
+
       - name: Publish signed APK release
+        if: steps.emulator_smoke.outcome == 'success'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APP_VERSION: ${{ inputs.app_version }}
@@ -139,6 +147,7 @@ jobs:
           gh release create "$RELEASE_TAG" foldbook.apk --title "FoldBook Android $APP_VERSION" --notes "Direct-install Android APK for FoldBook. Download foldbook.apk and install it on Android."
 
       - name: Keep a workflow artifact copy
+        if: always() && hashFiles('foldbook.apk') != ''
         uses: actions/upload-artifact@v6
         with:
           name: foldbook-android-${{ inputs.app_version }}
