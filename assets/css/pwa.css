@@ -189,3 +189,6 @@
   .foldbook-reminder-banner strong { font-size: 12px; }
   .foldbook-reminder-banner button { padding-inline: 8px; }
 }
+
+.foldbook-reminder-banner-status:empty { display: none; }
+.foldbook-reminder-banner-status { color: #e9f8b4 !important; font-size: 11px !important; line-height: 1.4; }
