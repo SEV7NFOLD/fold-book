@@ -9,7 +9,7 @@ def signingPassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD")
 
 android {
     namespace "com.sev7nfold.foldbook"
-    compileSdk 35
+    compileSdk 36
 
     defaultConfig {
         applicationId "com.sev7nfold.foldbook"
