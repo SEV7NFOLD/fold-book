@@ -119,7 +119,8 @@ async function deliver(database, row, message, profile, occasion) {
     const response = await sendWebPush(row.subscription, {
       title: occasion === "custom" ? "A FoldBook note for you ✨" : "Your FoldBook streak is waiting 🔥",
       body: renderMessage(message, profile),
-      url: "/",
+      url: "/?from=reminder",
+      image: "/assets/brand/trophy.png",
       tag: occasion === "morning" ? "foldbook-morning-study" : occasion === "evening" ? "foldbook-evening-study" : "foldbook-custom-study",
     });
     if (response.status === 404 || response.status === 410) {
