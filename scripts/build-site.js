@@ -23,6 +23,7 @@ const pwaIconSources = {
   "assets/brand/foldbook-pwa-icon-512.png": "scripts/foldbook-pwa-icon-512.png.b64",
 };
 const pwaIconFiles = Object.keys(pwaIconSources);
+const optionalFiles = [".well-known/assetlinks.json"];
 const allowedFiles = [
   "index.html",
   "manifest.webmanifest",
@@ -30,6 +31,7 @@ const allowedFiles = [
   "assets/js/pwa.js",
   ...brandFiles,
   ...pwaIconFiles,
+  ...optionalFiles,
   ...lottieFiles,
   ...sfxFiles,
   lottieManifest,
@@ -201,7 +203,7 @@ function serializeForJavaScript(value) {
 function writePublicSite() {
   for (const relativePath of allowedFiles) {
     const source = path.join(root, relativePath);
-    if (relativePath === lottieManifest || pwaIconFiles.includes(relativePath)) continue;
+    if (relativePath === lottieManifest || pwaIconFiles.includes(relativePath) || (optionalFiles.includes(relativePath) && !fs.existsSync(source))) continue;
     if (!fs.existsSync(source) || !fs.statSync(source).isFile()) {
       throw new Error(`Required public site file is missing: ${relativePath}`);
     }
@@ -215,6 +217,7 @@ function writePublicSite() {
   if (fs.existsSync(output)) fs.rmSync(output, { recursive: true, force: true });
 
   for (const relativePath of allowedFiles) {
+    if (optionalFiles.includes(relativePath) && !fs.existsSync(path.join(root, relativePath))) continue;
     const destination = path.join(output, relativePath);
     fs.mkdirSync(path.dirname(destination), { recursive: true });
     let content;
