@@ -1,6 +1,13 @@
 name: Build FoldBook Android APK
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/build-android-apk.yml
+      - android/app/src/main/res/drawable/foldbook_launcher.xml
+      - android/smoke-test.sh
   workflow_dispatch:
     inputs:
       app_version:
@@ -38,9 +45,9 @@ jobs:
 
       - name: Validate release inputs
         env:
-          APP_VERSION: ${{ inputs.app_version }}
-          APP_VERSION_CODE: ${{ inputs.app_version_code }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          APP_VERSION: ${{ inputs.app_version || '1.0.5' }}
+          APP_VERSION_CODE: ${{ inputs.app_version_code || '6' }}
+          RELEASE_TAG: ${{ inputs.release_tag || 'android-v1.0.5' }}
         run: |
           [[ "$APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           [[ "$APP_VERSION_CODE" =~ ^[1-9][0-9]*$ ]]
@@ -112,8 +119,8 @@ jobs:
 
       - name: Build signed release APK
         env:
-          APP_VERSION: ${{ inputs.app_version }}
-          APP_VERSION_CODE: ${{ inputs.app_version_code }}
+          APP_VERSION: ${{ inputs.app_version || '1.0.5' }}
+          APP_VERSION_CODE: ${{ inputs.app_version_code || '6' }}
           ANDROID_KEYSTORE_PATH: ../foldbook-release.jks
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.FOLDBOOK_ANDROID_KEYSTORE_PASSWORD }}
         run: |
@@ -141,8 +148,8 @@ jobs:
         if: steps.emulator_smoke.outputs.smoke_result == 'passed' || (steps.emulator_smoke.outcome == 'failure' && steps.emulator_smoke.outputs.smoke_result == '')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APP_VERSION: ${{ inputs.app_version }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          APP_VERSION: ${{ inputs.app_version || '1.0.5' }}
+          RELEASE_TAG: ${{ inputs.release_tag || 'android-v1.0.5' }}
         run: |
           gh release create "$RELEASE_TAG" foldbook.apk --title "FoldBook Android $APP_VERSION" --notes "Direct-install Android APK for FoldBook. Download foldbook.apk and install it on Android."
 
@@ -150,6 +157,6 @@ jobs:
         if: always() && hashFiles('foldbook.apk') != ''
         uses: actions/upload-artifact@v6
         with:
-          name: foldbook-android-${{ inputs.app_version }}
+          name: foldbook-android-${{ inputs.app_version || '1.0.5' }}
           path: foldbook.apk
           retention-days: 30
