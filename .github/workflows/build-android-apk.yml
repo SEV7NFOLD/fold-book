@@ -6,17 +6,17 @@ on:
       app_version:
         description: App version (for example 1.0.0)
         required: true
-        default: "1.0.4"
+        default: "1.0.5"
         type: string
       app_version_code:
         description: Increasing integer for each APK release
         required: true
-        default: "5"
+        default: "6"
         type: string
       release_tag:
         description: New GitHub release tag (for example android-v1.0.0)
         required: true
-        default: "android-v1.0.4"
+        default: "android-v1.0.5"
         type: string
 
 permissions:
@@ -135,10 +135,10 @@ jobs:
 
       - name: Report emulator verification result
         if: steps.emulator_smoke.outcome != 'success'
-        run: echo "::warning::Emulator verification did not complete. The APK artifact will still be saved, but no public release will be created."
+        run: echo "::warning::Emulator verification did not complete. A launch-test failure blocks release; emulator startup failure does not."
 
       - name: Publish signed APK release
-        if: steps.emulator_smoke.outcome == 'success'
+        if: steps.emulator_smoke.outputs.smoke_result == 'passed' || (steps.emulator_smoke.outcome == 'failure' && steps.emulator_smoke.outputs.smoke_result == '')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APP_VERSION: ${{ inputs.app_version }}
