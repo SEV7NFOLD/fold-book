@@ -54,14 +54,18 @@ self.addEventListener("push", (event) => {
   let payload = {};
   try { payload = event.data ? event.data.json() : {}; } catch { payload = { body: event.data?.text() || "" }; }
   const title = payload.title || "Your FoldBook streak is waiting 🔥";
-  event.waitUntil(self.registration.showNotification(title, {
+  const image = typeof payload.image === "string" ? new URL(payload.image, self.location.origin) : null;
+  const options = {
     body: payload.body || "Ready for a quick study quest?",
     icon: "/assets/brand/foldbook-pwa-icon.svg",
     badge: "/assets/brand/foldbook-pwa-icon.svg",
     tag: payload.tag || "foldbook-study-reminder",
     data: { url: payload.url || "/" },
+    actions: [{ action: "study", title: "Start a 5-minute quest" }],
     vibrate: [120, 60, 120]
-  }));
+  };
+  if (image?.origin === self.location.origin && image.pathname.startsWith("/assets/brand/")) options.image = image.href;
+  event.waitUntil(self.registration.showNotification(title, options));
 });
 
 self.addEventListener("notificationclick", (event) => {
