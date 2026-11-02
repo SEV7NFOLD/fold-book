@@ -165,14 +165,23 @@
     const isAppleMobile = /iphone|ipad|ipod/i.test(navigator.userAgent);
     const status = panel.querySelector(".foldbook-install-status");
     status.textContent = "";
-    help.hidden = !isAndroid && Boolean(installPromptEvent);
-    button.querySelector("span").textContent = isAndroid ? "Download Android app" : installPromptEvent ? "Install FoldBook" : "How to install";
+    help.hidden = false;
+    button.querySelector("span").textContent = isAndroid
+      ? "Download Android app"
+      : isAppleMobile
+        ? "Show iPhone install steps"
+        : installPromptEvent ? "Install FoldBook" : "How to install";
     if (isAndroid) {
-      help.textContent = "Download the APK, then open it from Downloads to install FoldBook. Android may ask you to allow Chrome to install apps.";
-    } else if (!installPromptEvent) {
-      help.textContent = isAppleMobile
-        ? "In Safari, tap Share, then Add to Home Screen."
-        : "In your browser menu, choose Install app or Add to Home screen.";
+      help.textContent = "Android · One tap downloads the app. Open the APK from Downloads and tap Install. If asked, allow your browser to install apps.";
+    } else if (isAppleMobile) {
+      const safari = /safari/i.test(navigator.userAgent) && !/crios|fxios|edgios|opios/i.test(navigator.userAgent);
+      help.textContent = safari
+        ? "iPhone · 1. Tap Share (the square with an up arrow).  2. Tap “Add to Home Screen”.  3. Tap “Add”.  FoldBook will appear beside your other apps."
+        : "iPhone · Open this page in Safari first. Then tap Share → “Add to Home Screen” → “Add”. FoldBook will appear beside your other apps.";
+    } else {
+      help.textContent = installPromptEvent
+        ? "Your browser can install FoldBook now. Tap the button and confirm “Install”."
+        : "Open your browser menu and choose “Install app” or “Add to Home screen”.";
     }
     panel.hidden = false;
     button.focus({ preventScroll: true });
@@ -182,6 +191,10 @@
     const status = modal.querySelector(".foldbook-install-status");
     if (/android/i.test(navigator.userAgent)) {
       window.location.assign("/download/android");
+      return;
+    }
+    if (/iphone|ipad|ipod/i.test(navigator.userAgent)) {
+      status.textContent = "On iPhone, open this page in Safari, tap Share → Add to Home Screen → Add. iOS requires these steps; FoldBook can’t install itself silently.";
       return;
     }
     if (!installPromptEvent) {
