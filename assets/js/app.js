@@ -226,18 +226,16 @@ function renderStudyCourseSwitcher(preferredCourse = currentCourse) {
   const switcher = document.querySelector("#courseSwitcher");
   const select = document.querySelector("#savedPathSelect");
   if (!switcher || !select) return;
-  const paths = Object.keys(studyProgress.studyPaths || {})
-    .filter((code) => studyProgress.studyPaths[code]?.length)
-    .map((code) => ({ code, title: studyProgress.studyPathTitles?.[code] || courseTitleFor(code) }))
-    .sort((a, b) => a.title.localeCompare(b.title));
-  switcher.hidden = paths.length === 0;
-  select.replaceChildren(...paths.map((path) => {
+  const courses = availableStudyCourses().sort((a, b) => a.title.localeCompare(b.title));
+  switcher.hidden = courses.length === 0;
+  select.replaceChildren(...courses.map((course) => {
     const option = document.createElement("option");
-    option.value = path.code;
-    option.textContent = `${path.code} · ${path.title}`;
+    const hasPath = Boolean(studyProgress.studyPaths?.[course.code]?.length);
+    option.value = course.code;
+    option.textContent = course.code + " · " + (course.title || course.code) + " · " + (hasPath ? "Open path" : "Build path");
     return option;
   }));
-  if (paths.some((path) => path.code === preferredCourse)) select.value = preferredCourse;
+  if (courses.some((course) => course.code === preferredCourse)) select.value = preferredCourse;
 }
 
 function courseTitleFor(courseCode) {
@@ -689,24 +687,31 @@ async function loadSyncedLearningProfile() {
 }
 
 function localDateKey(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Lagos",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return values.year + "-" + values.month + "-" + values.day;
 }
 
 function startStudyActivity() {
   const today = localDateKey();
-  if (studyProgress.lastStudyDate !== today) {
+  const newStudyDay = studyProgress.lastStudyDate !== today;
+  if (newStudyDay) {
     if (studyProgress.lastStudyDate) {
-      const previousDay = new Date(`${studyProgress.lastStudyDate}T00:00:00`);
-      const daysSinceStudy = Math.round((new Date(`${today}T00:00:00`) - previousDay) / 86400000);
+      const previousDay = new Date(studyProgress.lastStudyDate + "T00:00:00Z");
+      const currentDay = new Date(today + "T00:00:00Z");
+      const daysSinceStudy = Math.round((currentDay - previousDay) / 86400000);
       studyProgress.streak = daysSinceStudy === 1 ? studyProgress.streak + 1 : 1;
     } else studyProgress.streak = 1;
     studyProgress.lastStudyDate = today;
   }
   if (!studyProgress.activityDays.includes(today)) studyProgress.activityDays.push(today);
   studyProgress.activityDays = studyProgress.activityDays.slice(-35);
+  return newStudyDay;
 }
 
 function playStudyChime() {
@@ -716,6 +721,7 @@ function playStudyChime() {
 let AC = null;
 let soundOn = true;
 let consecutiveWrongCount = 0;
+let consecutiveCorrectCount = 0;
 
 const sfxEngine = {
   correct: new Audio("assets/sfx/duolingo-correct-answer-10-streak.mp3"),
@@ -749,9 +755,11 @@ function stopCustomSfx(key) {
 function playAnswerFeedback(isCorrect) {
   if (isCorrect) {
     consecutiveWrongCount = 0;
+    consecutiveCorrectCount += 1;
     playCustomSfx("correct");
     return;
   }
+  consecutiveCorrectCount = 0;
   consecutiveWrongCount += 1;
   if (consecutiveWrongCount === 3) playCustomSfx("fah");
   else if (consecutiveWrongCount === 5) playCustomSfx("failTest");
@@ -1177,7 +1185,13 @@ function renderModuleQuestion(module, record, index) {
       lessonFeedbackAnimation.hidden = true;
       lessonNextQuestion.textContent = "Next question →";
       lessonNextQuestion.hidden = false;
-      if (record.questionResults.filter(Boolean).length % 5 === 0 && record.questionResults.filter(Boolean).length < questions.length) {
+      const mastered = record.questionResults.filter(Boolean).length;
+      if (consecutiveCorrectCount > 0 && consecutiveCorrectCount % 3 === 0 && mastered < questions.length) {
+        lessonFeedbackAnimation.hidden = false;
+        renderLottieInto(lessonFeedbackAnimation, "streak-flame.json", "🔥", "Three correct answers in a row", { loop: false });
+        if (!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) buzz([40, 30, 65]);
+      }
+      if (mastered % 5 === 0 && mastered < questions.length) {
         showQuestionMilestone(record.questionResults.filter(Boolean).length);
       }
     });
@@ -1191,7 +1205,7 @@ function completeStudyModule(module, record) {
     studyProgress.completed.push(module.id);
     studyProgress.xp += 20;
     studyProgress.gems += 5;
-    startStudyActivity();
+    const streakAdvanced = startStudyActivity();
     saveStudyProgress();
     void syncLearningProfile("progress", currentCourse);
     updateStudySummary();
@@ -1200,7 +1214,7 @@ function completeStudyModule(module, record) {
     lessonFeedback.className = "lesson-feedback is-correct";
     lessonFeedbackAnimation.hidden = false;
     renderLottieInto(lessonFeedbackAnimation, "jump-for-joy.json", "✨", "Module complete", { loop: false });
-    showModuleCompletionCard(module, record, true);
+    showModuleCompletionCard(module, record, true, streakAdvanced);
     return "Perfect run! +20 XP · +5 gems. You cleared all the questions, and the next node is ready.";
   }
   showModuleCompletionCard(module, record, false);
@@ -1226,7 +1240,7 @@ function wrapCanvasText(context, text, x, y, maxWidth, lineHeight, maxLines = 4)
   if (line && lineCount < maxLines) context.fillText(line, x, y + lineCount * lineHeight);
 }
 
-async function showModuleCompletionCard(module, record, awardedXp) {
+async function showModuleCompletionCard(module, record, awardedXp, streakAdvanced = false) {
   const total = module.questions?.length || 10;
   const wrongByQuestion = Array.isArray(record.questionWrongAttempts) ? record.questionWrongAttempts : [];
   const misses = wrongByQuestion.reduce((sum, count) => sum + (Number(count) || 0), 0);
@@ -1262,8 +1276,19 @@ async function showModuleCompletionCard(module, record, awardedXp) {
   exportModuleCompletion.disabled = true;
 
   if (awardedXp) {
-    renderLottieInto(moduleCelebrationAnimation, "level-up.json", "🚀", "Module complete celebration", { loop: false });
-    buzz([55, 45, 65, 80, 100]);
+    if (streakAdvanced) {
+      document.querySelector("#moduleCelebration .module-celebration-kicker").textContent = "DAILY STREAK";
+      document.querySelector("#moduleCelebration h2").textContent = studyProgress.streak + "-day streak!";
+      document.querySelector("#moduleCelebration > p").textContent = "A little study today kept your FoldBook streak alive. Come back tomorrow to keep it glowing.";
+      renderLottieInto(moduleCelebrationAnimation, "streak-flame.json", "🔥", "Daily streak celebration", { loop: false });
+      if (!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) buzz([45, 35, 70, 45, 110]);
+    } else {
+      document.querySelector("#moduleCelebration .module-celebration-kicker").textContent = "MODULE COMPLETE";
+      document.querySelector("#moduleCelebration h2").textContent = "You did it!";
+      document.querySelector("#moduleCelebration > p").textContent = "Every question solved. Your next step is ready.";
+      renderLottieInto(moduleCelebrationAnimation, "level-up.json", "🚀", "Module complete celebration", { loop: false });
+      buzz([55, 45, 65, 80, 100]);
+    }
     if (soundOn) sfx.win();
     if (!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
       await new Promise((resolve) => window.setTimeout(resolve, 3500));
@@ -1895,7 +1920,12 @@ function syncCourseControls() {
   renderStudyCourseSwitcher(currentCourse);
 }
 
-document.querySelector("#savedPathSelect").addEventListener("change", (event) => setCourse(event.currentTarget.value));
+document.querySelector("#savedPathSelect").addEventListener("change", (event) => {
+  const course = event.currentTarget.value;
+  const hasPath = Boolean(studyProgress.studyPaths?.[course]?.length);
+  setCourse(course);
+  if (!hasPath) openLearningPathSetup(course);
+});
 document.querySelector("#chatCourse").addEventListener("change", (event) => {
   chatCourseCode = event.currentTarget.value;
   if (chatCourseCode !== currentCourse) setCourse(chatCourseCode);
@@ -2035,6 +2065,15 @@ function renderProfile() {
   document.querySelector("#headerProfileName").textContent = name.split(/\s+/)[0];
   document.querySelector("#profileDisplayName").textContent = name;
   document.querySelector("#profileDisplayLevel").textContent = user?.level || S.level;
+  const profileStreakValue = document.querySelector("#profileStreakValue");
+  if (profileStreakValue) profileStreakValue.textContent = String(studyProgress.streak);
+  const profileStreakCaption = document.querySelector("#profileStreakCaption");
+  if (profileStreakCaption) profileStreakCaption.textContent = studyProgress.streak === 1
+    ? "day in a row · come back tomorrow to keep it going"
+    : "days in a row · one study day at a time";
+  if (!document.querySelector("#profileStreakAnimation dotlottie-player")) {
+    renderLottieInto(document.querySelector("#profileStreakAnimation"), "streak-flame.json", "🔥", "Your daily study streak");
+  }
   renderProfileCourses();
   const levelSettings = document.querySelector("#profileLevelSettings");
   const levelSelect = document.querySelector("#profileLevelSelect");
@@ -2919,8 +2958,9 @@ function generalTopicCourseCode(topic) {
   return `GEN ${100 + (Date.now() % 900)}`;
 }
 
-function openLearningPathSetup() {
-  fillLearningPathCourseOptions(currentCourse);
+function openLearningPathSetup(preferredCourse = currentCourse) {
+  if (COURSE_CODE_PATTERN.test(preferredCourse) && preferredCourse !== currentCourse) setCourse(preferredCourse);
+  fillLearningPathCourseOptions(preferredCourse);
   const profile = studyProgress.learnerProfile || {};
   const savedTopic = /^GEN\s\d{3}$/i.test(currentCourse)
     ? (studyProgress.studyPathTitles?.[currentCourse] || "").replace(/^Open Study:\s*/i, "")
