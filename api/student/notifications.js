@@ -42,11 +42,13 @@ module.exports = async function studentNotificationsHandler(request, response) {
       .filter((row) => row.target_type === "all"
         || (row.target_type === "selected" && Array.isArray(row.registrations)
           && row.registrations.some((entry) => String(entry).trim().toUpperCase() === registration)))
-      .map((row) => ({
-        id: String(row.id),
-        message: typeof row.message === "string" ? row.message.slice(0, 500) : "",
-        createdAt: row.created_at,
-      }))
+      .map((row) => {
+        const firstName = String(session.name || "student").trim().split(/\s+/)[0] || "student";
+        const message = typeof row.message === "string" ? row.message.slice(0, 500)
+          .replace(/\{\{\s*name\s*\}\}/gi, firstName)
+          .replace(/\{\{\s*link\s*\}\}/gi, "https://foldbook-beta.vercel.app") : "";
+        return { id: String(row.id), message, createdAt: row.created_at };
+      })
       .filter((row) => row.message);
     return sendJson(response, 200, { notifications });
   } catch (error) {
