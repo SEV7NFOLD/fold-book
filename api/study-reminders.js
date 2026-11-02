@@ -1,6 +1,6 @@
 "use strict";
 
-const { sendWebPush } = require("./lib/web-push.js");
+const { sendWebPush } = require("../lib/web-push.js");
 
 function config() {
   const url = process.env.SUPABASE_URL;
