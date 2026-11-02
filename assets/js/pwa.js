@@ -6,6 +6,7 @@
   let installPromptEvent = null;
   let modal;
   let dashboardObserver;
+  let broadcastTimer;\n
 
   const isInstalled = () => window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
   const isStudentDashboardVisible = () => {
@@ -256,6 +257,80 @@
     window.history.replaceState(null, "", url.pathname + url.search + url.hash);
   }
 
+  function readDismissedBroadcastIds() {
+    try {
+      const saved = JSON.parse(localStorage.getItem("foldbook-dismissed-broadcasts") || "[]");
+      return new Set(Array.isArray(saved) ? saved.map(String) : []);
+    } catch {
+      return new Set();
+    }
+  }
+
+  function dismissBroadcast(id) {
+    const dismissed = readDismissedBroadcastIds();
+    dismissed.add(String(id));
+    try { localStorage.setItem("foldbook-dismissed-broadcasts", JSON.stringify([...dismissed].slice(-100))); } catch { /* Storage may be unavailable. */ }
+  }
+
+  async function showStudentBroadcast() {
+    if (!isStudentDashboardVisible()) return;
+    const dashboard = document.querySelector("#studentApp");
+    if (!dashboard || dashboard.querySelector(".foldbook-broadcast-banner")) return;
+    try {
+      const response = await fetch("/api/student/notifications", { credentials: "same-origin", cache: "no-store" });
+      if (!response.ok) return;
+      const data = await response.json();
+      const dismissed = readDismissedBroadcastIds();
+      const notice = (Array.isArray(data.notifications) ? data.notifications : [])
+        .find((item) => item?.id && item?.message && !dismissed.has(String(item.id)));
+      if (!notice || !isStudentDashboardVisible()) return;
+
+      const banner = document.createElement("aside");
+      banner.className = "foldbook-broadcast-banner";
+      banner.setAttribute("role", "status");
+      const copy = document.createElement("div");
+      copy.className = "foldbook-broadcast-copy";
+      const kicker = document.createElement("strong");
+      kicker.textContent = "A note from FoldBook";
+      const message = document.createElement("p");
+      message.textContent = notice.message;
+      copy.append(kicker, message);
+
+      const actions = document.createElement("div");
+      actions.className = "foldbook-broadcast-actions";
+      const openButton = document.createElement("button");
+      openButton.type = "button";
+      openButton.textContent = "Open study";
+      const dismissButton = document.createElement("button");
+      dismissButton.type = "button";
+      dismissButton.className = "foldbook-broadcast-dismiss";
+      dismissButton.setAttribute("aria-label", "Dismiss reminder");
+      dismissButton.textContent = "×";
+      const finish = () => {
+        dismissBroadcast(notice.id);
+        banner.remove();
+      };
+      openButton.addEventListener("click", () => {
+        finish();
+        dashboard.querySelector("#navLearn")?.click();
+      });
+      dismissButton.addEventListener("click", finish);
+      actions.append(openButton, dismissButton);
+      banner.append(copy, actions);
+      dashboard.prepend(banner);
+    } catch (error) {
+      console.warn("FoldBook inbox reminders could not be loaded.", error);
+    }
+  }
+
+  function startBroadcastChecks() {
+    if (broadcastTimer) return;
+    void showStudentBroadcast();
+    broadcastTimer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void showStudentBroadcast();
+    }, 60 * 1000);
+  }
+
   function addInstalledReminderBanner() {
     if (!isInstalled() || !isStudentDashboardVisible()) return;
     const dashboard = document.querySelector("#studentApp");
@@ -285,6 +360,7 @@
       if (isStudentDashboardVisible()) {
         showReminderArrival();
         addInstalledReminderBanner();
+        startBroadcastChecks();
         window.setTimeout(showModal, 1600);
       }
     });
@@ -292,6 +368,7 @@
     if (isStudentDashboardVisible()) {
       showReminderArrival();
       addInstalledReminderBanner();
+      startBroadcastChecks();
       window.setTimeout(showModal, 1600);
     }
   }
