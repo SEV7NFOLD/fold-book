@@ -1450,3 +1450,58 @@ textarea.admin-material-control { min-height: 140px; resize: vertical; }
     margin: 10px 0 0;
   }
 }
+
+/* FoldBook mobile app actions, streaks and course path controls */
+.header-refresh {
+  width: 36px;
+  min-width: 36px;
+  padding: 0;
+  cursor: pointer;
+}
+.header-refresh svg { width: 18px; height: 18px; }
+.header-refresh.is-refreshing svg { animation: foldbook-refresh-spin .8s linear infinite; }
+@keyframes foldbook-refresh-spin { to { transform: rotate(360deg); } }
+body.foldbook-app-open { overscroll-behavior-y: contain; }
+.profile-streak-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0 22px;
+  padding: 13px 15px;
+  border: 1px solid #5a5527;
+  border-radius: 14px;
+  background: linear-gradient(115deg, #211b0c, #15150f 70%);
+}
+#profileStreakAnimation { display: grid; flex: 0 0 46px; width: 46px; height: 46px; place-items: center; }
+#profileStreakAnimation dotlottie-player { display: block; width: 46px; height: 46px; }
+.profile-streak-card > div:last-child { display: grid; gap: 3px; }
+.profile-streak-card strong { color: #f7c65d; font-size: 14px; }
+.profile-streak-card > div:last-child > span { color: var(--fb-color-muted); font-size: 11px; line-height: 1.45; }
+.profile-course-item { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 8px; }
+.profile-course-item span { text-align: left; }
+.profile-course-path-action {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--fb-color-border);
+  border-radius: 9px;
+  background: #1b2113;
+  color: var(--fb-color-lime);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.profile-course-path-action:active { transform: scale(.97); }
+.lesson-feedback-row .feedback-animation { flex: 0 0 52px; width: 52px; height: 52px; }
+.lesson-feedback-row .feedback-animation dotlottie-player { width: 52px; height: 52px; }
+
+@media (max-width: 680px) {
+  .top-inner { gap: 8px; }
+  .student-header-widgets { gap: 6px; }
+  .header-refresh { width: 34px; min-width: 34px; }
+  .profile-course-item { grid-template-columns: auto minmax(0,1fr); }
+  .profile-course-path-action { grid-column: 2; justify-self: start; }
+  .profile-course-item span { font-size: 10px; }
+}
+
