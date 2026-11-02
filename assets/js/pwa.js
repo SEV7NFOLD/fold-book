@@ -6,7 +6,8 @@
   let installPromptEvent = null;
   let modal;
   let dashboardObserver;
-  let broadcastTimer;\n
+  let broadcastTimer;
+
 
   const isInstalled = () => window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
   const isStudentDashboardVisible = () => {
