@@ -35,10 +35,10 @@
         </a>
         <div class="sp" aria-hidden="true"></div>
         <div class="student-header-widgets" id="studentHeaderWidgets" hidden>
-          <div class="pill header-counter" id="pStreak" title="Daily streak">
+          <button class="pill header-counter streak-pill" id="pStreak" type="button" title="View your daily streak" aria-label="View your daily streak">
             <span class="flame streak-animation" id="streakAnimation" aria-hidden="true">🔥</span>
             <span class="mono" id="vStreak">6</span>
-          </div>
+          </button>
           <button class="pill fuel-pill" id="pFuel" type="button" aria-label="Open fuel and passes" title="Dr. Eco fuel">
             <span aria-hidden="true">⚡</span>
             <span class="mono" id="vFuel">100/100</span>
@@ -69,9 +69,10 @@
     <main id="top">
       <section id="home" class="learn-section hide" hidden>
         <div class="main-path-area">
-          <div class="course-switcher" id="courseSwitcher" aria-label="Choose a course or learning path" hidden>
-            <label for="savedPathSelect">Your courses & paths</label>
-            <select id="savedPathSelect" aria-label="Choose a course or learning path"></select>
+          <div class="course-switcher" id="courseSwitcher" aria-label="Your active paths" hidden>
+            <label for="savedPathSelect">Active paths</label>
+            <select id="savedPathSelect" aria-label="Switch between active study paths"></select>
+            <button class="course-new-path-button" id="newLearningPathButton" type="button" aria-label="Begin a new learning path">＋ Begin new path</button>
           </div>
           <header class="course-header-card wk">
             <div class="meta"><small class="mono course-code-label" id="courseCodeLabel">ECO 128 · STUDY PATH</small><small id="wkdays">YOUR STUDY ROADMAP</small></div>
@@ -655,6 +656,16 @@
       </div>
     </section>
 
+    <section class="streak-celebration-overlay" id="streakCelebration" role="dialog" aria-modal="true" aria-labelledby="streakCelebrationTitle" hidden>
+      <button class="streak-celebration-close" id="closeStreakCelebration" type="button" aria-label="Close streak celebration">×</button>
+      <div class="streak-celebration-content">
+        <div class="streak-celebration-flame" id="streakCelebrationFlame" aria-hidden="true">🔥</div>
+        <p class="section-kicker">FOLDBOOK DAILY STREAK</p>
+        <h2 id="streakCelebrationTitle">1 day streak</h2>
+        <p id="streakCelebrationCopy">Come back tomorrow to upgrade your flame.</p>
+      </div>
+    </section>
+
     <section class="profile-modal-overlay" id="profileModal" role="dialog" aria-modal="true" aria-labelledby="profileTitle" hidden>
       <div class="profile-modal-card">
         <button class="card-secondary-button profile-close" id="closeProfile" type="button" aria-label="Close profile">×</button>
@@ -668,6 +679,10 @@
           <div id="profileStreakAnimation" aria-hidden="true">🔥</div>
           <div><strong><span id="profileStreakValue">0</span> day streak</strong><span id="profileStreakCaption">Complete a study checkpoint to start your streak.</span></div>
         </div>
+        <section class="profile-community-card" aria-labelledby="profileCommunityTitle">
+          <div class="profile-community-heading"><div><h3 id="profileCommunityTitle">Study community</h3><p>Top learners by XP</p></div><button type="button" class="card-secondary-button" id="profileLeaderboardLink">See leaderboard</button></div>
+          <div class="profile-community-list" id="profileCommunityList"></div>
+        </section>
         <section class="profile-level-settings" id="profileLevelSettings" aria-labelledby="profileLevelTitle">
           <h3 id="profileLevelTitle">Academic level</h3>
           <label for="profileLevelSelect">Update your current level</label>

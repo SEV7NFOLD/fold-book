@@ -56,7 +56,7 @@ const COURSE_CODE_PATTERN = /^[A-Z]{2,6}\s?-?\s?\d{3,4}[A-Z]?$/;
 
 function sanitizeStudyModules(items, courseCode) {
   if (!Array.isArray(items)) return [];
-  return items.slice(0, 10).flatMap((item, index) => {
+  return items.slice(0, 50).flatMap((item, index) => {
     if (!item || typeof item !== "object") return [];
     const title = typeof item.title === "string" ? item.title.trim().slice(0, 100) : "";
     const lesson = typeof item.lesson === "string" ? item.lesson.trim().slice(0, 1600) : "";
@@ -226,15 +226,21 @@ function renderStudyCourseSwitcher(preferredCourse = currentCourse) {
   const switcher = document.querySelector("#courseSwitcher");
   const select = document.querySelector("#savedPathSelect");
   if (!switcher || !select) return;
-  const courses = availableStudyCourses().sort((a, b) => a.title.localeCompare(b.title));
-  switcher.hidden = courses.length === 0;
-  select.replaceChildren(...courses.map((course) => {
+  const courses = Object.keys(studyProgress.studyPaths || {})
+    .filter((code) => Array.isArray(studyProgress.studyPaths[code]) && studyProgress.studyPaths[code].length)
+    .map((code) => ({
+      code,
+      title: studyProgress.studyPathTitles?.[code] || availableStudyCourses().find((course) => course.code === code)?.title || code,
+    }))
+    .sort((a, b) => a.title.localeCompare(b.title));
+  switcher.hidden = false;
+  select.disabled = courses.length === 0;
+  select.replaceChildren(...(courses.length ? courses.map((course) => {
     const option = document.createElement("option");
-    const hasPath = Boolean(studyProgress.studyPaths?.[course.code]?.length);
     option.value = course.code;
-    option.textContent = course.code + " · " + (course.title || course.code) + " · " + (hasPath ? "Open path" : "Build path");
+    option.textContent = course.code + " · " + (course.title || course.code);
     return option;
-  }));
+  }) : [new Option("No active paths yet", "")]));
   if (courses.some((course) => course.code === preferredCourse)) select.value = preferredCourse;
 }
 
@@ -1006,6 +1012,34 @@ async function refreshStudentExperience() {
     }
   }
 }
+
+function openStreakCelebration() {
+  const overlay = document.querySelector("#streakCelebration");
+  if (!overlay) return;
+  overlay.hidden = false;
+  renderLottieInto(document.querySelector("#streakCelebrationFlame"), "streak-flame.json", "🔥", "A bright FoldBook streak flame", { loop: true });
+  const count = Math.max(0, Number(studyProgress.streak) || 0);
+  document.querySelector("#streakCelebrationTitle").textContent = count === 1 ? "1 day streak" : count + " day streak";
+  document.querySelector("#streakCelebrationCopy").textContent = count
+    ? "Come back tomorrow to upgrade your flame."
+    : "Complete a study checkpoint to light your first flame.";
+  sfx.win();
+  buzz([35, 35, 70, 35, 120]);
+  document.querySelector("#closeStreakCelebration")?.focus();
+}
+function closeStreakCelebration() {
+  const overlay = document.querySelector("#streakCelebration");
+  if (!overlay) return;
+  overlay.hidden = true;
+}
+document.querySelector("#pStreak")?.addEventListener("click", openStreakCelebration);
+document.querySelector("#closeStreakCelebration")?.addEventListener("click", closeStreakCelebration);
+document.querySelector("#streakCelebration")?.addEventListener("click", (event) => {
+  if (event.target.id === "streakCelebration") closeStreakCelebration();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !document.querySelector("#streakCelebration")?.hidden) closeStreakCelebration();
+});
 
 document.querySelector("#refreshFoldBook")?.addEventListener("click", () => { void refreshStudentExperience(); });
 window.addEventListener("foldbook:refresh", () => { void refreshStudentExperience(); });
@@ -1963,10 +1997,9 @@ function syncCourseControls() {
 
 document.querySelector("#savedPathSelect").addEventListener("change", (event) => {
   const course = event.currentTarget.value;
-  const hasPath = Boolean(studyProgress.studyPaths?.[course]?.length);
-  setCourse(course);
-  if (!hasPath) openLearningPathSetup(course);
+  if (studyProgress.studyPaths?.[course]?.length) setCourse(course);
 });
+document.querySelector("#newLearningPathButton")?.addEventListener("click", () => openLearningPathSetup(currentCourse));
 document.querySelector("#chatCourse").addEventListener("change", (event) => {
   chatCourseCode = event.currentTarget.value;
   if (chatCourseCode !== currentCourse) setCourse(chatCourseCode);
@@ -2100,6 +2133,29 @@ function renderUserAvatar(container, user, className = "") {
   }
 }
 
+function renderProfileCommunity() {
+  const list = document.querySelector("#profileCommunityList");
+  if (!list) return;
+  list.replaceChildren();
+  const peers = leaderboardEntries.filter((entry) => !entry.isCurrentUser).slice(0, 3);
+  if (!peers.length) {
+    const empty = document.createElement("p");
+    empty.textContent = "Your study community is getting started. Check back as more learners earn XP.";
+    list.append(empty);
+    return;
+  }
+  peers.forEach((entry) => {
+    const row = document.createElement("div");
+    row.className = "profile-community-row";
+    const name = document.createElement("strong");
+    name.textContent = entry.name;
+    const progress = document.createElement("span");
+    progress.textContent = Number(entry.xp).toLocaleString() + " XP";
+    row.append(name, progress);
+    list.append(row);
+  });
+}
+
 function renderProfile() {
   const user = S.user;
   const name = user?.name || currentStudent?.name || "Student";
@@ -2116,6 +2172,7 @@ function renderProfile() {
     renderLottieInto(document.querySelector("#profileStreakAnimation"), "streak-flame.json", "🔥", "Your daily study streak");
   }
   renderProfileCourses();
+  renderProfileCommunity();
   const levelSettings = document.querySelector("#profileLevelSettings");
   const levelSelect = document.querySelector("#profileLevelSelect");
   const levelSave = document.querySelector("#saveProfileLevel");
@@ -5421,6 +5478,11 @@ function persistAuthSession() {
     document.querySelector("#profileStatus").textContent = "Profile changes could not be saved on this device.";
   }
 }
+
+document.querySelector("#profileLeaderboardLink")?.addEventListener("click", () => {
+  document.querySelector("#closeProfile")?.click();
+  document.querySelector("#navBoard")?.click();
+});
 
 document.querySelector("#profileButton").addEventListener("click", () => {
   renderProfile();
