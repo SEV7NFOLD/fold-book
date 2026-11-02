@@ -419,6 +419,7 @@
     });
     dashboardObserver.observe(dashboard, { attributes: true, attributeFilter: ["hidden", "class"] });
     if (isStudentDashboardVisible()) {
+      document.body.classList.add("foldbook-app-open");
       showReminderArrival();
       addInstalledReminderBanner();
       startBroadcastChecks();
