@@ -4962,10 +4962,10 @@ function renderMobileReminderHistory(campaigns) {
   }
   for (const campaign of campaigns) {
     const item = document.createElement("p");
-    const audience = campaign.target_type === "selected" ? "Selected students" : "All opted-in students";
+    const audience = campaign.target_type === "selected" ? "Selected students" : "All registered students";
     const state = campaign.status === "queued" ? "Queued" : campaign.status === "processing" ? "Sending" : campaign.status === "sent" ? "Sent" : "Failed";
     const count = Number(campaign.sent_count) || 0;
-    item.textContent = state + " · " + audience + " · " + count + " device" + (count === 1 ? "" : "s") + " · " + new Date(campaign.created_at).toLocaleString();
+    item.textContent = state + " · " + audience + " · " + count + " push device" + (count === 1 ? "" : "s") + " · in-app inbox included · " + new Date(campaign.created_at).toLocaleString();
     container.append(item);
   }
 }
@@ -5008,7 +5008,7 @@ async function loadMobileReminderSettings() {
     const result = await requestAdminApi("/api/admin/mobile-reminders", { action: "status" });
     if (!result.settings) throw new Error("Mobile reminders are not configured. Apply the mobile reminders migration in Supabase first.");
     setMobileReminderForm(result.settings);
-    campaignStatus.textContent = result.subscribedStudents + " students · " + result.subscribedDevices + " opted-in devices. Schedule changes take effect within about a minute.";
+    campaignStatus.textContent = result.subscribedStudents + " registered students · " + result.subscribedDevices + " opted-in push devices. Custom broadcasts also appear in every selected student’s FoldBook inbox.";
     renderMobileReminderHistory(result.campaigns || []);
     status.textContent = "Mobile reminder settings loaded.";
   } catch (error) {
@@ -5072,7 +5072,7 @@ document.querySelector("#sendMobileReminder")?.addEventListener("click", async (
     document.querySelector("#mobileCampaignMessage").focus();
     return;
   }
-  if (targetType === "all" && !window.confirm("Queue this custom reminder for every student who enabled FoldBook mobile reminders?")) return;
+  if (targetType === "all" && !window.confirm("Send this custom reminder to all registered students? It will appear in their FoldBook inbox, with phone push for students who enabled reminders.")) return;
   button.disabled = true;
   status.textContent = "Queuing the custom reminder…";
   try {
