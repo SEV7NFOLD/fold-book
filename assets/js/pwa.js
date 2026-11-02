@@ -354,15 +354,67 @@
     dashboard.prepend(banner);
   }
 
+  function setupPullToRefresh() {
+    const dashboard = document.querySelector("#studentApp");
+    if (!dashboard || dashboard.dataset.foldbookPullRefresh === "ready") return;
+    dashboard.dataset.foldbookPullRefresh = "ready";
+    const indicator = document.createElement("div");
+    indicator.className = "foldbook-pull-indicator";
+    indicator.setAttribute("aria-hidden", "true");
+    indicator.innerHTML = '<span class="foldbook-pull-spinner"></span><span>Release to refresh FoldBook</span>';
+    document.body.append(indicator);
+
+    let startY = 0;
+    let pullDistance = 0;
+    let tracking = false;
+    const topOfPage = () => Math.max(window.scrollY || 0, document.scrollingElement?.scrollTop || 0) <= 2;
+    dashboard.addEventListener("touchstart", (event) => {
+      if (!isStudentDashboardVisible() || !topOfPage() || event.touches.length !== 1
+        || event.target.closest("input,textarea,select,[contenteditable=true]")) return;
+      startY = event.touches[0].clientY;
+      pullDistance = 0;
+      tracking = true;
+    }, { passive: true });
+    dashboard.addEventListener("touchmove", (event) => {
+      if (!tracking || event.touches.length !== 1 || !topOfPage()) {
+        tracking = false;
+        indicator.classList.remove("is-pulling", "is-ready");
+        return;
+      }
+      pullDistance = Math.max(0, Math.min(110, event.touches[0].clientY - startY));
+      if (pullDistance < 8) return;
+      indicator.style.setProperty("--foldbook-pull-distance", pullDistance + "px");
+      indicator.classList.add("is-pulling");
+      indicator.classList.toggle("is-ready", pullDistance >= 72);
+      event.preventDefault();
+    }, { passive: false });
+    const finish = () => {
+      if (!tracking) return;
+      tracking = false;
+      indicator.classList.remove("is-pulling", "is-ready");
+      if (pullDistance >= 72) {
+        indicator.classList.add("is-refreshing");
+        window.dispatchEvent(new Event("foldbook:refresh"));
+        window.setTimeout(() => indicator.classList.remove("is-refreshing"), 950);
+      }
+      pullDistance = 0;
+    };
+    dashboard.addEventListener("touchend", finish, { passive: true });
+    dashboard.addEventListener("touchcancel", finish, { passive: true });
+  }
+
   function observeDashboard() {
     const dashboard = document.querySelector("#studentApp");
     if (!dashboard || dashboardObserver) return;
     dashboardObserver = new MutationObserver(() => {
       if (isStudentDashboardVisible()) {
+        document.body.classList.add("foldbook-app-open");
         showReminderArrival();
         addInstalledReminderBanner();
         startBroadcastChecks();
         window.setTimeout(showModal, 1600);
+      } else {
+        document.body.classList.remove("foldbook-app-open");
       }
     });
     dashboardObserver.observe(dashboard, { attributes: true, attributeFilter: ["hidden", "class"] });
@@ -378,6 +430,7 @@
     if (!("serviceWorker" in navigator) || !window.isSecureContext) return;
     navigator.serviceWorker.register("/sw.js", { scope: "/" })
       .catch((error) => console.warn("FoldBook offline support could not be enabled.", error));
+    setupPullToRefresh();
     observeDashboard();
   }
 
