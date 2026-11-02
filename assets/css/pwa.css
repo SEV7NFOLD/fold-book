@@ -239,3 +239,88 @@
   .foldbook-reminder-arrival button { grid-column: 2; justify-self: start; }
   .foldbook-install-card { max-height: calc(100dvh - 28px); padding: 26px 18px 18px; }
 }
+
+.foldbook-install-help { white-space: pre-line; }
+.foldbook-broadcast-banner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 0 16px;
+  padding: 15px 16px;
+  border: 1px solid #667b35;
+  border-radius: 16px;
+  background: linear-gradient(120deg, #1b2113, #11130e);
+  color: #f3f4ed;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 22%);
+}
+.foldbook-broadcast-copy { min-width: 0; }
+.foldbook-broadcast-copy strong { color: #d9f07c; font-size: 13px; }
+.foldbook-broadcast-copy p { margin: 5px 0 0; color: #e5e7df; font-size: 13px; line-height: 1.5; white-space: pre-line; }
+.foldbook-broadcast-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; }
+.foldbook-broadcast-actions button {
+  min-height: 40px;
+  padding: 0 13px;
+  border: 1px solid #728a3b;
+  border-radius: 11px;
+  background: #d9f07c;
+  color: #171a10;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.foldbook-broadcast-actions .foldbook-broadcast-dismiss {
+  width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-color: #42463a;
+  background: #24271f;
+  color: #e7eadf;
+  font-size: 21px;
+}
+.foldbook-pull-indicator {
+  position: fixed;
+  z-index: 60;
+  top: calc(env(safe-area-inset-top, 0px) + 8px);
+  left: 50%;
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 16px;
+  border: 1px solid #4b503b;
+  border-radius: 999px;
+  background: #161811;
+  color: #e6efc4;
+  font-size: 12px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 30%);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -70px);
+  transition: transform .18s ease, opacity .18s ease;
+}
+.foldbook-pull-indicator.is-pulling {
+  opacity: 1;
+  transform: translate(-50%, calc(-70px + var(--foldbook-pull-distance, 0px)));
+}
+.foldbook-pull-indicator.is-ready,
+.foldbook-pull-indicator.is-refreshing { border-color: #d9f07c; color: #d9f07c; }
+.foldbook-pull-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgb(217 240 124 / 30%);
+  border-top-color: #d9f07c;
+  border-radius: 50%;
+}
+.foldbook-pull-indicator.is-refreshing .foldbook-pull-spinner { animation: foldbook-refresh-spin .7s linear infinite; }
+@media (max-width: 560px) {
+  .foldbook-broadcast-banner { align-items: flex-start; flex-direction: column; }
+  .foldbook-broadcast-actions { width: 100%; justify-content: flex-end; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .foldbook-header-refresh svg,
+  .foldbook-pull-indicator.is-refreshing .foldbook-pull-spinner { animation: none; }
+}
+
