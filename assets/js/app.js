@@ -265,21 +265,30 @@ function renderProfileCourses() {
     const list = document.querySelector(listSelector);
     const count = document.querySelector(countSelector);
     if (!list || !count) continue;
-    count.textContent = `${grouped[semester].length} courses`;
+    count.textContent = grouped[semester].length + " courses";
     list.replaceChildren(...grouped[semester].map((course) => {
       const row = document.createElement("div");
       row.className = "profile-course-item";
       const code = document.createElement("strong");
       const title = document.createElement("span");
+      const action = document.createElement("button");
       code.textContent = course.code;
       title.textContent = course.title || "Course title pending";
-      row.append(code, title);
+      action.type = "button";
+      action.className = "profile-course-path-action";
+      action.textContent = studyProgress.studyPaths?.[course.code]?.length ? "Open path" : "Build path";
+      action.setAttribute("aria-label", action.textContent + " for " + course.code);
+      action.addEventListener("click", () => {
+        document.querySelector("#profileModal").hidden = true;
+        setCourse(course.code);
+        if (!studyProgress.studyPaths?.[course.code]?.length) openLearningPathSetup(course.code);
+      });
+      row.append(code, title, action);
       return row;
     }));
   }
   document.querySelector("#otherSemesterGroup").hidden = grouped.other.length === 0;
 }
-
 function setStudentRegistration(registration) {
   currentStudentLevel = detectStudentLevel(registration);
   const levelStatus = document.querySelector("#chatLevel");
