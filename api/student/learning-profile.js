@@ -170,7 +170,7 @@ function mergeStudentState(existing, mode, courseCode, completed, attempts, path
 }
 
 function cleanPath(path, courseCode) {
-  if (!Array.isArray(path) || path.length > 50) return [];
+  if (!Array.isArray(path)) return [];
   return path.filter((item) => item && typeof item === "object" && !Array.isArray(item)
     && typeof item.id === "string" && /^[a-z0-9-]{2,100}$/i.test(item.id)
     && typeof item.title === "string" && item.title.trim().length > 0 && item.title.length <= 120
