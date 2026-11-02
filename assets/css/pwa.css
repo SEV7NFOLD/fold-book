@@ -320,7 +320,7 @@
   .foldbook-broadcast-actions { width: 100%; justify-content: flex-end; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .foldbook-header-refresh svg,
+  .header-refresh svg,
   .foldbook-pull-indicator.is-refreshing .foldbook-pull-spinner { animation: none; }
 }
 
