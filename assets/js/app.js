@@ -978,6 +978,38 @@ function consumeStudyFuel(amount) {
   return true;
 }
 
+async function refreshStudentExperience() {
+  const button = document.querySelector("#refreshFoldBook");
+  if (!currentStudent || button?.disabled) return;
+  if (button) {
+    button.disabled = true;
+    button.classList.add("is-refreshing");
+    button.setAttribute("aria-busy", "true");
+  }
+  try {
+    await refreshLiveCourseCatalog(currentStudentLevel);
+    await learningProfileSyncQueue;
+    await loadSyncedLearningProfile();
+    updateStudySummary();
+    updateFuelDisplay();
+    renderProfile();
+    void refreshStudentMaterials().catch(() => {});
+    showNotice("FoldBook is up to date ✨");
+  } catch (error) {
+    console.warn("FoldBook refresh did not finish:", error);
+    showNotice("Couldn’t refresh right now. Check your connection and try again.");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.classList.remove("is-refreshing");
+      button.removeAttribute("aria-busy");
+    }
+  }
+}
+
+document.querySelector("#refreshFoldBook")?.addEventListener("click", () => { void refreshStudentExperience(); });
+window.addEventListener("foldbook:refresh", () => { void refreshStudentExperience(); });
+
 function updateStudySummary() {
   const completedCount = studyProgress.completed.length;
   const percent = activeModules.length ? Math.round((completedCount / activeModules.length) * 100) : 0;
