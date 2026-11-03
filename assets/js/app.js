@@ -768,6 +768,13 @@ function stopCustomSfx(key) {
 }
 
 function playAnswerFeedback(isCorrect) {
+  const mascotContainer = document.querySelector("#lessonFeedbackAnimation");
+  if (mascotContainer) {
+    mascotContainer.hidden = false;
+    mascotContainer.classList.add("is-mascot");
+    const character = String(currentCourse || "").toUpperCase().startsWith("ECO") ? "eco" : "foldo";
+    window.playFoldBookMascot?.(character, isCorrect ? "correct" : "wrong", mascotContainer, { flameDays: studyProgress.streak });
+  }
   if (isCorrect) {
     consecutiveWrongCount = 0;
     consecutiveCorrectCount += 1;
@@ -1017,7 +1024,7 @@ function openStreakCelebration() {
   const overlay = document.querySelector("#streakCelebration");
   if (!overlay) return;
   overlay.hidden = false;
-  renderLottieInto(document.querySelector("#streakCelebrationFlame"), "streak-flame.json", "🔥", "A bright FoldBook streak flame", { loop: true });
+  window.playFoldBookMascot?.("foldo", "streak", document.querySelector("#streakCelebrationFlame"), { flameDays: studyProgress.streak });
   const count = Math.max(0, Number(studyProgress.streak) || 0);
   document.querySelector("#streakCelebrationTitle").textContent = count === 1 ? "1 day streak" : count + " day streak";
   document.querySelector("#streakCelebrationCopy").textContent = count
@@ -1263,7 +1270,8 @@ function renderModuleQuestion(module, record, index) {
       const mastered = record.questionResults.filter(Boolean).length;
       if (consecutiveCorrectCount > 0 && consecutiveCorrectCount % 3 === 0 && mastered < questions.length) {
         lessonFeedbackAnimation.hidden = false;
-        renderLottieInto(lessonFeedbackAnimation, "streak-flame.json", "🔥", "Three correct answers in a row", { loop: false });
+        lessonFeedbackAnimation.classList.add("is-mascot");
+        window.playFoldBookMascot?.(String(currentCourse || "").toUpperCase().startsWith("ECO") ? "eco" : "foldo", "combo", lessonFeedbackAnimation, { flameDays: studyProgress.streak });
         if (!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) buzz([40, 30, 65]);
       }
       if (mastered % 5 === 0 && mastered < questions.length) {
@@ -1355,13 +1363,13 @@ async function showModuleCompletionCard(module, record, awardedXp, streakAdvance
       document.querySelector("#moduleCelebration .module-celebration-kicker").textContent = "DAILY STREAK";
       document.querySelector("#moduleCelebration h2").textContent = studyProgress.streak + "-day streak!";
       document.querySelector("#moduleCelebration > p").textContent = "A little study today kept your FoldBook streak alive. Come back tomorrow to keep it glowing.";
-      renderLottieInto(moduleCelebrationAnimation, "streak-flame.json", "🔥", "Daily streak celebration", { loop: false });
+      window.playFoldBookMascot?.("foldo", "streak", moduleCelebrationAnimation, { flameDays: studyProgress.streak });
       if (!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) buzz([45, 35, 70, 45, 110]);
     } else {
       document.querySelector("#moduleCelebration .module-celebration-kicker").textContent = "MODULE COMPLETE";
       document.querySelector("#moduleCelebration h2").textContent = "You did it!";
       document.querySelector("#moduleCelebration > p").textContent = "Every question solved. Your next step is ready.";
-      renderLottieInto(moduleCelebrationAnimation, "level-up.json", "🚀", "Module complete celebration", { loop: false });
+      window.playFoldBookMascot?.(String(module.course || currentCourse || "").toUpperCase().startsWith("ECO") ? "eco" : "foldo", "complete", moduleCelebrationAnimation, { flameDays: studyProgress.streak });
       buzz([55, 45, 65, 80, 100]);
     }
     if (soundOn) sfx.win();
@@ -2132,7 +2140,12 @@ function renderUserAvatar(container, user, className = "") {
     container.append(fallback);
     renderLottieInto(container, user.avatarLottie, fallback.textContent || "S", "Profile character");
   } else {
-    container.append(fallback);
+    const mascot = document.createElement("img");
+    mascot.src = "/assets/brand/foldo-icon.svg";
+    mascot.alt = "";
+    mascot.className = "mascot-profile-icon";
+    mascot.addEventListener("error", () => container.replaceChildren(fallback), { once: true });
+    container.append(mascot);
   }
 }
 

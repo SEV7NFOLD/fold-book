@@ -18,6 +18,10 @@ const sfxFiles = fs.readdirSync(sfxDirectory, { withFileTypes: true })
   .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".mp3"))
   .map((entry) => `assets/sfx/${entry.name}`);
 const lottieManifest = "assets/lottie/manifest.json";
+const mascotAssetDirectory = path.join(lottieDirectory, "mascots");
+const mascotAssetFiles = fs.readdirSync(mascotAssetDirectory, { withFileTypes: true })
+  .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".b64"))
+  .map((entry) => `assets/lottie/mascots/${entry.name}`);
 const pwaIconSources = {
   "assets/brand/foldbook-pwa-icon-192.png": "scripts/foldbook-pwa-icon-192.png.b64",
   "assets/brand/foldbook-pwa-icon-512.png": "scripts/foldbook-pwa-icon-512.png.b64",
@@ -33,12 +37,15 @@ const allowedFiles = [
   ...pwaIconFiles,
   ...optionalFiles,
   ...lottieFiles,
+  ...mascotAssetFiles,
   ...sfxFiles,
   lottieManifest,
   "assets/css/design-tokens.css",
   "assets/css/styles.css",
   "assets/css/pwa.css",
   "assets/js/app.js",
+  "assets/js/mascots.js",
+  "assets/js/foldbook-characters.js",
   "data/announcements.csv",
   "data/timetable.csv",
 ];

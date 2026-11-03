@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="38 16 124 124" xmlns="http://www.w3.org/2000/svg"><defs><clipPath id="av-clip"><circle cx="100" cy="78" r="62"/></clipPath></defs><g clip-path="url(#av-clip)"><circle cx="100" cy="78" r="62" fill="#DCE4F3"/>
+
+<g id="body" data-name="body"><g>
+<path d="M72 196 L71 217 Q71 219 73 219 L95 219 Q97 219 97 217 L98 196 Z" fill="rgb(232, 220, 193)" stroke="rgb(74, 42, 23)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M102 196 L103 217 Q103 219 105 219 L127 219 Q129 219 129 217 L128 196 Z" fill="rgb(232, 220, 193)" stroke="rgb(74, 42, 23)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M62 224 Q62 213 77 213 L92 213 Q99 213 99 220 L99 225 Q99 228 96 228 L65 228 Q62 228 62 224 Z" fill="rgb(74, 43, 25)" stroke="rgb(74, 42, 23)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M138 224 Q138 213 123 213 L108 213 Q101 213 101 220 L101 225 Q101 228 104 228 L135 228 Q138 228 138 224 Z" fill="rgb(74, 43, 25)" stroke="rgb(74, 42, 23)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M78 100 Q52 102 45 126 Q39 152 43 202 Q100 212 157 202 Q161 152 155 126 Q148 102 122 100 Z" fill="rgb(244, 236, 217)" stroke="none"/>
+<path d="M155.2 127 Q160.6 152 156.6 201.6 Q146 204.5 131 206 Q150 176 150 140 Q150 129 147 118 Q152.5 121 155.2 127 Z" fill="rgb(226, 211, 178)" stroke="none"/>
+<ellipse cx="100" cy="114" rx="28" ry="9" fill="rgb(226, 211, 178)" stroke="none"/>
+
+
+
+<path fill="none" d="M78 100 Q52 102 45 126 Q39 152 43 202 Q100 212 157 202 Q161 152 155 126 Q148 102 122 100 Z" stroke="rgb(74, 42, 23)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M79 94 Q100 103 121 94 L121 101 Q100 110 79 101 Z" fill="rgb(244, 236, 217)" stroke="rgb(74, 42, 23)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M80 99 Q100 108 120 99" fill="none" stroke="rgb(123, 75, 41)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M78 112 L100 142 L122 112" fill="none" stroke="rgb(123, 75, 41)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+
+
+<g id="arm-l" data-name="arm-l">
+<path d="M62 116 Q42 118 36 142 Q32 160 38 170 L54 172 Q52 152 60 138 Z" fill="rgb(244, 236, 217)" stroke="rgb(74, 42, 23)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M36 166 Q45 164 55 167 L54 176 Q45 173 36 175 Z" fill="rgb(226, 211, 178)" stroke="rgb(74, 42, 23)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path stroke-width="2.4" d="M37 170.5 Q45 168.5 54.5 171.5" fill="none" stroke="rgb(123, 75, 41)" stroke-linecap="round" stroke-linejoin="round"/>
+<ellipse cx="54" cy="179" rx="4.5" ry="6.5" transform="rotate(25 54 179)" fill="rgb(92, 54, 34)" stroke="rgb(74, 42, 23)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="45" cy="181" r="9" fill="rgb(92, 54, 34)" stroke="rgb(74, 42, 23)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<g id="arm-r" data-name="arm-r">
+<path d="M138 116 Q158 118 164 142 Q168 160 162 170 L146 172 Q148 152 140 138 Z" fill="rgb(244, 236, 217)" stroke="rgb(74, 42, 23)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M156.5 126 Q166 145 162 169.5 L157 170 Q160 148 152 129 Z" fill="rgb(226, 211, 178)" stroke="none"/>
+<path d="M145 167 Q155 164 164 166 L164 175 Q155 173 146 176 Z" fill="rgb(226, 211, 178)" stroke="rgb(74, 42, 23)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path stroke-width="2.4" d="M145.5 171.5 Q155 168.5 164 170.5" fill="none" stroke="rgb(123, 75, 41)" stroke-linecap="round" stroke-linejoin="round"/>
+<ellipse cx="146" cy="179" rx="4.5" ry="6.5" transform="rotate(-25 146 179)" fill="rgb(92, 54, 34)" stroke="rgb(74, 42, 23)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="155" cy="181" r="9" fill="rgb(92, 54, 34)" stroke="rgb(74, 42, 23)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<g id="head" data-name="head"><g>
+<ellipse cx="68" cy="72" rx="7" ry="9" fill="rgb(92, 54, 34)" stroke="rgb(74, 42, 23)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+<ellipse cx="132" cy="72" rx="7" ry="9" fill="rgb(92, 54, 34)" stroke="rgb(74, 42, 23)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M69 58 Q63 66 66 78 L73 74 Q71 66 74 58 Z" fill="rgb(251, 248, 241)" stroke="rgb(74, 42, 23)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M131 58 Q137 66 134 78 L127 74 Q129 66 126 58 Z" fill="rgb(251, 248, 241)" stroke="rgb(74, 42, 23)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="100" cy="70" r="31" fill="rgb(92, 54, 34)" stroke="rgb(74, 42, 23)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M123 50 Q133 70 126 92 Q118 100 108 101 Q126 88 126 70 Q126 59 123 50 Z" fill="rgb(70, 40, 26)" stroke="none"/>
+
+
+<circle cx="80" cy="84" r="8" fill="rgb(122, 70, 49)" stroke="none"/><circle cx="120" cy="84" r="8" fill="rgb(122, 70, 49)" stroke="none"/>
+<g id="beard" data-name="beard">
+<path d="M68 76 Q64 96 74 108 Q80 118 91 117 Q95 122 100 120 Q105 122 109 117 Q120 118 126 108 Q136 96 132 76 Q126 90 114 92 Q107 88 100 90 Q93 88 86 92 Q74 90 68 76 Z" fill="rgb(251, 248, 241)" stroke="rgb(74, 42, 23)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M76 106 Q82 113 91 113.5 Q95 117.5 100 115.5 Q105 117.5 109 113.5 Q118 113 124 106 Q125 111 120 115 Q110 120 100 121 Q90 120 80 115 Q76 111 76 106 Z" fill="rgb(228, 221, 207)" stroke="none"/>
+</g>
+<path d="M93 82 Q93 75 100 75 Q107 75 107 82 Q107 87 100 87 Q93 87 93 82 Z" fill="rgb(70, 40, 26)" stroke="none"/>
+<circle cx="97.6" cy="78.6" r="1.8" fill="rgb(140, 87, 58)" stroke="none"/>
+<path d="M83 92 Q90 84 100 89 Q110 84 117 92 Q111 98 100 94 Q89 98 83 92 Z" fill="rgb(251, 248, 241)" stroke="rgb(74, 42, 23)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+<g id="mouth-big" data-name="mouth-big">
+<g id="mouth-neutral" data-name="mouth-neutral"><path d="M92 101 Q100 107 108 101" fill="none" stroke="rgb(36, 19, 11)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></g>
+
+
+
+
+
+
+</g>
+<g id="eyes" data-name="eyes"><g id="eyes-big" data-name="eyes-big">
+<g id="eye-neutral" data-name="eye-neutral"><ellipse cx="88" cy="68" rx="5.4" ry="6" fill="rgb(255, 253, 246)" stroke="none"/><ellipse cx="112" cy="68" rx="5.4" ry="6" fill="rgb(255, 253, 246)" stroke="none"/><ellipse cx="88.6" cy="68.6" rx="3.3" ry="4" fill="rgb(36, 19, 11)" stroke="none"/><ellipse cx="112.6" cy="68.6" rx="3.3" ry="4" fill="rgb(36, 19, 11)" stroke="none"/><circle cx="89.8" cy="67" r="1.2" fill="rgb(255, 255, 255)" stroke="none"/><circle cx="113.8" cy="67" r="1.2" fill="rgb(255, 255, 255)" stroke="none"/></g>
+
+
+
+
+
+
+</g></g>
+<g id="glasses-big" data-name="glasses-big"><rect x="76.5" y="59" width="23" height="18" rx="8" fill="rgb(255, 255, 255)" fill-opacity="0.3" stroke="none"/><rect x="100.5" y="59" width="23" height="18" rx="8" fill="rgb(255, 255, 255)" fill-opacity="0.3" stroke="none"/>
+
+<rect x="76.5" y="59" width="23" height="18" rx="8" fill="none" stroke="rgb(201, 139, 71)" stroke-width="3.5" stroke-linecap="butt" stroke-linejoin="miter"/><rect x="100.5" y="59" width="23" height="18" rx="8" fill="none" stroke="rgb(201, 139, 71)" stroke-width="3.5" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path d="M99.5 66 Q100 64 100.5 66 M76.5 65 L70 63 M123.5 65 L130 63" fill="none" stroke="rgb(201, 139, 71)" stroke-width="3.5" stroke-linecap="butt" stroke-linejoin="miter"/></g>
+<g id="cap" data-name="cap">
+<g id="cap-round" data-name="cap-round">
+<path d="M69 53 Q70 31 100 31 Q130 31 131 53 Q100 47 69 53 Z" fill="rgb(123, 75, 41)" stroke="rgb(74, 42, 23)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M80 41 Q90 35 104 35.5 Q91 38.5 83 45 Z" fill="rgb(158, 103, 59)" stroke="none"/>
+<path d="M69.4 52.6 Q100 46.6 130.6 52.6 L130.8 46.4 Q100 40.4 69.2 46.4 Z" fill="rgb(94, 56, 32)" stroke="rgb(74, 42, 23)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+
+</g>
+
+</g>
+<g id="brows-big" data-name="brows-big">
+<g id="brow-neutral" data-name="brow-neutral"><path d="M77 55 Q86 48 97 53 Q95 57 87 56 Q80 57 77 55 Z M123 55 Q114 48 103 53 Q105 57 113 56 Q120 57 123 55 Z" fill="rgb(251, 248, 241)" stroke="rgb(74, 42, 23)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></g>
+
+
+
+
+
+
+</g>
+</g></g>
+</g></g>
+</g></svg>

@@ -9,7 +9,9 @@ const SHELL_FILES = [
   "/assets/css/design-tokens.css",
   "/assets/css/styles.css",
   "/assets/js/app.js",
-  "/assets/js/pwa.js"
+  "/assets/js/pwa.js",
+  "/assets/js/mascots.js",
+  "/assets/js/foldbook-characters.js"
 ];
 
 self.addEventListener("install", (event) => {
