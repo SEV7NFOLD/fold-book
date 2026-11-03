@@ -2374,7 +2374,12 @@ function appendChatMessage(text, kind) {
   avatar.setAttribute("aria-hidden", "true");
   if (kind === "assistant") {
     article.classList.add("has-avatar");
-    renderLottieInto(avatar, "cat-idle.json", "✦", "Dr. Eco");
+    avatar.classList.add("dr-eco-chat-avatar");
+    const drEcoAvatar = document.createElement("img");
+    drEcoAvatar.src = "/assets/brand/eco-avatar.svg";
+    drEcoAvatar.alt = "";
+    drEcoAvatar.className = "dr-eco-avatar-image";
+    avatar.append(drEcoAvatar);
   } else if (S.user) {
     article.classList.add("has-avatar");
     renderUserAvatar(avatar, S.user, "message-avatar profile-avatar");
@@ -5924,6 +5929,15 @@ document.querySelectorAll("[data-admin-view]").forEach((button) => {
     if (button.dataset.adminView === "mobile-reminders") void loadMobileReminderSettings();
   });
 });
+
+function initializeLandingMascots() {
+  const foldo = document.querySelector("#landingFoldoMascot");
+  const eco = document.querySelector("#landingEcoMascot");
+  if (foldo) window.playFoldBookMascot?.("foldo", "greet", foldo, { flameDays: 1 });
+  if (eco) window.playFoldBookMascot?.("eco", "greet", eco, { cap: "round" });
+}
+
+initializeLandingMascots();
 
 const initialHash = window.location.hash.slice(1);
 (async () => {

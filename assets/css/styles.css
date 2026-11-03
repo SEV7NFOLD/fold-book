@@ -1566,3 +1566,20 @@ body.foldbook-app-open { overscroll-behavior-y: contain; }
 .feedback-animation.is-mascot svg { width: 100%; height: 100%; overflow: visible; }
 .mascot-profile-icon { display: block; width: 100%; height: 100%; object-fit: contain; }
 #moduleCelebrationAnimation svg, #streakCelebrationFlame svg, #profileStreakAnimation svg { width: 100%; height: 100%; overflow: visible; }
+
+
+/* Character artwork for the public landing page and Dr. Eco chat */
+.landing-hero-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(230px, 370px); align-items: center; gap: clamp(18px, 5vw, 64px); }
+.landing-hero-copy { min-width: 0; }
+.landing-mascot-stage { min-height: clamp(220px, 31vw, 350px); display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.landing-mascot { width: 52%; aspect-ratio: 4 / 5; display: grid; place-items: center; }
+.landing-mascot-foldo { z-index: 1; transform: translateY(18px) rotate(-6deg); }
+.landing-mascot-eco { margin-left: -9%; transform: translateY(-12px) rotate(5deg); }
+.landing-mascot img, .landing-mascot svg { display: block; width: 100%; height: 100%; object-fit: contain; overflow: visible; }
+.dr-eco-chat-avatar { overflow: hidden; }
+.dr-eco-avatar-image { display: block; width: 100%; height: 100%; object-fit: contain; }
+@media (max-width: 680px) {
+  .landing-hero-layout { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .landing-mascot-stage { width: min(100%, 360px); min-height: 200px; margin: 4px auto 0; }
+  .landing-mascot { width: 46%; }
+}
