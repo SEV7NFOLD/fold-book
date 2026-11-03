@@ -347,12 +347,18 @@
             <a class="landing-download-link" href="/download/android">Download the Android app (.APK) ↓</a>
           </div>
           <div class="landing-mascot-stage" aria-hidden="true">
-            <div class="landing-mascot landing-mascot-foldo" id="landingFoldoMascot">
-              <img src="/assets/brand/foldo-mark-dark.svg" alt="">
-            </div>
-            <div class="landing-mascot landing-mascot-eco" id="landingEcoMascot">
-              <img src="/assets/brand/eco-avatar.svg" alt="">
-            </div>
+            <figure class="landing-mascot-figure landing-mascot-figure-foldo">
+              <div class="landing-mascot" id="landingFoldoMascot">
+                <img class="mascot-static" src="/assets/brand/foldo-mark-dark.svg" alt="">
+              </div>
+              <figcaption><strong>Foldo</strong><span>Your study buddy</span></figcaption>
+            </figure>
+            <figure class="landing-mascot-figure landing-mascot-figure-eco">
+              <div class="landing-mascot" id="landingEcoMascot">
+                <img class="mascot-static" src="/assets/brand/eco-avatar.svg" alt="">
+              </div>
+              <figcaption><strong>Dr. Eco</strong><span>Your Economics tutor</span></figcaption>
+            </figure>
           </div>
         </div>
       </section>
@@ -674,14 +680,45 @@
       </div>
     </section>
 
+    <section class="answer-feedback-overlay" id="answerFeedbackModal" role="dialog" aria-modal="true" aria-labelledby="answerFeedbackTitle" aria-describedby="answerFeedbackCopy" hidden>
+      <div class="answer-feedback-card">
+        <span class="answer-feedback-grip" aria-hidden="true"></span>
+        <div class="answer-feedback-heading">
+          <div class="answer-feedback-mascot" id="answerFeedbackMascot" aria-hidden="true">
+            <img class="mascot-static" src="/assets/brand/foldo-mark-dark.svg" alt="">
+          </div>
+          <div class="answer-feedback-heading-copy">
+            <p class="answer-feedback-kicker" id="answerFeedbackKicker">ANSWER CHECK</p>
+            <h2 id="answerFeedbackTitle">Exactly right!</h2>
+            <p id="answerFeedbackCopy">That’s it. One clear step forward.</p>
+          </div>
+        </div>
+        <div class="answer-feedback-answers">
+          <div class="answer-feedback-answer-row" id="answerFeedbackYourAnswerRow">
+            <span>Your answer</span><strong id="answerFeedbackYourAnswer"></strong>
+          </div>
+          <div class="answer-feedback-answer-row is-correct-answer" id="answerFeedbackCorrectAnswerRow" hidden>
+            <span>Correct answer</span><strong id="answerFeedbackCorrectAnswer"></strong>
+          </div>
+        </div>
+        <button class="results-submit answer-feedback-continue" id="answerFeedbackContinue" type="button">Continue →</button>
+      </div>
+    </section>
+
     <section class="streak-celebration-overlay" id="streakCelebration" role="dialog" aria-modal="true" aria-labelledby="streakCelebrationTitle" hidden>
       <button class="streak-celebration-close" id="closeStreakCelebration" type="button" aria-label="Close streak celebration">×</button>
       <div class="streak-celebration-content">
-        <div class="streak-celebration-flame" id="streakCelebrationFlame" aria-hidden="true"><span class="foldbook-fallback">🔥</span></div>
-        <div class="streak-celebration-badge" id="streakCelebrationBadge" aria-hidden="true" hidden></div>
+        <div class="streak-celebration-heroes" aria-hidden="true">
+          <span class="streak-spark streak-spark-one"></span><span class="streak-spark streak-spark-two"></span>
+          <span class="streak-spark streak-spark-three"></span><span class="streak-spark streak-spark-four"></span>
+          <div class="streak-celebration-flame" id="streakCelebrationFlame"><span class="foldbook-fallback">🔥</span></div>
+          <div class="streak-celebration-foldo" id="streakCelebrationFoldo"><img class="mascot-static" src="/assets/brand/foldo-mark-dark.svg" alt=""></div>
+        </div>
         <p class="section-kicker">FOLDBOOK DAILY STREAK</p>
-        <h2 id="streakCelebrationTitle">1 day streak</h2>
+        <div class="streak-celebration-count" id="streakCelebrationCount" aria-hidden="true"><span class="streak-count-old" id="streakCelebrationOldCount">0</span><span class="streak-count-new" id="streakCelebrationNewCount">1</span></div>
+        <h2 id="streakCelebrationTitle"><span class="streak-sr-only" id="streakCelebrationAccessibleCount">1 </span>day streak</h2>
         <p id="streakCelebrationCopy">Come back tomorrow to upgrade your flame.</p>
+        <button class="results-submit streak-celebration-continue" id="continueStreakCelebration" type="button">Continue studying →</button>
       </div>
     </section>
 

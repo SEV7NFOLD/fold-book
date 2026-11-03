@@ -811,8 +811,8 @@ function updateComboMeter(isCorrect) {
   }
 }
 
-function playAnswerFeedback(isCorrect) {
-  const mascotContainer = document.querySelector("#lessonFeedbackAnimation");
+function playAnswerFeedback(isCorrect, { mascot = true } = {}) {
+  const mascotContainer = mascot ? document.querySelector("#lessonFeedbackAnimation") : null;
   if (mascotContainer) {
     const character = foldbookCharacterFor();
     mascotContainer.hidden = false;
@@ -832,6 +832,69 @@ function playAnswerFeedback(isCorrect) {
   else if (consecutiveWrongCount === 5) playCustomSfx("failTest");
   else playCustomSfx("wrong");
 }
+
+let answerFeedbackAfterContinue = null;
+
+function resetAnswerFeedbackMascot(character) {
+  const container = document.querySelector("#answerFeedbackMascot");
+  if (!container) return;
+  window.stopFoldBookMascot?.(container);
+  const image = document.createElement("img");
+  image.className = "mascot-static";
+  image.alt = "";
+  image.src = character === "eco" ? "/assets/brand/eco-avatar.svg" : "/assets/brand/foldo-mark-dark.svg";
+  container.replaceChildren(image);
+  container.classList.toggle("is-eco", character === "eco");
+}
+
+function showLessonAnswerFeedback({ module, question, selectedAnswer, isCorrect, inCorrections = false, combo = false, onContinue = null }) {
+  const modal = document.querySelector("#answerFeedbackModal");
+  const character = foldbookCharacterFor(module.course || currentCourse);
+  const title = document.querySelector("#answerFeedbackTitle");
+  const kicker = document.querySelector("#answerFeedbackKicker");
+  const copy = document.querySelector("#answerFeedbackCopy");
+  const correctRow = document.querySelector("#answerFeedbackCorrectAnswerRow");
+  const continueButton = document.querySelector("#answerFeedbackContinue");
+  const explanation = String(question.explanation || "").trim();
+
+  resetAnswerFeedbackMascot(character);
+  document.querySelector("#answerFeedbackYourAnswer").textContent = selectedAnswer;
+  document.querySelector("#answerFeedbackCorrectAnswer").textContent = question.answers[question.correctAnswer] || "";
+  document.querySelector("#answerFeedbackYourAnswerRow").classList.toggle("is-wrong", !isCorrect);
+  kicker.textContent = isCorrect ? (combo ? "THREE IN A ROW" : "NICE WORK") : "KEEP LEARNING";
+  title.textContent = isCorrect ? "Exactly right!" : "Nearly there";
+  copy.textContent = isCorrect
+    ? explanation || "That’s it. One clear step forward."
+    : explanation || (inCorrections ? "The right answer is highlighted. Give it another try." : "We’ll come back to this one in your corrections round.");
+  correctRow.hidden = isCorrect;
+  continueButton.textContent = inCorrections && !isCorrect ? "Try another answer →" : "Continue →";
+  answerFeedbackAfterContinue = onContinue;
+
+  const state = !isCorrect ? "wrong" : combo ? "combo" : "correct";
+  window.playFoldBookMascot?.(character, state, document.querySelector("#answerFeedbackMascot"), character === "foldo" ? { flameDays: studyProgress.streak } : { cap: "round" });
+  modal.hidden = false;
+  document.body.classList.add("answer-feedback-open");
+  continueButton.focus({ preventScroll: true });
+}
+
+function closeLessonAnswerFeedback() {
+  const modal = document.querySelector("#answerFeedbackModal");
+  if (!modal || modal.hidden) return;
+  modal.hidden = true;
+  document.body.classList.remove("answer-feedback-open");
+  resetAnswerFeedbackMascot(document.querySelector("#answerFeedbackMascot")?.classList.contains("is-eco") ? "eco" : "foldo");
+  const action = answerFeedbackAfterContinue;
+  answerFeedbackAfterContinue = null;
+  if (action) {
+    action();
+    return;
+  }
+  const nextAnswer = answerOptions.querySelector(".answer-option:not(:disabled)");
+  if (nextAnswer) nextAnswer.focus({ preventScroll: true });
+  else document.querySelector("#moduleCompletionCard button:not([hidden])")?.focus({ preventScroll: true });
+}
+
+document.querySelector("#answerFeedbackContinue")?.addEventListener("click", closeLessonAnswerFeedback);
 
 function beginQuickQuestionLoading(label) {
   const panel = document.querySelector("#quickTestLoading");
@@ -1070,28 +1133,61 @@ function openStreakCelebration() {
   const overlay = document.querySelector("#streakCelebration");
   if (!overlay) return;
   overlay.hidden = false;
-  window.playFoldBookMascot?.("foldo", "streak", document.querySelector("#streakCelebrationFlame"), { flameDays: studyProgress.streak });
   const count = Math.max(0, Number(studyProgress.streak) || 0);
-  const flameBadge = document.querySelector("#streakCelebrationBadge");
-  if (flameBadge) {
-    flameBadge.hidden = count < 1;
-    if (count >= 1) window.playFoldBookUI?.("streak-flame", [1, 3, 7, 14, 30, 100].includes(count) ? `milestone-${count}` : "day-earned", flameBadge);
+  const oldCount = document.querySelector("#streakCelebrationOldCount");
+  const newCount = document.querySelector("#streakCelebrationNewCount");
+  const countDisplay = document.querySelector("#streakCelebrationCount");
+  const practicedToday = count > 0 && studyProgress.lastStudyDate === localDateKey();
+  const seenKey = `foldBook.streakCelebrationSeen.${currentStudent?.registration || "student"}.${localDateKey()}`;
+  let firstShowAfterPractice = false;
+  if (practicedToday) {
+    try {
+      firstShowAfterPractice = !window.localStorage.getItem(seenKey);
+      if (firstShowAfterPractice) window.localStorage.setItem(seenKey, "1");
+    } catch (error) {
+      console.warn("Could not save streak celebration state:", error.message);
+    }
   }
-  document.querySelector("#streakCelebrationTitle").textContent = count === 1 ? "1 day streak" : count + " day streak";
+  oldCount.textContent = String(Math.max(0, count - 1));
+  newCount.textContent = String(count);
+  countDisplay.classList.remove("is-rolling");
+  const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  const animateCount = firstShowAfterPractice && !reducedMotion;
+  overlay.classList.toggle("is-animating", animateCount);
+  if (animateCount) {
+    void countDisplay.offsetWidth;
+    countDisplay.classList.add("is-rolling");
+    window.setTimeout(() => overlay.classList.remove("is-animating"), 1200);
+  }
+  document.querySelector("#streakCelebrationAccessibleCount").textContent = `${count} `;
+  overlay.setAttribute("aria-label", count === 1 ? "1 day streak celebration" : `${count} day streak celebration`);
+  const flame = document.querySelector("#streakCelebrationFlame");
+  const flameMarker = [1, 3, 7, 14, 30, 100].includes(count) ? `milestone-${count}` : "day-earned";
+  if (count) window.playFoldBookUI?.("streak-flame", flameMarker, flame, { flameDays: count });
+  window.playFoldBookMascot?.("foldo", count ? "streak" : "encourage", document.querySelector("#streakCelebrationFoldo"), { flameDays: count });
   document.querySelector("#streakCelebrationCopy").textContent = count
-    ? "Come back tomorrow to upgrade your flame."
+    ? "Come back tomorrow to grow your flame."
     : "Complete a study checkpoint to light your first flame.";
   sfx.win();
   buzz([35, 35, 70, 35, 120]);
-  document.querySelector("#closeStreakCelebration")?.focus();
+  document.querySelector("#continueStreakCelebration")?.focus();
 }
 function closeStreakCelebration() {
   const overlay = document.querySelector("#streakCelebration");
   if (!overlay) return;
   overlay.hidden = true;
+  window.stopFoldBookUI?.(document.querySelector("#streakCelebrationFlame"));
+  const foldo = document.querySelector("#streakCelebrationFoldo");
+  window.stopFoldBookMascot?.(foldo);
+  const fallback = document.createElement("img");
+  fallback.className = "mascot-static";
+  fallback.alt = "";
+  fallback.src = "/assets/brand/foldo-mark-dark.svg";
+  foldo?.replaceChildren(fallback);
 }
 document.querySelector("#pStreak")?.addEventListener("click", openStreakCelebration);
 document.querySelector("#closeStreakCelebration")?.addEventListener("click", closeStreakCelebration);
+document.querySelector("#continueStreakCelebration")?.addEventListener("click", closeStreakCelebration);
 document.querySelector("#streakCelebration")?.addEventListener("click", (event) => {
   if (event.target.id === "streakCelebration") closeStreakCelebration();
 });
@@ -1258,6 +1354,7 @@ function renderModuleQuestion(module, record, index) {
   lessonFeedback.textContent = "";
   lessonFeedback.className = "lesson-feedback";
   lessonFeedbackAnimation.hidden = true;
+  document.querySelector(".lesson-feedback-row").hidden = false;
   question.answers.forEach((answer, answerIndex) => {
     const option = document.createElement("button");
     option.type = "button";
@@ -1276,7 +1373,7 @@ function renderModuleQuestion(module, record, index) {
         studyProgress.attempts[module.id] = record;
         saveStudyProgress();
         void syncLearningProfile("progress", currentCourse);
-        playAnswerFeedback(false);
+        playAnswerFeedback(false, { mascot: false });
         showAnswerBadge(option, false);
         updateComboMeter(false);
         lessonFeedback.textContent = `${inCorrections
@@ -1297,6 +1394,14 @@ function renderModuleQuestion(module, record, index) {
           for (const button of answerOptions.children) button.disabled = false;
           option.disabled = true;
         }
+        showLessonAnswerFeedback({
+          module,
+          question,
+          selectedAnswer: answer,
+          isCorrect: false,
+          inCorrections,
+          onContinue: inCorrections ? null : () => lessonNextQuestion.click(),
+        });
         return;
       }
       record.correct = (record.correct || 0) + 1;
@@ -1307,7 +1412,7 @@ function renderModuleQuestion(module, record, index) {
       studyProgress.attempts[module.id] = record;
       saveStudyProgress();
       void syncLearningProfile("progress", currentCourse);
-      playAnswerFeedback(true);
+      playAnswerFeedback(true, { mascot: false });
       option.classList.add("is-correct");
       showAnswerBadge(option, true);
       updateComboMeter(true);
@@ -1315,6 +1420,7 @@ function renderModuleQuestion(module, record, index) {
       if (record.questionResults.filter(Boolean).length >= questions.length) {
         lessonFeedback.textContent = completeStudyModule(module, record);
         lessonNextQuestion.hidden = true;
+        showLessonAnswerFeedback({ module, question, selectedAnswer: answer, isCorrect: true });
         return;
       }
       lessonFeedback.textContent = question.explanation || "That’s it! One more step forward.";
@@ -1322,16 +1428,20 @@ function renderModuleQuestion(module, record, index) {
       lessonNextQuestion.textContent = "Next question →";
       lessonNextQuestion.hidden = false;
       const mastered = record.questionResults.filter(Boolean).length;
-      if (consecutiveCorrectCount > 0 && consecutiveCorrectCount % 3 === 0 && mastered < questions.length) {
-        lessonFeedbackAnimation.hidden = false;
-        lessonFeedbackAnimation.classList.add("is-mascot");
-        lessonFeedbackAnimation.classList.toggle("is-mascot-eco", foldbookCharacterFor() === "eco");
-        window.playFoldBookMascot?.(foldbookCharacterFor(), "combo", lessonFeedbackAnimation, foldbookCharacterFor() === "foldo" ? { flameDays: studyProgress.streak } : {});
-        if (!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) buzz([40, 30, 65]);
-      }
-      if (mastered % 5 === 0 && mastered < questions.length) {
-        showQuestionMilestone(record.questionResults.filter(Boolean).length);
-      }
+      const combo = consecutiveCorrectCount > 0 && consecutiveCorrectCount % 3 === 0;
+      if (combo && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) buzz([40, 30, 65]);
+      const milestone = mastered % 5 === 0 && mastered < questions.length;
+      showLessonAnswerFeedback({
+        module,
+        question,
+        selectedAnswer: answer,
+        isCorrect: true,
+        combo,
+        onContinue: () => {
+          lessonNextQuestion.click();
+          if (milestone) showQuestionMilestone(mastered);
+        },
+      });
     });
     answerOptions.append(option);
   });
