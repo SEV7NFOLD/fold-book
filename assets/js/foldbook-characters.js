@@ -79,7 +79,7 @@ function createCharacter(lottie, container, data, options = {}) {
     if (destroyed || !markers[next]) return;
     state = next; after = then;
     if (onComplete) { anim.removeEventListener('complete', onComplete); onComplete = null; }
-    if (reduced()) { anim.goToAndStop('still-' + next, true); return; }
+    if (reduced()) { anim.goToAndStop(markers['still-' + next]?.[0] ?? 0, true); return; }
     const loop = LOOP_STATES.has(next);
     anim.loop = loop;
     anim.playSegments(markers[next], true);
@@ -90,7 +90,7 @@ function createCharacter(lottie, container, data, options = {}) {
     if (!visible) anim.pause();
   }
   /** Show a state's still pose without animating (static fallback, reduced motion, screenshots). */
-  function still(name) { state = name; anim.goToAndStop('still-' + name, true); }
+  function still(name) { state = name; anim.goToAndStop(markers['still-' + name]?.[0] ?? 0, true); }
 
   let io = null;
   if (options.pauseOffscreen !== false && typeof IntersectionObserver === 'function') {
