@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="6 6 200 200" xmlns="http://www.w3.org/2000/svg">
+
+<g id="body" data-name="body"><g>
+
+<g id="bookmark" data-name="bookmark">
+<path d="M138 72 C135 59 140 51 147 46" fill="none" stroke="rgb(30, 74, 44)" stroke-width="18" stroke-linecap="round" stroke-linejoin="miter"/>
+<path d="M138 72 C135 59 140 51 147 46" fill="none" stroke="rgb(232, 87, 58)" stroke-width="10" stroke-linecap="round" stroke-linejoin="miter"/>
+
+<g id="flame" data-name="flame"><g><g id="flame-size" data-name="flame-size">
+
+<g transform="translate(130 3)">
+<path d="M20 46 C9 45 4 36 7 26 C9 19 13 15 14 6 L19 15 L25 3 C29 11 34 17 35 26 C37 37 31 45 20 46 Z" fill="rgb(255, 143, 46)" stroke="#EEF3E8" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M20 41 C14 40 12 35 14 30 C15 27 17 25 18 21 L21 27 L24 20 C26 25 28 28 28 32 C29 37 25 41 20 41 Z" fill="rgb(255, 210, 63)" stroke="none"/>
+
+
+</g>
+
+</g></g></g>
+</g>
+<path d="M146 70 L164 77 Q171 80 171 87 L171 189 Q171 196 164 197 L146 201 Z" fill="rgb(255, 245, 216)" stroke="#EEF3E8" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+
+<path d="M68 62 L128 62 Q152 62 152 86 L155 180 Q155 204 131 204 L65 204 Q41 204 41 180 L44 86 Q44 62 68 62 Z" fill="rgb(184, 226, 60)" stroke="none"/>
+<path d="M61 62.5 Q46 63.5 44.4 86 L41.4 180 Q41.4 203.6 61 203.6 Q55.5 133 61 62.5 Z" fill="rgb(151, 199, 44)" stroke="none"/>
+<path d="M151.2 112 L154.6 180 Q154.6 203.6 131 203.6 L94 203.6 Q137 197 146 168 Q151 146 151.2 112 Z" fill="rgb(164, 209, 50)" stroke="none"/>
+
+
+
+<rect x="70" y="86" width="74" height="88" rx="24" fill="rgb(215, 243, 130)" stroke="none"/>
+<rect x="70" y="86" width="74" height="88" rx="24" fill="none" stroke="rgb(142, 193, 38)" stroke-width="2.5" stroke-linecap="butt" stroke-linejoin="miter"/>
+<path fill="none" d="M68 62 L128 62 Q152 62 152 86 L155 180 Q155 204 131 204 L65 204 Q41 204 41 180 L44 86 Q44 62 68 62 Z" stroke="#EEF3E8" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+
+
+<g id="face" data-name="face">
+
+<g id="brows-big" data-name="brows-big">
+<g id="brow-neutral" data-name="brow-neutral"><path d="M85 103 Q93 99 101 102 M113 102 Q121 99 129 103" fill="none" stroke="rgb(30, 74, 44)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></g>
+
+
+
+
+
+
+</g>
+<g id="eyes" data-name="eyes"><g id="eyes-big" data-name="eyes-big">
+<g id="eye-neutral" data-name="eye-neutral"><ellipse cx="93" cy="122" rx="7.5" ry="10.5" fill="rgb(30, 74, 44)" stroke="none"/><ellipse cx="121" cy="122" rx="7.5" ry="10.5" fill="rgb(30, 74, 44)" stroke="none"/><circle cx="95.6" cy="117.6" r="2.9" fill="rgb(255, 255, 255)" stroke="none"/><circle cx="123.6" cy="117.6" r="2.9" fill="rgb(255, 255, 255)" stroke="none"/><circle cx="91.4" cy="126.6" r="1.3" fill="rgb(255, 255, 255)" stroke="none"/><circle cx="119.4" cy="126.6" r="1.3" fill="rgb(255, 255, 255)" stroke="none"/></g>
+
+
+
+
+
+
+</g></g>
+<g id="mouth-big" data-name="mouth-big">
+<g id="mouth-neutral" data-name="mouth-neutral"><path d="M98 147 Q107 155 116 147" fill="none" stroke="rgb(30, 74, 44)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/></g>
+
+
+
+
+
+
+</g>
+</g>
+</g></g>
+</svg>

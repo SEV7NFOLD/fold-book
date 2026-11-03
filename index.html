@@ -21,9 +21,11 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
     <script src="https://unpkg.com/@dotlottie/player-component@latest/dist/dotlottie-player.mjs" type="module"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.12.2/lottie.min.js" defer></script>
+    <script src="/assets/vendor/lottie-5.12.2.min.js" defer></script>
     <script src="/assets/js/foldbook-characters.js" defer></script>
     <script src="/assets/js/mascots.js" defer></script>
+    <script src="/assets/js/foldbook-ui.js" defer></script>
+    <script src="/assets/js/ui-animations.js" defer></script>
     <script src="/assets/js/app.js" defer></script>
     <script src="/assets/js/pwa.js" defer></script>
   </head>
@@ -39,7 +41,7 @@
         <div class="sp" aria-hidden="true"></div>
         <div class="student-header-widgets" id="studentHeaderWidgets" hidden>
           <button class="pill header-counter streak-pill" id="pStreak" type="button" title="View your daily streak" aria-label="View your daily streak">
-            <span class="flame streak-animation" id="streakAnimation" aria-hidden="true">🔥</span>
+            <span class="flame streak-animation" id="streakAnimation" aria-hidden="true"><span class="foldbook-fallback">🔥</span></span>
             <span class="mono" id="vStreak">6</span>
           </button>
           <button class="pill fuel-pill" id="pFuel" type="button" aria-label="Open fuel and passes" title="Dr. Eco fuel">
@@ -142,6 +144,7 @@
             <p class="lesson-body" id="lessonBody"></p>
             <p class="lesson-question" id="lessonQuestion"></p>
             <p class="lesson-assessment-progress" id="lessonAssessmentProgress" aria-live="polite"></p>
+            <div class="lesson-combo-meter" id="lessonComboMeter" aria-hidden="true" hidden></div>
             <div class="lesson-question-progress" id="lessonQuestionProgress" role="progressbar" aria-label="Question set loading" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><i></i></div>
             <div class="answer-options" id="answerOptions"></div>
             <div class="lesson-feedback-row"><div class="feedback-animation" id="lessonFeedbackAnimation" aria-hidden="true" hidden></div>
@@ -345,7 +348,7 @@
           </div>
           <div class="landing-mascot-stage" aria-hidden="true">
             <div class="landing-mascot landing-mascot-foldo" id="landingFoldoMascot">
-              <img src="/assets/brand/foldo-icon.svg" alt="">
+              <img src="/assets/brand/foldo-mark-dark.svg" alt="">
             </div>
             <div class="landing-mascot landing-mascot-eco" id="landingEcoMascot">
               <img src="/assets/brand/eco-avatar.svg" alt="">
@@ -674,7 +677,8 @@
     <section class="streak-celebration-overlay" id="streakCelebration" role="dialog" aria-modal="true" aria-labelledby="streakCelebrationTitle" hidden>
       <button class="streak-celebration-close" id="closeStreakCelebration" type="button" aria-label="Close streak celebration">×</button>
       <div class="streak-celebration-content">
-        <div class="streak-celebration-flame" id="streakCelebrationFlame" aria-hidden="true">🔥</div>
+        <div class="streak-celebration-flame" id="streakCelebrationFlame" aria-hidden="true"><span class="foldbook-fallback">🔥</span></div>
+        <div class="streak-celebration-badge" id="streakCelebrationBadge" aria-hidden="true" hidden></div>
         <p class="section-kicker">FOLDBOOK DAILY STREAK</p>
         <h2 id="streakCelebrationTitle">1 day streak</h2>
         <p id="streakCelebrationCopy">Come back tomorrow to upgrade your flame.</p>
@@ -691,7 +695,7 @@
           <div><strong id="profileDisplayName">Student</strong><span id="profileDisplayLevel">100L</span></div>
         </div>
         <div class="profile-streak-card">
-          <div id="profileStreakAnimation" aria-hidden="true">🔥</div>
+          <div id="profileStreakAnimation" aria-hidden="true"><span class="foldbook-fallback">🔥</span></div>
           <div><strong><span id="profileStreakValue">0</span> day streak</strong><span id="profileStreakCaption">Complete a study checkpoint to start your streak.</span></div>
         </div>
         <section class="profile-community-card" aria-labelledby="profileCommunityTitle">

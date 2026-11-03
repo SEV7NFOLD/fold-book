@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "foldbook-shell-v2";
+const CACHE_NAME = "foldbook-shell-v3";
 const SHELL_FILES = [
   "/",
   "/index.html",
@@ -11,7 +11,10 @@ const SHELL_FILES = [
   "/assets/js/app.js",
   "/assets/js/pwa.js",
   "/assets/js/mascots.js",
-  "/assets/js/foldbook-characters.js"
+  "/assets/js/foldbook-characters.js",
+  "/assets/vendor/lottie-5.12.2.min.js",
+  "/assets/js/foldbook-ui.js",
+  "/assets/js/ui-animations.js"
 ];
 
 self.addEventListener("install", (event) => {
