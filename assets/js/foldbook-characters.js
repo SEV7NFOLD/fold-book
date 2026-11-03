@@ -1,5 +1,6 @@
 /**
- * FoldBook character helpers (core pack 1.0) for lottie-web 5.12+.
+ * FoldBook character helpers (core pack 1.0.1) for lottie-web 5.12+.
+ * 1.0.1: still poses reset segments first, so reduced motion and still() land on the right frame after playback.
  * No dependencies. Pass in your own `lottie` instance so this works with any bundler or a <script> tag.
  *
  *   import lottie from 'lottie-web';
@@ -79,7 +80,7 @@ function createCharacter(lottie, container, data, options = {}) {
     if (destroyed || !markers[next]) return;
     state = next; after = then;
     if (onComplete) { anim.removeEventListener('complete', onComplete); onComplete = null; }
-    if (reduced()) { anim.goToAndStop(markers['still-' + next]?.[0] ?? 0, true); return; }
+    if (reduced()) { gotoStill(next); return; }
     const loop = LOOP_STATES.has(next);
     anim.loop = loop;
     anim.playSegments(markers[next], true);
@@ -89,8 +90,10 @@ function createCharacter(lottie, container, data, options = {}) {
     }
     if (!visible) anim.pause();
   }
+  // lottie-web counts goToAndStop frames from the last played segment, so reset segments before jumping to an absolute marker.
+  function gotoStill(name) { anim.resetSegments(true); anim.goToAndStop('still-' + name, true); }
   /** Show a state's still pose without animating (static fallback, reduced motion, screenshots). */
-  function still(name) { state = name; anim.goToAndStop(markers['still-' + name]?.[0] ?? 0, true); }
+  function still(name) { state = name; gotoStill(name); }
 
   let io = null;
   if (options.pauseOffscreen !== false && typeof IntersectionObserver === 'function') {

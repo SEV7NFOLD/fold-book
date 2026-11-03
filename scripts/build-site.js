@@ -22,6 +22,10 @@ const mascotAssetDirectory = path.join(lottieDirectory, "mascots");
 const mascotAssetFiles = fs.readdirSync(mascotAssetDirectory, { withFileTypes: true })
   .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".b64"))
   .map((entry) => `assets/lottie/mascots/${entry.name}`);
+const uiAnimationDirectory = path.join(lottieDirectory, "ui");
+const uiAnimationFiles = fs.readdirSync(uiAnimationDirectory, { withFileTypes: true })
+  .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".json"))
+  .map((entry) => `assets/lottie/ui/${entry.name}`);
 const pwaIconSources = {
   "assets/brand/foldbook-pwa-icon-192.png": "scripts/foldbook-pwa-icon-192.png.b64",
   "assets/brand/foldbook-pwa-icon-512.png": "scripts/foldbook-pwa-icon-512.png.b64",
@@ -38,6 +42,7 @@ const allowedFiles = [
   ...optionalFiles,
   ...lottieFiles,
   ...mascotAssetFiles,
+  ...uiAnimationFiles,
   ...sfxFiles,
   lottieManifest,
   "assets/css/design-tokens.css",
@@ -46,6 +51,9 @@ const allowedFiles = [
   "assets/js/app.js",
   "assets/js/mascots.js",
   "assets/js/foldbook-characters.js",
+  "assets/vendor/lottie-5.12.2.min.js",
+  "assets/js/foldbook-ui.js",
+  "assets/js/ui-animations.js",
   "data/announcements.csv",
   "data/timetable.csv",
 ];

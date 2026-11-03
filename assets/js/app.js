@@ -767,13 +767,58 @@ function stopCustomSfx(key) {
   audio.loop = false;
 }
 
+// FoldBook: Dr. Eco leads Economics (ECO courses); Foldo leads everything else.
+function foldbookCharacterFor(course = currentCourse) {
+  return String(course || "").toUpperCase().startsWith("ECO") ? "eco" : "foldo";
+}
+
+// FoldBook: static Dr. Eco art for small slots (animated Dr. Eco needs 120 px or more).
+function renderDrEcoAvatar(container) {
+  if (!container) return;
+  window.stopFoldBookMascot?.(container);
+  window.stopFoldBookUI?.(container);
+  const image = document.createElement("img");
+  image.src = "/assets/brand/eco-avatar.svg";
+  image.alt = "";
+  image.className = "mascot-profile-icon";
+  container.replaceChildren(image);
+}
+
+// FoldBook: small check or cross badge on the chosen answer option.
+function showAnswerBadge(option, isCorrect) {
+  if (!option) return;
+  let badge = option.querySelector(".answer-feedback-badge");
+  if (!badge) {
+    badge = document.createElement("span");
+    badge.className = "answer-feedback-badge";
+    badge.setAttribute("aria-hidden", "true");
+    option.append(badge);
+  }
+  option.classList.add("has-feedback-badge");
+  window.playFoldBookUI?.("answer-feedback", isCorrect ? "correct" : "wrong", badge);
+}
+
+// FoldBook: combo meter pips (1, 2, burst on 3) and reset on a miss.
+function updateComboMeter(isCorrect) {
+  const meter = document.querySelector("#lessonComboMeter");
+  if (!meter) return;
+  if (isCorrect) {
+    const step = consecutiveCorrectCount % 3;
+    meter.hidden = false;
+    window.playFoldBookUI?.("combo-meter", step === 1 ? "pip-1" : step === 2 ? "pip-2" : "pip-3-burst", meter);
+  } else if (!meter.hidden) {
+    window.playFoldBookUI?.("combo-meter", "reset", meter);
+  }
+}
+
 function playAnswerFeedback(isCorrect) {
   const mascotContainer = document.querySelector("#lessonFeedbackAnimation");
   if (mascotContainer) {
+    const character = foldbookCharacterFor();
     mascotContainer.hidden = false;
     mascotContainer.classList.add("is-mascot");
-    const character = String(currentCourse || "").toUpperCase().startsWith("ECO") ? "eco" : "foldo";
-    window.playFoldBookMascot?.(character, isCorrect ? "correct" : "wrong", mascotContainer, { flameDays: studyProgress.streak });
+    mascotContainer.classList.toggle("is-mascot-eco", character === "eco");
+    window.playFoldBookMascot?.(character, isCorrect ? "correct" : "wrong", mascotContainer, character === "foldo" ? { flameDays: studyProgress.streak } : {});
   }
   if (isCorrect) {
     consecutiveWrongCount = 0;
@@ -803,7 +848,7 @@ function beginQuickQuestionLoading(label) {
 function showQuestionMilestone(correctCount) {
   const overlay = document.querySelector("#questionMilestone");
   document.querySelector("#questionMilestoneCopy").textContent = `${correctCount} correct answers mastered. Take the win, then keep moving.`;
-  renderLottieInto(document.querySelector("#questionMilestoneAnimation"), "level-up.json", "🚀", "Five answers mastered", { loop: false });
+  window.playFoldBookUI?.("rewards", "badge-reveal", document.querySelector("#questionMilestoneAnimation"));
   overlay.hidden = false;
   if (!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) buzz([45, 40, 70]);
   document.querySelector("#questionMilestoneContinue").focus({ preventScroll: true });
@@ -953,7 +998,8 @@ function renderLeaderboard() {
     block.textContent = String(rank);
     if (entry.isCurrentUser && S.user) renderUserAvatar(avatar, S.user, "av");
     award.className = "podium-award";
-    renderLottieInto(award, "trophy.json", "🏆", `Rank ${rank} award`);
+    award.innerHTML = '<span class="foldbook-fallback">🏆</span>';
+    window.playFoldBookUI?.("rewards", "badge-reveal", award);
     step.append(award, avatar, name, xp, block);
     podium.append(step);
   });
@@ -1026,6 +1072,11 @@ function openStreakCelebration() {
   overlay.hidden = false;
   window.playFoldBookMascot?.("foldo", "streak", document.querySelector("#streakCelebrationFlame"), { flameDays: studyProgress.streak });
   const count = Math.max(0, Number(studyProgress.streak) || 0);
+  const flameBadge = document.querySelector("#streakCelebrationBadge");
+  if (flameBadge) {
+    flameBadge.hidden = count < 1;
+    if (count >= 1) window.playFoldBookUI?.("streak-flame", [1, 3, 7, 14, 30, 100].includes(count) ? `milestone-${count}` : "day-earned", flameBadge);
+  }
   document.querySelector("#streakCelebrationTitle").textContent = count === 1 ? "1 day streak" : count + " day streak";
   document.querySelector("#streakCelebrationCopy").textContent = count
     ? "Come back tomorrow to upgrade your flame."
@@ -1052,6 +1103,7 @@ document.querySelector("#refreshFoldBook")?.addEventListener("click", () => { vo
 window.addEventListener("foldbook:refresh", () => { void refreshStudentExperience(); });
 
 function updateStudySummary() {
+  window.playFoldBookUI?.("streak-flame", "header", document.querySelector("#streakAnimation"), { flameDays: Math.max(1, Number(studyProgress.streak) || 0) });
   const completedCount = studyProgress.completed.length;
   const percent = activeModules.length ? Math.round((completedCount / activeModules.length) * 100) : 0;
   const mockUnlocked = activeModules.length > 0 && completedCount === activeModules.length;
@@ -1088,7 +1140,7 @@ function renderLessonActivity(module) {
   document.querySelector("#lessonActivityKicker").textContent = `${module.activityType.toUpperCase()} · REQUIRED STEP`;
   document.querySelector("#lessonActivityTitle").textContent = labels[module.activityType] || "Your next study step";
   document.querySelector("#lessonActivityText").textContent = module.activityText || module.lesson || `Take a moment with ${module.title}, then come back for the checkpoint.`;
-  renderLottieInto(document.querySelector("#lessonActivityMascot"), "hello-wave.json", "👋", "Dr. Eco welcomes you", { loop: false });
+  window.playFoldBookMascot?.(foldbookCharacterFor(module.course || currentCourse), "greet", document.querySelector("#lessonActivityMascot"), { flameDays: studyProgress.streak });
   const done = document.querySelector("#lessonActivityDone");
   done.hidden = ["chat", "live", "test"].includes(module.activityType);
   done.textContent = module.activityType === "video" ? "I watched · Start checkpoint →" : "I’m done · Start checkpoint →";
@@ -1225,11 +1277,12 @@ function renderModuleQuestion(module, record, index) {
         saveStudyProgress();
         void syncLearningProfile("progress", currentCourse);
         playAnswerFeedback(false);
+        showAnswerBadge(option, false);
+        updateComboMeter(false);
         lessonFeedback.textContent = `${inCorrections
           ? "Not quite yet. The right answer is highlighted—choose it to lock in this correction."
           : "Not quite. We’ll return to this one in your corrections round."}${question.explanation ? ` ${question.explanation}` : ""}`;
         lessonFeedback.className = "lesson-feedback is-retry";
-        lessonFeedbackAnimation.hidden = true;
         question.answers.forEach((_, answerPosition) => {
           const button = answerOptions.children[answerPosition];
           button.disabled = true;
@@ -1256,6 +1309,8 @@ function renderModuleQuestion(module, record, index) {
       void syncLearningProfile("progress", currentCourse);
       playAnswerFeedback(true);
       option.classList.add("is-correct");
+      showAnswerBadge(option, true);
+      updateComboMeter(true);
       for (const button of answerOptions.children) button.disabled = true;
       if (record.questionResults.filter(Boolean).length >= questions.length) {
         lessonFeedback.textContent = completeStudyModule(module, record);
@@ -1264,14 +1319,14 @@ function renderModuleQuestion(module, record, index) {
       }
       lessonFeedback.textContent = question.explanation || "That’s it! One more step forward.";
       lessonFeedback.className = "lesson-feedback is-correct";
-      lessonFeedbackAnimation.hidden = true;
       lessonNextQuestion.textContent = "Next question →";
       lessonNextQuestion.hidden = false;
       const mastered = record.questionResults.filter(Boolean).length;
       if (consecutiveCorrectCount > 0 && consecutiveCorrectCount % 3 === 0 && mastered < questions.length) {
         lessonFeedbackAnimation.hidden = false;
         lessonFeedbackAnimation.classList.add("is-mascot");
-        window.playFoldBookMascot?.(String(currentCourse || "").toUpperCase().startsWith("ECO") ? "eco" : "foldo", "combo", lessonFeedbackAnimation, { flameDays: studyProgress.streak });
+        lessonFeedbackAnimation.classList.toggle("is-mascot-eco", foldbookCharacterFor() === "eco");
+        window.playFoldBookMascot?.(foldbookCharacterFor(), "combo", lessonFeedbackAnimation, foldbookCharacterFor() === "foldo" ? { flameDays: studyProgress.streak } : {});
         if (!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) buzz([40, 30, 65]);
       }
       if (mastered % 5 === 0 && mastered < questions.length) {
@@ -1295,8 +1350,7 @@ function completeStudyModule(module, record) {
     void syncLeaderboardEntry();
     renderStudyPath();
     lessonFeedback.className = "lesson-feedback is-correct";
-    lessonFeedbackAnimation.hidden = false;
-    renderLottieInto(lessonFeedbackAnimation, "jump-for-joy.json", "✨", "Module complete", { loop: false });
+    lessonFeedbackAnimation.hidden = true;
     showModuleCompletionCard(module, record, true, streakAdvanced);
     return "Perfect run! +20 XP · +5 gems. You cleared all the questions, and the next node is ready.";
   }
@@ -1369,7 +1423,8 @@ async function showModuleCompletionCard(module, record, awardedXp, streakAdvance
       document.querySelector("#moduleCelebration .module-celebration-kicker").textContent = "MODULE COMPLETE";
       document.querySelector("#moduleCelebration h2").textContent = "You did it!";
       document.querySelector("#moduleCelebration > p").textContent = "Every question solved. Your next step is ready.";
-      window.playFoldBookMascot?.(String(module.course || currentCourse || "").toUpperCase().startsWith("ECO") ? "eco" : "foldo", "complete", moduleCelebrationAnimation, { flameDays: studyProgress.streak });
+      const finisher = foldbookCharacterFor(module.course || currentCourse);
+      window.playFoldBookMascot?.(finisher, "complete", moduleCelebrationAnimation, finisher === "foldo" ? { flameDays: studyProgress.streak } : {});
       buzz([55, 45, 65, 80, 100]);
     }
     if (soundOn) sfx.win();
@@ -1694,9 +1749,12 @@ function renderStudyPath() {
     courseProgressLottie.dataset.progressKey = progressKey;
     courseProgressLottie.hidden = completedCount === 0;
     if (completedCount > 0) {
-      const filename = completedCount === activeModules.length ? "watering-the-flower.json" : "growing-plant.json";
-      renderLottieInto(courseProgressLottie, filename, "🌱", "Course progress growing", { loop: false });
-    } else courseProgressLottie.replaceChildren();
+      if (completedCount >= activeModules.length) window.playFoldBookUI?.("rewards", "badge-reveal", courseProgressLottie);
+      else window.playFoldBookUI?.("path-nodes", "complete-check", courseProgressLottie);
+    } else {
+      window.stopFoldBookUI?.(courseProgressLottie);
+      courseProgressLottie.replaceChildren();
+    }
   }
 
   activeModules.forEach((module, index) => {
@@ -1720,7 +1778,6 @@ function renderStudyPath() {
       : isUnlocked
         ? '<svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>'
         : '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zm2 0h6V8a3 3 0 0 0-6 0z"/></svg>';
-    if (isComplete) renderLottieInto(node, "badge-unlocked.json", "✓", `Completed ${module.title}`, { loop: false });
     label.className = "lab";
     title.textContent = module.title;
     const history = studyProgress.attempts[module.id];
@@ -1907,7 +1964,7 @@ function finishMockExam() {
   mockExamQuestion.textContent = "This practice result is for revision guidance only and does not predict or replace an official exam result.";
   mockExamOptions.replaceChildren();
   mockExamFeedback.textContent = "";
-  renderLottieInto(document.querySelector("#mockExamAnimation"), "confetti-burst.json", "🎉", "Practice mock complete", { loop: false });
+  window.playFoldBookUI?.("rewards", "badge-reveal", document.querySelector("#mockExamAnimation"));
   mockExamNext.disabled = true;
   mockExamNext.textContent = "Mock complete";
 
@@ -2184,9 +2241,7 @@ function renderProfile() {
   if (profileStreakCaption) profileStreakCaption.textContent = studyProgress.streak === 1
     ? "day in a row · come back tomorrow to keep it going"
     : "days in a row · one study day at a time";
-  if (!document.querySelector("#profileStreakAnimation dotlottie-player")) {
-    renderLottieInto(document.querySelector("#profileStreakAnimation"), "streak-flame.json", "🔥", "Your daily study streak");
-  }
+  window.playFoldBookUI?.("streak-flame", "header", document.querySelector("#profileStreakAnimation"), { flameDays: Math.max(1, Number(studyProgress.streak) || 0) });
   renderProfileCourses();
   renderProfileCommunity();
   const levelSettings = document.querySelector("#profileLevelSettings");
@@ -3106,7 +3161,7 @@ function openLearningPathSetup(preferredCourse = currentCourse) {
   document.querySelector("#learningPathSetupStatus").textContent = "";
   document.querySelector("#learningPathSetup").hidden = false;
   learningPathWizardStep = 0;
-  renderLottieInto(document.querySelector("#learningPathMascot"), "hello-wave.json", "🐱", "Dr. Eco welcomes you");
+  renderDrEcoAvatar(document.querySelector("#learningPathMascot"));
   renderLearningPathWizardStep();
 }
 
@@ -3489,9 +3544,11 @@ function setVoiceCallStatus(status, detail = "") {
     IDLE: "Disconnected",
   };
   statusLabel.textContent = detail || statusLabels[status] || status;
-  if (status === "SPEAKING") renderLottieInto(mascot, "heart-eyes.json", "🔊", "Dr. Eco speaking");
-  else if (status === "LISTENING") renderLottieInto(mascot, "person-02-breathing.json", "🎙️", "Dr. Eco listening");
-  else if (status === "CONNECTING") renderLottieInto(mascot, "typing-indicator.json", "…", "Connecting to Dr. Eco");
+  if (status === "SPEAKING") window.playFoldBookMascot?.("eco", "explain", mascot);
+  else if (status === "LISTENING") window.playFoldBookMascot?.("eco", "listen", mascot);
+  else if (status === "CONNECTING") window.playFoldBookMascot?.("eco", "loading", mascot);
+  else if (status === "ERROR") window.playFoldBookMascot?.("eco", "error", mascot);
+  else if (status === "IDLE") window.playFoldBookMascot?.("eco", "idle", mascot);
   if (status === "LISTENING" && !caption.textContent) caption.textContent = "Dr. Eco is listening…";
 }
 
@@ -3608,11 +3665,14 @@ async function submitChatQuestion(question) {
   appendChatMessage(cleaned, "user");
   chatRequestInProgress = true;
   const responseMessage = appendChatMessage("Dr. Eco is thinking…", "assistant");
-  renderLottieInto(responseMessage.querySelector(".message-avatar"), "typing-indicator.json", "💭", "Dr. Eco is thinking");
+  const typingIndicator = document.createElement("span");
+  typingIndicator.className = "chat-typing-animation";
+  typingIndicator.setAttribute("aria-hidden", "true");
+  responseMessage.querySelector("p")?.prepend(typingIndicator);
+  window.playFoldBookUI?.("live-session", "chat-typing", typingIndicator);
   try {
     const answer = await callGeminiRAG(cleaned, chatCourseCode, currentStudentLevel, priorConversation, moduleContext);
     renderDrEcoFormatting(responseMessage.querySelector("p"), answer);
-    renderLottieInto(responseMessage.querySelector(".message-avatar"), "heart-eyes.json", "✨", "Dr. Eco response ready", { loop: false });
     const moduleId = moduleContext?.moduleId;
     chatConversationHistory.push(
       { role: "user", text: cleaned, ...(moduleId ? { moduleId } : {}) },
@@ -3637,7 +3697,6 @@ async function submitChatQuestion(question) {
   } catch (error) {
     console.error("Dr. Eco could not answer the question:", error);
     renderDrEcoFormatting(responseMessage.querySelector("p"), `Dr. Eco could not respond: ${error.message}`);
-    renderLottieInto(responseMessage.querySelector(".message-avatar"), "cat-idle.json", "🐾", "Dr. Eco is resting");
   } finally {
     chatRequestInProgress = false;
   }
@@ -3741,7 +3800,7 @@ function renderTestQuestion() {
         option.classList.add("is-wrong");
         document.querySelector("#testOptions").children[question.correctAnswer]?.classList.add("is-correct");
         document.querySelector("#testFeedbackAnimation").hidden = false;
-        renderLottieInto(document.querySelector("#testFeedbackAnimation"), "person-02-breathing.json", "↻", "Review this answer", { loop: false });
+        window.playFoldBookUI?.("answer-feedback", "wrong", document.querySelector("#testFeedbackAnimation"));
         document.querySelector("#lecturerTipHeading").textContent = "Review this idea";
         document.querySelector("#lecturerTip").textContent = question.explanation || "Name the concept and explain why the other option does not fit.";
       }
@@ -3826,8 +3885,8 @@ document.querySelector("#nextTestQuestion").addEventListener("click", () => {
     document.querySelector("#testFeedback").textContent = `${testState.wrongCount ? `${testState.wrongCount} question${testState.wrongCount === 1 ? "" : "s"} added to your review focus. ` : "Great run — no missed questions this time. "}Practice only; this is not an official exam score.`;
     document.querySelector("#nextTestQuestion").disabled = true;
     document.querySelector("#testFeedbackAnimation").hidden = false;
-    renderLottieInto(document.querySelector("#testFeedbackAnimation"), "finish-line.json", "🏁", "Practice complete", { loop: false });
     testDrawer.classList.add("is-complete");
+    window.playFoldBookMascot?.(foldbookCharacterFor(), "complete", document.querySelector("#testFeedbackAnimation"), { flameDays: studyProgress.streak });
     document.querySelector("#pathTestReturn").hidden = !testState.pathModuleId;
     return;
   }
@@ -3895,7 +3954,7 @@ async function incrementReferralCount(action) {
   if (earnedReward) {
     const rewardAnimation = document.querySelector("#inviteRewardAnimation");
     rewardAnimation.hidden = false;
-    renderLottieInto(rewardAnimation, "delivery-arrival.json", "🎁", "Study reward unlocked", { loop: false });
+    window.playFoldBookUI?.("rewards", "gem-pop", rewardAnimation);
   }
   updateFuelDisplay();
   updateStudySummary();
@@ -3932,8 +3991,7 @@ soundOn = soundEnabled;
 syncCourseControls();
 renderStudyPath();
 updateStudySummary();
-renderMascot("person", "chatMascot");
-renderLottieInto(document.querySelector("#streakAnimation"), "streak-flame.json", "🔥", "Daily streak");
+renderDrEcoAvatar(document.querySelector("#chatMascot"));
 renderInviteProgress();
 chatMessages.replaceChildren();
 appendChatMessage(CHAT_GREETING, "assistant");

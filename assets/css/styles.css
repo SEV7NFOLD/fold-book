@@ -1583,3 +1583,26 @@ body.foldbook-app-open { overscroll-behavior-y: contain; }
   .landing-mascot-stage { width: min(100%, 360px); min-height: 200px; margin: 4px auto 0; }
   .landing-mascot { width: 46%; }
 }
+
+/* Hide a mascot's static fallback once its Lottie animation has rendered (double class beats the landing/chat image rules). */
+.mascot-ready.mascot-ready > img,
+.mascot-ready.mascot-ready > .mascot-fallback,
+.mascot-ready.mascot-ready > .foldbook-fallback { display: none; }
+
+/* FoldBook character and UI animation slots */
+.foldbook-fallback { display: inline-grid; place-items: center; line-height: 1; }
+.mascot-static { display: block; width: 100%; height: 100%; object-fit: contain; }
+.feedback-animation.is-mascot { width: 96px; height: 120px; flex: 0 0 96px; }
+.feedback-animation.is-mascot.is-mascot-eco { width: 120px; height: 150px; flex-basis: 120px; }
+.path-activity-mascot { width: clamp(120px, 28vw, 190px); aspect-ratio: 4 / 5; }
+.path-activity-mascot > svg, .module-celebration-animation > svg, .voice-call-mascot > svg, .streak-celebration-flame > svg,
+.question-milestone-animation > svg, .course-progress-lottie > svg, .invite-reward-animation > svg, #profileStreakAnimation > svg,
+.streak-animation > svg, .podium-award > svg, .lesson-combo-meter > svg, .streak-celebration-badge > svg,
+.chat-typing-animation > svg, .answer-feedback-badge > svg { display: block; width: 100%; height: 100%; }
+.streak-celebration-flame.mascot-ready { width: min(56vw, 240px); height: min(70vw, 300px); filter: none; }
+.streak-celebration-badge { width: 56px; height: 65px; margin: -4px auto 0; }
+.streak-celebration-badge[hidden], .lesson-combo-meter[hidden] { display: none; }
+.lesson-combo-meter { width: 120px; height: 42px; margin: 2px 0 6px; }
+.answer-option.has-feedback-badge { position: relative; padding-right: 52px; }
+.answer-feedback-badge { position: absolute; top: 50%; right: 8px; width: 40px; height: 40px; transform: translateY(-50%); pointer-events: none; }
+.chat-typing-animation { display: inline-block; width: 40px; height: 30px; margin-right: 6px; vertical-align: middle; }
