@@ -97,14 +97,16 @@ module.exports = async function geminiLiveTokenHandler(request, response) {
     `Course notes begin:\n${courseNotes || "(No indexed course notes were available.)"}\nCourse notes end.`,
   ].join("\n\n");
   const liveConfig = {
-    responseModalities: ["AUDIO"],
-    inputAudioTranscription: {},
-    outputAudioTranscription: {},
-    speechConfig: {
-      voiceConfig: {
-        prebuiltVoiceConfig: { voiceName: "Kore" },
+    generationConfig: {
+      responseModalities: ["AUDIO"],
+      speechConfig: {
+        voiceConfig: {
+          prebuiltVoiceConfig: { voiceName: "Kore" },
+        },
       },
     },
+    inputAudioTranscription: {},
+    outputAudioTranscription: {},
     systemInstruction: { parts: [{ text: systemInstruction }] },
   };
   const now = Date.now();
@@ -112,9 +114,9 @@ module.exports = async function geminiLiveTokenHandler(request, response) {
     uses: 1,
     newSessionExpireTime: new Date(now + 60 * 1000).toISOString(),
     expireTime: new Date(now + 30 * 60 * 1000).toISOString(),
-    liveConnectConstraints: {
+    bidiGenerateContentSetup: {
       model: `models/${LIVE_MODEL}`,
-      config: liveConfig,
+      ...liveConfig,
     },
   };
   const controller = new AbortController();
