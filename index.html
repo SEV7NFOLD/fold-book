@@ -199,132 +199,13 @@
           </label>
           <details class="chat-settings-group">
             <summary>Student details</summary>
-
-          </details>
-          <header class="course-header-card wk">
-            <div class="meta"><small class="mono course-code-label" id="courseCodeLabel">ECO 128 · STUDY PATH</small><small id="wkdays">YOUR STUDY ROADMAP</small></div>
-            <h1 id="courseTitle">Transportation Economics</h1>
-            <p id="learningPathIntro">Short lessons, one clear idea at a time. Complete a node to unlock the next.</p>
-            <p class="learning-path-source" id="learningPathSource" aria-live="polite"></p>
-            <button class="card-secondary-button" id="personalizePathButton" type="button">✨ Build my learning path</button>
-            <div class="progress-row">
-              <div class="bar-bg" role="progressbar" aria-label="Course progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-                <div id="cbar" class="bar-fill" style="width: 0%;"></div>
-              </div>
-              <b class="mono" id="cpct">0%</b>
-              <div class="course-progress-lottie" id="courseProgressLottie" aria-hidden="true" hidden></div>
-            </div>
-            <div class="course-week-meta"><span class="mono" id="wkd">COURSE PROGRESS</span><span id="wkp">0 / 5 modules</span></div>
-          </header>
-          <div class="path-tree path" id="pathTree" aria-label="Course learning modules"></div>
-        </div>
-        <aside class="study-sidebar">
-          <section class="card">
-            <h2>This Week's Activity</h2>
-            <div class="week-tracker" id="weekTracker" aria-label="Study activity for this week"></div>
-          </section>
-          <section class="card learning-focus-card">
-            <h2>Your learning focus</h2>
-            <p id="learningFocus">Your tricky topics will show up here as you practise.</p>
-          </section>
-          <section class="card exam-card">
-            <span class="section-kicker" id="examPredictorStatus">LOCKED</span>
-            <h2>Exam Predictor</h2>
-            <p id="examPredictorDescription">Complete every module to unlock the practice mock, or view the ₦200 demo pass option. No payment is collected.</p>
-            <button class="results-submit" id="examPredictorButton" type="button" disabled>Complete all modules to unlock</button>
-          </section>
-          <section class="card exam-session" id="examPredictorPanel" aria-live="polite" hidden>
-            <span class="section-kicker" id="mockExamProgress"></span>
-            <h2 id="mockExamTitle">UNIUYO Practice Mock</h2>
-            <div class="feedback-animation" id="mockExamAnimation" aria-hidden="true"></div>
-            <p class="exam-disclaimer">Practice estimate only — not an official exam prediction.</p>
-            <p class="lesson-question" id="mockExamQuestion"></p>
-            <div class="answer-options" id="mockExamOptions"></div>
-            <p class="lesson-feedback" id="mockExamFeedback" role="status"></p>
-            <button class="results-submit" id="mockExamNext" type="button" disabled>Next question</button>
-          </section>
-        </aside>
-      </section>
-
-      <section class="lesson-page" id="lessonPage" aria-label="Study module" hidden>
-        <div class="lesson-page-shell">
-          <div class="lesson-page-topbar">
-            <button class="card-secondary-button" id="closeLesson" type="button">← Back to my path</button>
-            <span class="section-kicker" id="lessonStep"></span>
-            <span class="lesson-page-course" id="lessonPageCourse"></span>
-          </div>
-          <section class="lesson-panel" id="lessonPanel" aria-live="polite" hidden>
-            <div class="lesson-panel-heading"><h1 id="lessonTitle"></h1></div>
-            <section class="path-activity-screen" id="lessonActivity" aria-labelledby="lessonActivityTitle" hidden>
-              <div class="path-activity-mascot" id="lessonActivityMascot" aria-hidden="true"></div>
-              <span class="section-kicker" id="lessonActivityKicker">YOUR NEXT STUDY STEP</span>
-              <h2 id="lessonActivityTitle">Learn with Dr. Eco</h2>
-              <p id="lessonActivityText"></p>
-              <div class="path-activity-actions" id="lessonActivityActions"></div>
-              <button class="results-submit" id="lessonActivityDone" type="button">I’m done · Start checkpoint →</button>
-            </section>
-            <p class="lesson-body" id="lessonBody"></p>
-            <p class="lesson-question" id="lessonQuestion"></p>
-            <p class="lesson-assessment-progress" id="lessonAssessmentProgress" aria-live="polite"></p>
-            <div class="lesson-combo-meter" id="lessonComboMeter" aria-hidden="true" hidden></div>
-            <div class="lesson-question-progress" id="lessonQuestionProgress" role="progressbar" aria-label="Question set loading" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><i></i></div>
-            <div class="answer-options" id="answerOptions"></div>
-            <div class="lesson-feedback-row"><div class="feedback-animation" id="lessonFeedbackAnimation" aria-hidden="true" hidden></div>
-              <p class="lesson-feedback" id="lessonFeedback" role="status"></p>
-            </div>
-            <section class="module-completion" id="moduleCompletion" aria-labelledby="moduleCompletionHeading" hidden>
-              <div class="module-celebration" id="moduleCelebration" aria-live="polite" hidden>
-                <div class="module-celebration-animation" id="moduleCelebrationAnimation" aria-hidden="true"></div>
-                <p class="module-celebration-kicker">MODULE COMPLETE</p>
-                <h2>You did it!</h2>
-                <p>Every question solved. Your next step is ready.</p>
-              </div>
-              <section class="module-completion-card" id="moduleCompletionCard" aria-labelledby="moduleCompletionHeading" hidden>
-                <h2 id="moduleCompletionHeading">Dr. Eco’s recap</h2>
-                <p id="moduleCompletionSummary" class="module-completion-summary" role="status"></p>
-                <button class="results-submit" id="continueNextModule" type="button" hidden>Continue to the next module →</button>
-                <canvas id="moduleCompletionCanvas" width="1080" height="1350" aria-hidden="true"></canvas>
-                <button class="results-submit" id="exportModuleCompletion" type="button">Download my recap card ↓</button>
-                <div class="path-complete-actions" id="pathCompleteActions" hidden>
-                  <p>Your path is complete. Celebrate with Dr. Eco or build a fresh route.</p>
-                  <button class="results-submit" id="pathCompleteCall" type="button">Call Dr. Eco to celebrate 🎉</button>
-                  <button class="card-secondary-button" id="pathCompleteBuild" type="button">Build another learning path</button>
-                </div>
-              </section>
-            </section>
-            <button class="results-submit" id="lessonNextQuestion" type="button" hidden>Next question →</button>
-          </section>
-        </div>
-      </section>
-
-      <section id="chat" class="chat-section hide" hidden>
-        <div class="chat-header">
-          <div class="chat-profile">
-            <div class="chat-mascot" id="chatMascot" aria-hidden="true"></div>
-            <div class="chat-title">
-              <div class="chat-profile-heading"><h1>Dr. Eco</h1></div>
-              <p>Economics study buddy</p>
-            </div>
-          </div>
-          <div class="chat-header-actions">
-            <button type="button" class="voice-toggle" id="voiceToggle" aria-pressed="false">📞 Call</button>
-            <button type="button" class="chat-settings-toggle" id="chatSettingsToggle" aria-label="Open chat settings" aria-expanded="false" aria-controls="chatSettingsDrawer" title="Chat settings">⚙</button>
-          </div>
-        </div>
-        <div class="chat-settings-drawer" id="chatSettingsDrawer" hidden>
-          <div class="chat-settings-heading">
-            <div><h2>Session settings</h2><p>Course and study context</p></div>
-            <button type="button" class="chat-settings-close" id="chatSettingsClose" aria-label="Close chat settings" title="Close settings">×</button>
-          </div>
-          <label class="course-chat-select">Active course
-            <select id="chatCourse" aria-label="Chat course"><option>Loading your courses…</option></select>
-          </label>
           <div class="chat-routing">
             <label for="chatRegistration">Matric number for level routing
               <input id="chatRegistration" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="18" placeholder="e.g. 25/SS/EC/071" readonly>
             </label>
             <p id="chatLevel" role="status" aria-live="polite">Detected level: 100L</p>
           </div>
+          </details>
           <details class="chat-settings-group">
             <summary>Study preferences</summary>
           <div class="learner-preferences">
@@ -345,7 +226,7 @@
           </details>
           <details class="chat-settings-group">
             <summary>Study fuel</summary>
-          <div class="chat-fuel"><span>⚡ Fuel</span><div class="fuel-track"><i id="chatFuelBar"></i></div><strong class="mono" id="chatFuelValue">100/100</strong></div>
+            <div class="chat-fuel"><span>⚡ Fuel</span><div class="fuel-track"><i id="chatFuelBar"></i></div><strong class="mono" id="chatFuelValue">100/100</strong></div>
           </details>
         </div>
         <div class="chat-messages" id="chatMessages" aria-live="polite"></div>
