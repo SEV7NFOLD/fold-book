@@ -131,7 +131,14 @@ module.exports = async function geminiLiveTokenHandler(request, response) {
     });
     const data = await upstream.json();
     if (!upstream.ok) {
-      console.error("Gemini Live token provisioning failed:", upstream.status);
+      const upstreamError = data?.error && typeof data.error === "object" ? data.error : {};
+      console.error("Gemini Live token provisioning failed:", JSON.stringify({
+        httpStatus: upstream.status,
+        code: typeof upstreamError.code === "number" || typeof upstreamError.code === "string" ? upstreamError.code : undefined,
+        status: typeof upstreamError.status === "string" ? upstreamError.status : undefined,
+        message: typeof upstreamError.message === "string" ? upstreamError.message.slice(0, 600) : undefined,
+        model: LIVE_MODEL,
+      }));
       sendJson(response, 502, { error: "Gemini Live could not provision a call token." });
       return;
     }

@@ -3755,7 +3755,6 @@ document.querySelector("#voiceMuteButton").addEventListener("click", (event) => 
   if (drEcoVoice) drEcoVoice.setMuted(voiceMuted);
   event.currentTarget.setAttribute("aria-pressed", String(voiceMuted));
   event.currentTarget.textContent = voiceMuted ? "🔇 Unmute mic" : "🎙️ Mute mic";
-  if (voiceCallActive) setVoiceCallStatus(voiceMuted ? "IDLE" : "LISTENING", voiceMuted ? "Microphone muted" : "Listening");
 });
 document.querySelector("#voiceSpeakerButton").addEventListener("click", (event) => {
   voiceSpeakerOn = !voiceSpeakerOn;
