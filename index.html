@@ -180,8 +180,130 @@
           <div class="chat-profile">
             <div class="chat-mascot" id="chatMascot" aria-hidden="true"></div>
             <div class="chat-title">
-              <div class="chat-profile-heading"><h1>Dr. Eco</h1><span class="chat-availability"><i></i>Active</span></div>
-              <p>UNIUYO Economics Tutor</p>
+              <div class="chat-profile-heading"><h1>Dr. Eco</h1></div>
+              <p>Economics study buddy</p>
+            </div>
+          </div>
+          <div class="chat-header-actions">
+            <button type="button" class="voice-toggle" id="voiceToggle" aria-pressed="false">📞 Call</button>
+            <button type="button" class="chat-settings-toggle" id="chatSettingsToggle" aria-label="Open chat settings" aria-expanded="false" aria-controls="chatSettingsDrawer" title="Chat settings">⚙</button>
+          </div>
+        </div>
+        <div class="chat-settings-drawer" id="chatSettingsDrawer" hidden>
+          <div class="chat-settings-heading">
+            <div><h2>Session settings</h2><p>Course and study context</p></div>
+            <button type="button" class="chat-settings-close" id="chatSettingsClose" aria-label="Close chat settings" title="Close settings">×</button>
+          </div>
+          <label class="course-chat-select">Active course
+            <select id="chatCourse" aria-label="Chat course"><option>Loading your courses…</option></select>
+          </label>
+          <details class="chat-settings-group">
+            <summary>Student details</summary>
+
+          </details>
+          <header class="course-header-card wk">
+            <div class="meta"><small class="mono course-code-label" id="courseCodeLabel">ECO 128 · STUDY PATH</small><small id="wkdays">YOUR STUDY ROADMAP</small></div>
+            <h1 id="courseTitle">Transportation Economics</h1>
+            <p id="learningPathIntro">Short lessons, one clear idea at a time. Complete a node to unlock the next.</p>
+            <p class="learning-path-source" id="learningPathSource" aria-live="polite"></p>
+            <button class="card-secondary-button" id="personalizePathButton" type="button">✨ Build my learning path</button>
+            <div class="progress-row">
+              <div class="bar-bg" role="progressbar" aria-label="Course progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <div id="cbar" class="bar-fill" style="width: 0%;"></div>
+              </div>
+              <b class="mono" id="cpct">0%</b>
+              <div class="course-progress-lottie" id="courseProgressLottie" aria-hidden="true" hidden></div>
+            </div>
+            <div class="course-week-meta"><span class="mono" id="wkd">COURSE PROGRESS</span><span id="wkp">0 / 5 modules</span></div>
+          </header>
+          <div class="path-tree path" id="pathTree" aria-label="Course learning modules"></div>
+        </div>
+        <aside class="study-sidebar">
+          <section class="card">
+            <h2>This Week's Activity</h2>
+            <div class="week-tracker" id="weekTracker" aria-label="Study activity for this week"></div>
+          </section>
+          <section class="card learning-focus-card">
+            <h2>Your learning focus</h2>
+            <p id="learningFocus">Your tricky topics will show up here as you practise.</p>
+          </section>
+          <section class="card exam-card">
+            <span class="section-kicker" id="examPredictorStatus">LOCKED</span>
+            <h2>Exam Predictor</h2>
+            <p id="examPredictorDescription">Complete every module to unlock the practice mock, or view the ₦200 demo pass option. No payment is collected.</p>
+            <button class="results-submit" id="examPredictorButton" type="button" disabled>Complete all modules to unlock</button>
+          </section>
+          <section class="card exam-session" id="examPredictorPanel" aria-live="polite" hidden>
+            <span class="section-kicker" id="mockExamProgress"></span>
+            <h2 id="mockExamTitle">UNIUYO Practice Mock</h2>
+            <div class="feedback-animation" id="mockExamAnimation" aria-hidden="true"></div>
+            <p class="exam-disclaimer">Practice estimate only — not an official exam prediction.</p>
+            <p class="lesson-question" id="mockExamQuestion"></p>
+            <div class="answer-options" id="mockExamOptions"></div>
+            <p class="lesson-feedback" id="mockExamFeedback" role="status"></p>
+            <button class="results-submit" id="mockExamNext" type="button" disabled>Next question</button>
+          </section>
+        </aside>
+      </section>
+
+      <section class="lesson-page" id="lessonPage" aria-label="Study module" hidden>
+        <div class="lesson-page-shell">
+          <div class="lesson-page-topbar">
+            <button class="card-secondary-button" id="closeLesson" type="button">← Back to my path</button>
+            <span class="section-kicker" id="lessonStep"></span>
+            <span class="lesson-page-course" id="lessonPageCourse"></span>
+          </div>
+          <section class="lesson-panel" id="lessonPanel" aria-live="polite" hidden>
+            <div class="lesson-panel-heading"><h1 id="lessonTitle"></h1></div>
+            <section class="path-activity-screen" id="lessonActivity" aria-labelledby="lessonActivityTitle" hidden>
+              <div class="path-activity-mascot" id="lessonActivityMascot" aria-hidden="true"></div>
+              <span class="section-kicker" id="lessonActivityKicker">YOUR NEXT STUDY STEP</span>
+              <h2 id="lessonActivityTitle">Learn with Dr. Eco</h2>
+              <p id="lessonActivityText"></p>
+              <div class="path-activity-actions" id="lessonActivityActions"></div>
+              <button class="results-submit" id="lessonActivityDone" type="button">I’m done · Start checkpoint →</button>
+            </section>
+            <p class="lesson-body" id="lessonBody"></p>
+            <p class="lesson-question" id="lessonQuestion"></p>
+            <p class="lesson-assessment-progress" id="lessonAssessmentProgress" aria-live="polite"></p>
+            <div class="lesson-combo-meter" id="lessonComboMeter" aria-hidden="true" hidden></div>
+            <div class="lesson-question-progress" id="lessonQuestionProgress" role="progressbar" aria-label="Question set loading" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><i></i></div>
+            <div class="answer-options" id="answerOptions"></div>
+            <div class="lesson-feedback-row"><div class="feedback-animation" id="lessonFeedbackAnimation" aria-hidden="true" hidden></div>
+              <p class="lesson-feedback" id="lessonFeedback" role="status"></p>
+            </div>
+            <section class="module-completion" id="moduleCompletion" aria-labelledby="moduleCompletionHeading" hidden>
+              <div class="module-celebration" id="moduleCelebration" aria-live="polite" hidden>
+                <div class="module-celebration-animation" id="moduleCelebrationAnimation" aria-hidden="true"></div>
+                <p class="module-celebration-kicker">MODULE COMPLETE</p>
+                <h2>You did it!</h2>
+                <p>Every question solved. Your next step is ready.</p>
+              </div>
+              <section class="module-completion-card" id="moduleCompletionCard" aria-labelledby="moduleCompletionHeading" hidden>
+                <h2 id="moduleCompletionHeading">Dr. Eco’s recap</h2>
+                <p id="moduleCompletionSummary" class="module-completion-summary" role="status"></p>
+                <button class="results-submit" id="continueNextModule" type="button" hidden>Continue to the next module →</button>
+                <canvas id="moduleCompletionCanvas" width="1080" height="1350" aria-hidden="true"></canvas>
+                <button class="results-submit" id="exportModuleCompletion" type="button">Download my recap card ↓</button>
+                <div class="path-complete-actions" id="pathCompleteActions" hidden>
+                  <p>Your path is complete. Celebrate with Dr. Eco or build a fresh route.</p>
+                  <button class="results-submit" id="pathCompleteCall" type="button">Call Dr. Eco to celebrate 🎉</button>
+                  <button class="card-secondary-button" id="pathCompleteBuild" type="button">Build another learning path</button>
+                </div>
+              </section>
+            </section>
+            <button class="results-submit" id="lessonNextQuestion" type="button" hidden>Next question →</button>
+          </section>
+        </div>
+      </section>
+
+      <section id="chat" class="chat-section hide" hidden>
+        <div class="chat-header">
+          <div class="chat-profile">
+            <div class="chat-mascot" id="chatMascot" aria-hidden="true"></div>
+            <div class="chat-title">
+              <div class="chat-profile-heading"><h1>Dr. Eco</h1></div>
+              <p>Economics study buddy</p>
             </div>
           </div>
           <div class="chat-header-actions">
@@ -203,6 +325,8 @@
             </label>
             <p id="chatLevel" role="status" aria-live="polite">Detected level: 100L</p>
           </div>
+          <details class="chat-settings-group">
+            <summary>Study preferences</summary>
           <div class="learner-preferences">
             <label>Dr. Eco’s tone
               <select id="studyTone"><option value="friendly">Friendly & encouraging</option><option value="calm">Calm & patient</option><option value="direct">Direct & focused</option></select>
@@ -211,25 +335,32 @@
               <select id="studyPace"><option value="gentle">One small step at a time</option><option value="balanced">Balanced</option><option value="quick">Quick revision</option></select>
             </label>
             <label>Live call voice
-              <select id="studyVoice"><option value="Kore">Kore · Female, firm</option><option value="Aoede">Aoede · Female, breezy</option><option value="Leda">Leda · Female, youthful</option><option value="Puck">Puck · Male, upbeat</option><option value="Orus">Orus · Male, firm</option></select>
+              <select id="studyVoice"><option value="Orus">Orus · Male, firm</option><option value="Kore">Kore · Female, firm</option><option value="Aoede">Aoede · Female, breezy</option><option value="Leda">Leda · Female, youthful</option><option value="Puck">Puck · Male, upbeat</option></select>
             </label>
           </div>
+          </details>
           <details class="student-materials-panel" id="studentMaterialsPanel">
             <summary>📚 My study materials <span>Saved to your study space. Authorized FoldBook admins can review the extracted text and course details; matching text is shared with Gemini when you study that course.</span></summary>
             <ul id="studentMaterialList" class="student-material-list"></ul>
           </details>
+          <details class="chat-settings-group">
+            <summary>Study fuel</summary>
           <div class="chat-fuel"><span>⚡ Fuel</span><div class="fuel-track"><i id="chatFuelBar"></i></div><strong class="mono" id="chatFuelValue">100/100</strong></div>
+          </details>
         </div>
         <div class="chat-messages" id="chatMessages" aria-live="polite"></div>
         <div class="chat-prompts" id="chatPrompts">
           <button type="button" class="prompt-chip" data-prompt="Explain Peak-Load Pricing">Explain Peak-Load Pricing</button>
-          <button type="button" class="prompt-chip" data-action="generate-quiz">Build a 10-question course quiz</button>
           <button type="button" class="prompt-chip" data-prompt="What's on this week?">What's on this week?</button>
         </div>
         <form class="chat-composer" id="chatForm">
-          <button type="button" class="chat-icon-button" id="micButton" aria-label="Speak your question">🎤</button>
-          <button type="button" class="chat-icon-button" id="cameraUploadButton" aria-label="Take a photo to add to your study materials" title="Take a photo · Add it to your study materials">📷</button>
-          <button type="button" class="chat-icon-button" id="fileUploadButton" aria-label="Add a PDF or photo to your study materials" title="Attach a PDF or photo · Save it to your study materials">📎</button>
+          <details class="chat-attachment-menu" id="chatAttachmentMenu">
+            <summary class="chat-icon-button" aria-label="Add study material" title="Add study material">＋</summary>
+            <div class="chat-attachment-actions">
+              <button type="button" id="cameraUploadButton">Take a photo</button>
+              <button type="button" id="fileUploadButton">Attach a PDF or photo</button>
+            </div>
+          </details>
           <input id="chatMaterialPicker" class="chat-material-picker" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp" aria-label="Choose a PDF or photo to add as study material">
           <input id="cameraMaterialPicker" class="chat-material-picker" type="file" accept="image/*" capture="environment" aria-label="Take a photo of study material">
           <input id="chatInput" type="text" placeholder="Ask Dr. Eco about your course" autocomplete="off" aria-label="Your question">

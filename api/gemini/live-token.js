@@ -96,12 +96,13 @@ module.exports = async function geminiLiveTokenHandler(request, response) {
     "Ground course-specific claims in the notes when available. If no notes are available or they do not cover a point, continue helpfully with general Economics guidance, clearly label it as general, and do not claim it reflects UNIUYO course materials.",
     `Course notes begin:\n${courseNotes || "(No indexed course notes were available.)"}\nCourse notes end.`,
   ].join("\n\n");
+  const voiceName = ["Kore", "Aoede", "Leda", "Puck", "Orus"].includes(payload.studyVoice) ? payload.studyVoice : "Orus";
   const liveConfig = {
     generationConfig: {
       responseModalities: ["AUDIO"],
       speechConfig: {
         voiceConfig: {
-          prebuiltVoiceConfig: { voiceName: "Kore" },
+          prebuiltVoiceConfig: { voiceName },
         },
       },
     },

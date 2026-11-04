@@ -1704,3 +1704,34 @@ body.answer-feedback-open { overflow: hidden; }
   .streak-celebration-count.is-rolling .streak-count-old { opacity: 0; }
   .streak-celebration-count.is-rolling .streak-count-new { opacity: 1; transform: translateY(0); }
 }
+
+/* Compact chat controls and keep study preferences out of the way until needed. */
+#chat .chat-header { gap: 8px; margin-bottom: 8px; padding: 8px 10px; }
+#chat .chat-mascot, #chat .chat-mascot dotlottie-player, #chat .mascot-fallback { width: 44px; height: 44px; flex-basis: 44px; }
+#chat .chat-mascot { border-width: 1px; box-shadow: none; }
+#chat .chat-title h1 { font-size: 18px; }
+#chat .chat-title p { display: none; }
+#chat .chat-header-actions { gap: 6px; }
+#chat .chat-header-actions .voice-toggle { min-height: 40px; padding-inline: 12px; }
+.chat-settings-group { display: grid; gap: 12px; padding: 11px 12px; border: 1px solid var(--fb-color-border); border-radius: 11px; background: var(--fb-color-surface-2); }
+.chat-settings-group > summary { color: var(--fb-color-text); font-size: 13px; font-weight: 700; cursor: pointer; }
+.chat-settings-group[open] > summary { padding-bottom: 2px; }
+.chat-attachment-menu { position: relative; flex: 0 0 auto; }
+.chat-attachment-menu > summary { display: grid; width: 44px; min-height: 44px; place-items: center; list-style: none; border-radius: 11px; cursor: pointer; }
+.chat-attachment-menu > summary::-webkit-details-marker { display: none; }
+.chat-attachment-actions { position: absolute; z-index: 15; bottom: calc(100% + 8px); left: 0; display: grid; min-width: 180px; gap: 5px; padding: 7px; border: 1px solid var(--fb-color-border); border-radius: 12px; background: var(--fb-color-surface); box-shadow: 0 12px 32px rgb(0 0 0 / 35%); }
+.chat-attachment-actions button { min-height: 42px; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--fb-color-text); text-align: left; cursor: pointer; }
+.chat-attachment-actions button:hover { background: var(--fb-color-surface-2); }
+.chat-prompts { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.chat-prompts::-webkit-scrollbar { display: none; }
+.chat-prompts .prompt-chip { flex: 0 0 auto; white-space: nowrap; }
+.chat-message.voice-call-message { max-width: min(90%, 680px); }
+@media (max-width: 768px) {
+  #chat .chat-header { padding: 7px 9px; }
+  #chat .chat-header-actions .voice-toggle { min-height: 40px; padding-inline: 10px; }
+  #chat .chat-header-actions .chat-settings-toggle { width: 40px; min-width: 40px; height: 40px; min-height: 40px; }
+  .chat-composer { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 7px; }
+  .chat-composer .quiz-launch { grid-column: 1 / -1; justify-self: start; min-height: 36px; padding-inline: 11px; }
+  .chat-composer input { font-size: 16px; }
+  .chat-attachment-actions { min-width: 170px; }
+}

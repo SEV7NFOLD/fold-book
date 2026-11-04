@@ -151,7 +151,8 @@ const DEFAULT_STUDY_PROGRESS = {
   attempts: {},
   studyTone: "friendly",
   studyPace: "balanced",
-  studyVoice: "Kore",
+  studyVoice: "Orus",
+  studyVoiceExplicit: false,
   quizAttempts: [],
   studyPaths: {},
   studyPathSources: {},
@@ -423,7 +424,10 @@ function loadStudyProgress(storageKey = STUDY_PROGRESS_KEY) {
       attempts: parsed.attempts && typeof parsed.attempts === "object" ? parsed.attempts : {},
       studyTone: ["friendly", "calm", "direct"].includes(parsed.studyTone) ? parsed.studyTone : "friendly",
       studyPace: ["gentle", "balanced", "quick"].includes(parsed.studyPace) ? parsed.studyPace : "balanced",
-      studyVoice: ["Kore", "Aoede", "Leda", "Puck", "Orus"].includes(parsed.studyVoice) ? parsed.studyVoice : "Kore",
+      studyVoice: parsed.studyVoiceExplicit === true && ["Kore", "Aoede", "Leda", "Puck", "Orus"].includes(parsed.studyVoice)
+        ? parsed.studyVoice
+        : ["Aoede", "Leda", "Puck", "Orus"].includes(parsed.studyVoice) ? parsed.studyVoice : "Orus",
+      studyVoiceExplicit: parsed.studyVoiceExplicit === true,
       quizAttempts: Array.isArray(parsed.quizAttempts) ? parsed.quizAttempts.slice(-60).filter((item) => item && typeof item.course === "string" && typeof item.question === "string" && typeof item.correct === "boolean") : [],
     };
   } catch (error) {
@@ -3374,6 +3378,24 @@ let voiceCallActive = false;
 let voiceMuted = false;
 let voiceSpeakerOn = true;
 
+function mergeLiveTranscriptText(existing, incoming) {
+  const prior = String(existing || "").trim();
+  const next = String(incoming || "").trim();
+  if (!next) return prior;
+  if (!prior) return next;
+  const priorLower = prior.toLocaleLowerCase();
+  const nextLower = next.toLocaleLowerCase();
+  if (nextLower.startsWith(priorLower)) return next;
+  if (priorLower.endsWith(nextLower)) return prior;
+  const maxOverlap = Math.min(prior.length, next.length);
+  for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
+    if (priorLower.slice(-overlap) === nextLower.slice(0, overlap)) {
+      return prior + next.slice(overlap);
+    }
+  }
+  return prior + (/[\s]$/.test(prior) || /^[,.;!?]/.test(next) ? "" : " ") + next;
+}
+
 class DrEcoVoiceLive {
   constructor(onStatusChange) {
     this.onStatusChange = onStatusChange;
@@ -3390,10 +3412,51 @@ class DrEcoVoiceLive {
     this.config = null;
     this.currentUserTranscript = "";
     this.currentAssistantTranscript = "";
+    this.currentUserTranscriptRow = null;
+    this.currentAssistantTranscriptRow = null;
+    this.currentUserChatMessage = null;
+    this.currentAssistantChatMessage = null;
   }
 
   setStatus(status, detail = "") {
     this.onStatusChange(status, detail);
+  }
+
+  updateTranscript(speaker, text) {
+    const clean = String(text || "").trim();
+    if (!clean) return;
+    const isUser = speaker === "You";
+    const kind = isUser ? "user" : "assistant";
+    const rowKey = isUser ? "currentUserTranscriptRow" : "currentAssistantTranscriptRow";
+    let row = this[rowKey];
+    const transcript = document.querySelector("#voiceTranscript");
+    if (!row || !row.isConnected) {
+      row = document.createElement("p");
+      const label = document.createElement("b");
+      const textNode = document.createElement("span");
+      label.textContent = speaker + ": ";
+      row.append(label, textNode);
+      transcript.append(row);
+      this[rowKey] = row;
+      while (transcript.children.length > 8) transcript.firstElementChild.remove();
+    }
+    row.querySelector("span").textContent = clean;
+    document.querySelector("#voiceCaption").textContent = speaker + ": " + clean;
+    document.querySelector("#voiceMiniTranscript").textContent = speaker + ": " + clean;
+
+    const articleKey = isUser ? "currentUserChatMessage" : "currentAssistantChatMessage";
+    let article = this[articleKey];
+    if (!article || !article.isConnected) {
+      article = appendChatMessage(clean, kind);
+      article.classList.add("voice-call-message");
+      article.setAttribute("aria-live", "off");
+      this[articleKey] = article;
+    }
+    const paragraph = article.querySelector("p");
+    if (kind === "assistant") renderDrEcoFormatting(paragraph, clean);
+    else paragraph.textContent = clean;
+    const nearBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 96;
+    if (nearBottom) chatMessages.scrollTop = chatMessages.scrollHeight;
   }
 
   async startSession(courseCode, level, openingPrompt = "") {
@@ -3492,13 +3555,14 @@ class DrEcoVoiceLive {
         this.stopPlayback();
         this.setStatus("LISTENING", "Dr. Eco paused. Go ahead—I'm listening.");
       }
-      if (content.inputTranscription?.text) {
-        this.currentUserTranscript = content.inputTranscription.text.trim();
-        document.querySelector("#voiceCaption").textContent = `You: ${this.currentUserTranscript}`;
+      const userText = content.inputTranscription?.text || content.interimInputTranscription?.text;
+      if (userText) {
+        this.currentUserTranscript = mergeLiveTranscriptText(this.currentUserTranscript, userText);
+        this.updateTranscript("You", this.currentUserTranscript);
       }
       if (content.outputTranscription?.text) {
-        this.currentAssistantTranscript = content.outputTranscription.text.trim();
-        document.querySelector("#voiceCaption").textContent = `Dr. Eco: ${this.currentAssistantTranscript}`;
+        this.currentAssistantTranscript = mergeLiveTranscriptText(this.currentAssistantTranscript, content.outputTranscription.text);
+        this.updateTranscript("Dr. Eco", this.currentAssistantTranscript);
       }
       const parts = content.modelTurn?.parts || [];
       for (const part of parts) {
@@ -3508,14 +3572,18 @@ class DrEcoVoiceLive {
           this.playAudioChunk(audio, part.inlineData.mimeType);
         }
         if (part.text) {
-          this.currentAssistantTranscript = part.text.trim();
-          document.querySelector("#voiceCaption").textContent = `Dr. Eco: ${this.currentAssistantTranscript}`;
+          this.currentAssistantTranscript = mergeLiveTranscriptText(this.currentAssistantTranscript, part.text);
+          this.updateTranscript("Dr. Eco", this.currentAssistantTranscript);
         }
       }
       if (content.turnComplete) {
         publishVoiceTranscript(this.currentUserTranscript, this.currentAssistantTranscript);
         this.currentUserTranscript = "";
         this.currentAssistantTranscript = "";
+        this.currentUserTranscriptRow = null;
+        this.currentAssistantTranscriptRow = null;
+        this.currentUserChatMessage = null;
+        this.currentAssistantChatMessage = null;
         this.setStatus("LISTENING");
       }
     } catch (error) {
@@ -3523,7 +3591,6 @@ class DrEcoVoiceLive {
       this.setStatus("ERROR", "Received an unreadable response from Gemini Live.");
     }
   }
-
   startMicStream() {
     const context = this.audioContext;
     if (!context || !this.mediaStream || !this.socket || this.stopped) return;
@@ -3614,6 +3681,11 @@ class DrEcoVoiceLive {
 
   stopSession(closeSocket = true) {
     if (this.stopped && !this.audioContext && !this.socket) return;
+    if (this.currentUserTranscript || this.currentAssistantTranscript) {
+      publishVoiceTranscript(this.currentUserTranscript, this.currentAssistantTranscript);
+      this.currentUserTranscript = "";
+      this.currentAssistantTranscript = "";
+    }
     this.stopped = true;
     if (this.processor) {
       this.processor.onaudioprocess = null;
@@ -3672,7 +3744,7 @@ function toggleVoiceCallRoom(open, openingPrompt = "") {
   voiceCallActive = open;
   const toggle = document.querySelector("#voiceToggle");
   toggle.setAttribute("aria-pressed", String(open));
-  toggle.textContent = open ? "📞 End Dr. Eco call" : "📞 Call Dr. Eco";
+  toggle.textContent = open ? "End call" : "Call";
   if (open) {
     voiceMuted = false;
     document.querySelector("#voiceMuteButton").setAttribute("aria-pressed", "false");
@@ -3701,24 +3773,13 @@ function toggleVoiceCallRoom(open, openingPrompt = "") {
 }
 
 function publishVoiceTranscript(userText, assistantText) {
-  const transcript = document.querySelector("#voiceTranscript");
-  const addLine = (speaker, text) => {
-    const clean = String(text || "").trim();
-    if (!clean) return;
-    const line = document.createElement("p");
-    const label = document.createElement("b");
-    label.textContent = `${speaker}: `;
-    line.append(label, document.createTextNode(clean));
-    transcript.append(line);
-    while (transcript.children.length > 8) transcript.firstElementChild.remove();
-    const miniCaption = document.querySelector("#voiceMiniTranscript");
-    miniCaption.textContent = `${speaker}: ${clean}`;
-    appendChatMessage(`${speaker}: ${clean}`, speaker === "You" ? "user" : "assistant");
-  };
-  addLine("You", userText);
-  addLine("Dr. Eco", assistantText);
+  const turns = [];
+  const cleanUser = String(userText || "").trim();
+  const cleanAssistant = String(assistantText || "").trim();
+  if (cleanUser) turns.push({ role: "user", text: cleanUser });
+  if (cleanAssistant) turns.push({ role: "assistant", text: cleanAssistant });
+  if (turns.length) chatConversationHistory = [...chatConversationHistory, ...turns].slice(-12);
 }
-
 document.querySelector("#voiceMinimizeButton").addEventListener("click", () => {
   const room = document.querySelector("#voiceCallRoom");
   room.hidden = true;
@@ -3836,12 +3897,14 @@ chatMessages.addEventListener("click", (event) => {
 document.querySelector("#voiceToggle").addEventListener("click", () => {
   toggleVoiceCallRoom(!voiceCallActive);
 });
-document.querySelector("#micButton").addEventListener("click", () => document.querySelector("#voiceToggle").click());
+document.querySelector("#micButton")?.addEventListener("click", () => document.querySelector("#voiceToggle").click());
 document.querySelector("#cameraUploadButton")?.addEventListener("click", () => {
+  document.querySelector("#chatAttachmentMenu").open = false;
   const picker = document.querySelector("#cameraMaterialPicker");
   if (picker) { picker.value = ""; picker.click(); }
 });
 document.querySelector("#fileUploadButton")?.addEventListener("click", () => {
+  document.querySelector("#chatAttachmentMenu").open = false;
   const picker = document.querySelector("#chatMaterialPicker");
   if (picker) { picker.value = ""; picker.click(); }
 });
@@ -4204,6 +4267,7 @@ document.querySelector("#studyPace").addEventListener("change", (event) => {
 });
 document.querySelector("#studyVoice").addEventListener("change", (event) => {
   studyProgress.studyVoice = event.currentTarget.value;
+  studyProgress.studyVoiceExplicit = true;
   saveStudyProgress();
 });
 
