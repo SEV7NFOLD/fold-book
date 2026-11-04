@@ -178,8 +178,8 @@
     } else if (isAppleMobile) {
       const safari = /safari/i.test(navigator.userAgent) && !/crios|fxios|edgios|opios/i.test(navigator.userAgent);
       help.textContent = safari
-        ? "iPhone · 1. Tap Share (the square with an up arrow).  2. Tap “Add to Home Screen”.  3. Tap “Add”.  FoldBook will appear beside your other apps."
-        : "iPhone · Open this page in Safari first. Then tap Share → “Add to Home Screen” → “Add”. FoldBook will appear beside your other apps.";
+        ? "Install FoldBook on iPhone\n1. In Safari, tap Share (square with the up arrow).\n2. Scroll and tap “Add to Home Screen”. If it’s missing, tap “Edit Actions” and add it.\n3. Turn on “Open as Web App” for an app-like experience.\n4. Tap “Add”. Find FoldBook on your Home Screen."
+        : "Install FoldBook on iPhone\n1. Open this page in Safari.\n2. Tap Share (square with the up arrow).\n3. Scroll and tap “Add to Home Screen”. If it’s missing, tap “Edit Actions” and add it.\n4. Turn on “Open as Web App”, then tap “Add”.";
     } else {
       help.textContent = installPromptEvent
         ? "Your browser can install FoldBook now. Tap the button and confirm “Install”."
@@ -196,7 +196,7 @@
       return;
     }
     if (/iphone|ipad|ipod/i.test(navigator.userAgent)) {
-      status.textContent = "On iPhone, open this page in Safari, tap Share → Add to Home Screen → Add. iOS requires these steps; FoldBook can’t install itself silently.";
+      status.textContent = "In Safari, tap Share → Add to Home Screen, turn on “Open as Web App”, then tap Add. If “Add to Home Screen” is missing, scroll to Edit Actions.";
       return;
     }
     if (!installPromptEvent) {
