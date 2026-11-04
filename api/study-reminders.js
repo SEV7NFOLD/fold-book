@@ -74,7 +74,21 @@ function renderMessage(template, student) {
 
 async function loadProfiles(database) {
   const rows = await databaseRequest(database, "student_accounts?select=reg_number,full_name&limit=10000");
-  return new Map((rows || []).map((row) => [row.reg_number, row]));
+  let courseByRegistration = new Map();
+  try {
+    const profiles = await databaseRequest(database, "student_learning_profiles?select=reg_number,course_code&limit=10000");
+    courseByRegistration = new Map((profiles || []).map((row) => [row.reg_number, row.course_code || ""]));
+  } catch (error) {
+    console.warn("Reminder character selection could not load study courses:", error.message);
+  }
+  return new Map((rows || []).map((row) => [row.reg_number, {
+    ...row,
+    course_code: courseByRegistration.get(row.reg_number) || "",
+  }]));
+}
+
+function mascotForStudent(student) {
+  return /^ECO\b/i.test(String(student?.course_code || "")) ? "eco" : "foldo";
 }
 
 async function loadSubscriptions(database) {
@@ -116,11 +130,17 @@ async function deliver(database, row, message, profile, occasion) {
       claimed = await claimScheduledSend(database, row, occasion);
       if (!claimed) return "already";
     }
+    const character = mascotForStudent(profile);
+    const characterLabel = character === "eco" ? "Dr. Eco" : "Foldo";
+    const moment = ["morning", "evening"].includes(occasion) ? occasion : "custom";
     const response = await sendWebPush(row.subscription, {
-      title: occasion === "custom" ? "A FoldBook note for you ✨" : "Your FoldBook streak is waiting 🔥",
+      title: occasion === "morning" ? `${characterLabel} has a morning quest ☀️`
+        : occasion === "evening" ? `${characterLabel} is cheering you on 🌙`
+          : `A note from ${characterLabel} ✨`,
       body: renderMessage(message, profile),
-      url: "/?from=reminder",
-      image: "/assets/brand/trophy.png",
+      url: `/?from=reminder&moment=${moment}&character=${character}`,
+      icon: character === "eco" ? "/assets/brand/eco-avatar.svg" : "/assets/brand/foldbook-pwa-icon.svg",
+      image: character === "eco" ? "/assets/brand/eco-avatar.svg" : "/assets/brand/foldo-mark-dark.svg",
       tag: occasion === "morning" ? "foldbook-morning-study" : occasion === "evening" ? "foldbook-evening-study" : "foldbook-custom-study",
     });
     if (response.status === 404 || response.status === 410) {

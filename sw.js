@@ -1,11 +1,14 @@
 "use strict";
 
-const CACHE_NAME = "foldbook-shell-v4";
+const CACHE_NAME = "foldbook-shell-v5";
 const SHELL_FILES = [
   "/",
   "/index.html",
   "/manifest.webmanifest",
   "/assets/brand/foldbook-pwa-icon.svg",
+  "/assets/brand/foldo-icon-dark.svg",
+  "/assets/brand/foldo-mark-dark.svg",
+  "/assets/brand/eco-avatar.svg",
   "/assets/css/design-tokens.css",
   "/assets/css/styles.css",
   "/assets/js/app.js",
@@ -60,10 +63,12 @@ self.addEventListener("push", (event) => {
   try { payload = event.data ? event.data.json() : {}; } catch { payload = { body: event.data?.text() || "" }; }
   const title = payload.title || "Your FoldBook streak is waiting 🔥";
   const image = typeof payload.image === "string" ? new URL(payload.image, self.location.origin) : null;
+  const icon = typeof payload.icon === "string" ? new URL(payload.icon, self.location.origin) : null;
   const options = {
     body: payload.body || "Ready for a quick study quest?",
-    icon: "/assets/brand/foldbook-pwa-icon.svg",
-    badge: "/assets/brand/foldbook-pwa-icon.svg",
+    icon: icon?.origin === self.location.origin && icon.pathname.startsWith("/assets/brand/")
+      ? icon.href : "/assets/brand/foldbook-pwa-icon.svg",
+    badge: "/assets/brand/foldo-mark-dark.svg",
     tag: payload.tag || "foldbook-study-reminder",
     data: { url: payload.url || "/" },
     actions: [{ action: "study", title: "Start a 5-minute quest" }],

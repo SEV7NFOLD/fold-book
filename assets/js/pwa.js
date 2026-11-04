@@ -241,21 +241,40 @@
     const card = document.createElement("aside");
     card.className = "foldbook-reminder-arrival";
     card.setAttribute("role", "status");
-    card.innerHTML = '<div class="foldbook-reminder-arrival-art" aria-hidden="true">🔥</div><div class="foldbook-reminder-arrival-copy"><strong>Your next quick win is ready.</strong><small>Five minutes can move your study path forward.</small></div><button type="button">Let’s study</button>';
+    card.innerHTML = '<div class="foldbook-reminder-arrival-art" aria-hidden="true"><img class="mascot-static" src="/assets/brand/foldo-icon-dark.svg" alt=""></div><div class="foldbook-reminder-arrival-copy"><strong>Your next quick win is ready.</strong><small>Five minutes can move your study path forward.</small></div><button type="button">Let’s study</button>';
     const art = card.querySelector(".foldbook-reminder-arrival-art");
-    const animation = document.createElement("dotlottie-player");
-    animation.setAttribute("src", "/assets/lottie/streak-flame.json");
-    animation.setAttribute("autoplay", "");
-    animation.setAttribute("loop", "");
-    animation.setAttribute("aria-hidden", "true");
-    art.replaceChildren(animation);
+    const moment = url.searchParams.get("moment");
+    const character = url.searchParams.get("character") === "eco" ? "eco" : "foldo";
+    const state = moment === "morning" ? "greet" : moment === "evening" ? "welcome-back" : "encourage";
+    const heading = card.querySelector(".foldbook-reminder-arrival-copy strong");
+    const caption = card.querySelector(".foldbook-reminder-arrival-copy small");
+    if (character === "eco") {
+      art.querySelector("img").src = "/assets/brand/eco-avatar.svg";
+      heading.textContent = moment === "evening" ? "Dr. Eco saved you a quick win." : "Dr. Eco has a study nudge for you.";
+      caption.textContent = "Five focused minutes can move your study path forward.";
+      window.playFoldBookMascot?.("eco", state, art, { cap: "round" });
+    } else {
+      heading.textContent = moment === "evening" ? "Foldo is here for one last quick win." : "Foldo has a little study quest for you.";
+      window.playFoldBookMascot?.("foldo", state, art);
+    }
     card.querySelector("button").addEventListener("click", () => {
       dashboard.querySelector("#navLearn")?.click();
       card.remove();
     });
     dashboard.prepend(card);
     url.searchParams.delete("from");
+    url.searchParams.delete("moment");
+    url.searchParams.delete("character");
     window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+  }
+
+  function reminderCharacterForStudent() {
+    try {
+      const saved = JSON.parse(localStorage.getItem("foldBook.studyProgress") || "{}");
+      return /^ECO\b/i.test(String(saved.course || "")) ? "eco" : "foldo";
+    } catch {
+      return "foldo";
+    }
   }
 
   function readDismissedBroadcastIds() {
@@ -289,6 +308,16 @@
       const banner = document.createElement("aside");
       banner.className = "foldbook-broadcast-banner";
       banner.setAttribute("role", "status");
+      const character = reminderCharacterForStudent();
+      const mascot = document.createElement("div");
+      mascot.className = "foldbook-broadcast-mascot";
+      mascot.setAttribute("aria-hidden", "true");
+      const portrait = document.createElement("img");
+      portrait.className = "mascot-static";
+      portrait.src = character === "eco" ? "/assets/brand/eco-avatar.svg" : "/assets/brand/foldo-icon-dark.svg";
+      portrait.alt = "";
+      mascot.append(portrait);
+      window.playFoldBookMascot?.(character, "encourage", mascot, character === "eco" ? { cap: "round" } : {});
       const copy = document.createElement("div");
       copy.className = "foldbook-broadcast-copy";
       const kicker = document.createElement("strong");
@@ -317,7 +346,7 @@
       });
       dismissButton.addEventListener("click", finish);
       actions.append(openButton, dismissButton);
-      banner.append(copy, actions);
+      banner.append(mascot, copy, actions);
       dashboard.prepend(banner);
     } catch (error) {
       console.warn("FoldBook inbox reminders could not be loaded.", error);

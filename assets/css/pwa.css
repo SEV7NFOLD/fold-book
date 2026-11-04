@@ -198,7 +198,7 @@
 
 .foldbook-reminder-arrival {
   display: grid;
-  grid-template-columns: 56px minmax(0, 1fr) auto;
+  grid-template-columns: 124px minmax(0, 1fr) auto;
   gap: 13px;
   align-items: center;
   margin: 0 0 14px;
@@ -210,12 +210,13 @@
   box-shadow: 0 10px 28px rgb(0 0 0 / 20%);
 }
 .foldbook-reminder-arrival-art,
-.foldbook-reminder-arrival-art dotlottie-player {
+.foldbook-reminder-arrival-art img {
   display: block;
-  width: 56px;
-  height: 56px;
+  width: 124px;
+  height: 104px;
+  object-fit: contain;
 }
-.foldbook-reminder-arrival-art { font-size: 38px; }
+.foldbook-reminder-arrival-art { overflow: hidden; }
 .foldbook-reminder-arrival-copy { display: grid; gap: 4px; min-width: 0; }
 .foldbook-reminder-arrival-copy strong { font-size: 14px; }
 .foldbook-reminder-arrival-copy small { color: #bfc3b3; font-size: 12px; line-height: 1.4; }
@@ -232,9 +233,9 @@
   cursor: pointer;
 }
 @media (max-width: 520px) {
-  .foldbook-reminder-arrival { grid-template-columns: 44px minmax(0, 1fr); gap: 10px; padding: 12px; }
+  .foldbook-reminder-arrival { grid-template-columns: 124px minmax(0, 1fr); gap: 10px; padding: 12px; }
   .foldbook-reminder-arrival-art,
-  .foldbook-reminder-arrival-art dotlottie-player { width: 44px; height: 44px; }
+  .foldbook-reminder-arrival-art img { width: 124px; height: 104px; }
   .foldbook-reminder-arrival-copy strong { font-size: 13px; }
   .foldbook-reminder-arrival button { grid-column: 2; justify-self: start; }
   .foldbook-install-card { max-height: calc(100dvh - 28px); padding: 26px 18px 18px; }
@@ -255,6 +256,8 @@
   color: #f3f4ed;
   box-shadow: 0 12px 32px rgb(0 0 0 / 22%);
 }
+.foldbook-broadcast-mascot,
+.foldbook-broadcast-mascot img { display: block; width: 54px; height: 54px; object-fit: contain; flex: 0 0 54px; }
 .foldbook-broadcast-copy { min-width: 0; }
 .foldbook-broadcast-copy strong { color: #d9f07c; font-size: 13px; }
 .foldbook-broadcast-copy p { margin: 5px 0 0; color: #e5e7df; font-size: 13px; line-height: 1.5; white-space: pre-line; }

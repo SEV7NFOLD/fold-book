@@ -15,6 +15,11 @@ const path = require("node:path");
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const FOLDBOOK_URL = process.env.FOLDBOOK_URL || "https://foldbook-beta.vercel.app";
+function reminderStudyUrl(courseCode, session) {
+  const character = /^ECO\b/i.test(String(courseCode || "")) ? "eco" : "foldo";
+  const moment = session === "morning" || session === "evening" ? session : "custom";
+  return `${FOLDBOOK_URL.replace(/\/+$/, "")}/?from=reminder&moment=${moment}&character=${character}`;
+}
 const AUTH_DIRECTORY = path.resolve(process.env.WHATSAPP_AUTH_DIRECTORY || "auth_info_baileys");
 const BOT_PHONE_NUMBER = process.env.BOT_PHONE_NUMBER || "";
 const DEFAULT_NUDGE_INTERVAL_HOURS = 10;
@@ -124,20 +129,21 @@ function generateNudgeMessage(name, streak, courseCode, session = "morning") {
   const greeting = firstName || "there";
   const streakDays = Number.isInteger(streak) && streak > 0 ? streak : 0;
   const course = typeof courseCode === "string" && courseCode.trim() ? courseCode.trim() : "Economics";
+  const mascot = /^ECO\b/i.test(String(courseCode || "")) ? "Dr. Eco" : "Foldo";
   const streakLine = streakDays
     ? `Your ${streakDays}-day streak is looking strong. Keep it glowing with one tiny win.`
     : "Your next streak starts with one tiny win. Five minutes is plenty.";
   const messages = session === "evening" ? [
     `🌙 Evening checkpoint, ${greeting}! ${streakLine}\n\nYour mini-quest: answer one quick ${course} question before you call it a day. You’ve got this ✨`,
     `✨ ${greeting}, one last little win? Give ${course} five focused minutes and let tomorrow-you wake up proud.\n\nNo marathon required.`,
-    `🐾 Dr. Eco’s evening mission for ${greeting}: open ${course}, tackle one idea, then enjoy your night. Small steps count!`,
+    `🐾 ${mascot}’s evening mission for ${greeting}: open ${course}, tackle one idea, then enjoy your night. Small steps count!`,
   ] : [
     `☀️ Good morning, ${greeting}! ${streakLine}\n\nToday's mini-quest: warm up with five minutes of ${course}. Ready, set, learn! 🎯`,
-    `🚀 Rise and shine, ${greeting}! Dr. Eco has a bite-sized ${course} quest waiting. One lesson now; main-character energy all day.`,
-    `🐱 Your morning study streak is calling, ${greeting}! Pop into ${course} for one quick lesson and collect a little win before the day gets busy.`,
+    `🚀 Rise and shine, ${greeting}! ${mascot} has a bite-sized ${course} quest waiting. One lesson now; main-character energy all day.`,
+    `✨ ${mascot} says your morning study streak is calling, ${greeting}! Pop into ${course} for one quick lesson and collect a little win before the day gets busy.`,
   ];
   const message = messages[Math.floor(Math.random() * messages.length)];
-  const footer = `\n\nOpen FoldBook → ${FOLDBOOK_URL}`;
+  const footer = `\n\nOpen FoldBook → ${reminderStudyUrl(courseCode, session)}`;
   return `${message}${footer}`;
 }
 
@@ -172,7 +178,7 @@ function renderAdminMessage(template, name, streak, courseCode, profile, session
     activity: activityLabel,
     goal: typeof profile?.learner_goal === "string" && profile.learner_goal.trim()
       ? profile.learner_goal.trim().slice(0, 100) : "your learning goal",
-    link: FOLDBOOK_URL,
+    link: reminderStudyUrl(courseCode, session),
   };
   const rendered = cleanTemplate.replace(/\{\{(name|streak|course|link|focus|activity|goal)\}\}/g, (_, key) => values[key]);
   const personalized = focus && !cleanTemplate.includes("{{focus}}") && !cleanTemplate.includes("{{activity}}")
@@ -180,7 +186,7 @@ function renderAdminMessage(template, name, streak, courseCode, profile, session
     : rendered;
   return personalized.includes(FOLDBOOK_URL)
     ? personalized
-    : `${personalized}\n\nOpen FoldBook → ${FOLDBOOK_URL}`;
+    : `${personalized}\n\nOpen FoldBook → ${reminderStudyUrl(courseCode, session)}`;
 }
 
 function reminderMedia(phoneNumber, session, caption) {
