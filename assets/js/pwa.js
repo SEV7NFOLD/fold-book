@@ -181,9 +181,11 @@
         ? "Install FoldBook on iPhone\n1. In Safari, tap Share (square with the up arrow).\n2. Scroll and tap “Add to Home Screen”. If it’s missing, tap “Edit Actions” and add it.\n3. Turn on “Open as Web App” for an app-like experience.\n4. Tap “Add”. Find FoldBook on your Home Screen."
         : "Install FoldBook on iPhone\n1. Open this page in Safari.\n2. Tap Share (square with the up arrow).\n3. Scroll and tap “Add to Home Screen”. If it’s missing, tap “Edit Actions” and add it.\n4. Turn on “Open as Web App”, then tap “Add”.";
     } else {
-      help.textContent = installPromptEvent
-        ? "Your browser can install FoldBook now. Tap the button and confirm “Install”."
-        : "Open your browser menu and choose “Install app” or “Add to Home screen”.";
+      if (installPromptEvent) {
+        help.textContent = "Your browser can install FoldBook now. Tap the button and confirm “Install”.";
+      } else {
+        help.innerHTML = 'For Android, <a href="/download/android">download the FoldBook APK</a> and open it to install. For iPhone, use Safari’s Share menu to add FoldBook to your Home Screen.';
+      }
     }
     panel.hidden = false;
     button.focus({ preventScroll: true });
@@ -200,7 +202,7 @@
       return;
     }
     if (!installPromptEvent) {
-      status.textContent = "Open your browser menu and choose “Install app” or “Add to Home screen.”";
+      status.innerHTML = 'For Android, <a href="/download/android">download the FoldBook APK</a> and open it to install. For iPhone, open this page in Safari and use Share → Add to Home Screen.';
       return;
     }
 

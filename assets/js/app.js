@@ -468,6 +468,7 @@ function saveStudyProgress() {
 
 let learningProfileSyncQueue = Promise.resolve();
 let learningProfileSyncNoticeShown = false;
+let learningProfileLoadFailed = false;
 let studentStatsSyncReady = false;
 let studentStatsSyncTimer = null;
 
@@ -585,21 +586,23 @@ function applySyncedStudyState(state, { preserveLocal = false } = {}) {
 
 function syncLearningProfile(mode = "progress", courseCode = currentCourse) {
   if (!currentStudent || !COURSE_CODE_PATTERN.test(courseCode || "")) return Promise.resolve(false);
+  const registration = currentStudent.registration;
+  const path = JSON.parse(JSON.stringify(studyProgress.studyPaths[courseCode] || []));
+  const payload = {
+    mode,
+    courseCode,
+    courseTitle: studyProgress.studyPathTitles?.[courseCode] || courseTitleFor(courseCode),
+    completedModuleIds: [...(studyProgress.courseCompleted[courseCode] || [])],
+    moduleAttempts: Object.fromEntries(path.map((module) => [module.id, studyProgress.attempts[module.id] || {}])
+      .filter(([, record]) => Number(record.attempts) > 0 || record.activityComplete === true)),
+    studyPath: path,
+    pathSource: studyProgress.studyPathSources[courseCode] || "",
+    activeCourse: courseCode,
+    accountStats: getAccountStudyStats(),
+  };
+  if (mode === "path" || mode === "import_path") payload.learnerProfile = JSON.parse(JSON.stringify(studyProgress.learnerProfile || {}));
   const run = async () => {
-    const path = studyProgress.studyPaths[courseCode] || [];
-    const payload = {
-      mode,
-      courseCode,
-      courseTitle: studyProgress.studyPathTitles?.[courseCode] || courseTitleFor(courseCode),
-      completedModuleIds: studyProgress.courseCompleted[courseCode] || [],
-      moduleAttempts: Object.fromEntries(path.map((module) => [module.id, studyProgress.attempts[module.id] || {}])
-        .filter(([, record]) => Number(record.attempts) > 0 || record.activityComplete === true)),
-      studyPath: path,
-      pathSource: studyProgress.studyPathSources[courseCode] || "",
-      activeCourse: courseCode,
-      accountStats: getAccountStudyStats(),
-    };
-    if (mode === "path" || mode === "import_path") payload.learnerProfile = studyProgress.learnerProfile || {};
+    if (!currentStudent || currentStudent.registration !== registration) return false;
     try {
       const response = await fetch("/api/student/learning-profile", {
         method: "POST",
@@ -629,6 +632,7 @@ function syncLearningProfile(mode = "progress", courseCode = currentCourse) {
 
 async function loadSyncedLearningProfile() {
   if (!currentStudent) return false;
+  learningProfileLoadFailed = false;
   try {
     const response = await fetch("/api/student/learning-profile", { credentials: "same-origin", headers: { Accept: "application/json" } });
     const result = await response.json().catch(() => ({}));
@@ -694,8 +698,10 @@ async function loadSyncedLearningProfile() {
       syncCourseControls();
     }
     saveStudyProgress();
+    renderStudyPath();
     return Boolean(code);
   } catch (error) {
+    learningProfileLoadFailed = true;
     console.warn("Could not load the account-synced learning paths:", error.message);
     if (!learningProfileSyncNoticeShown) {
       learningProfileSyncNoticeShown = true;
@@ -1332,7 +1338,7 @@ async function startPathPracticeTest(module = null) {
     renderTestQuestion();
   } catch (error) {
     document.querySelector("#testProgress").textContent = "PRACTICE UNAVAILABLE";
-    document.querySelector("#testQuestion").textContent = `Could not make this check: ${error.message}`;
+    document.querySelector("#testQuestion").textContent = "Dr. Eco isn’t available at the moment. Close this check and try again shortly.";
     document.querySelector("#testOptions").replaceChildren();
     testAnswerDrawer.classList.remove("on", "is-correct", "is-wrong");
     document.querySelector("#lecturerTipHeading").textContent = "Try again";
@@ -1804,7 +1810,7 @@ async function showStudyLesson(index, { activityDone = false } = {}) {
     document.querySelector("#lessonQuestionProgress").hidden = true;
     lessonQuestion.textContent = "I couldn’t prepare this module’s questions.";
     lessonAssessmentProgress.textContent = "QUESTION SET UNAVAILABLE";
-    lessonFeedback.textContent = `${error.message} Your path and progress are saved; try opening this module again.`;
+    lessonFeedback.textContent = `${drEcoUnavailableMessage()} Your path and progress are saved.`;
     lessonFeedback.className = "lesson-feedback is-retry";
   }
 }
@@ -1874,7 +1880,7 @@ function renderStudyPath() {
   activeModules.forEach((module, index) => {
     const isComplete = studyProgress.completed.includes(module.id);
     const isUnlocked = isComplete || index === studyProgress.completed.length;
-    const offset = Math.round(Math.sin(index * 1.1) * 70);
+    const offset = Math.round(Math.sin(index * 1.1) * Math.min(70, window.innerWidth * 0.045));
     const row = document.createElement("div");
     const node = document.createElement("button");
     const label = document.createElement("div");
@@ -1956,6 +1962,10 @@ function showNotice(message) {
   window.setTimeout(() => { toast.hidden = true; }, 4000);
 }
 
+function drEcoUnavailableMessage() {
+  return "Dr. Eco isn’t available at the moment. Close and reopen this module, or try again shortly.";
+}
+
 function activateTab(tab) {
   const selectedTab = typeof tab === "string" ? tab : tab.dataset.tab;
   if (!currentStudent || isMasterAdmin || !studyPanels.has(selectedTab)) {
@@ -1974,6 +1984,7 @@ function activateTab(tab) {
     panel.classList.toggle("hide", isHidden);
   }
   if (selectedTab === "chat") document.querySelector("#chatInput").focus();
+  if (selectedTab === "home") renderStudyPath();
   if (selectedTab === "results") void loadMyResults();
   return true;
 }
@@ -2118,7 +2129,7 @@ examPredictorButton.addEventListener("click", async () => {
   } catch (error) {
     console.error("Could not generate the practice mock:", error);
     mockExamProgress.textContent = "PRACTICE MOCK UNAVAILABLE";
-    mockExamQuestion.textContent = `Could not generate questions: ${error.message}`;
+    mockExamQuestion.textContent = "Dr. Eco isn’t available at the moment. Close this check and try again shortly.";
   } finally {
   }
 });
@@ -3365,7 +3376,7 @@ document.querySelector("#learningPathSetupForm").addEventListener("submit", asyn
       : "Your " + result.modules.length + "-step path is ready on this device. Sign in again later to sync it.");
   } catch (error) {
     console.error("Could not generate personalized learning path:", error);
-    document.querySelector("#learningPathSetupStatus").textContent = `I hit a snag: ${error.message}. Your answers are still here. Check your connection and try again.`;
+    document.querySelector("#learningPathSetupStatus").textContent = "Dr. Eco isn’t available at the moment. Your answers are saved; try building the path again shortly.";
     document.querySelector("#learningPathDialogue").textContent = "Sorry, I couldn’t finish the route just now. I’ve kept your answers, so we can take another run at it.";
   } finally {
     submit.disabled = false;
@@ -3423,13 +3434,14 @@ class DrEcoVoiceLive {
   }
 
   updateTranscript(speaker, text) {
+    window.clearTimeout(this.transcriptClearTimer);
+    const transcript = document.querySelector("#voiceTranscript");
+    transcript.classList.remove("is-settling");
     const clean = String(text || "").trim();
     if (!clean) return;
     const isUser = speaker === "You";
-    const kind = isUser ? "user" : "assistant";
     const rowKey = isUser ? "currentUserTranscriptRow" : "currentAssistantTranscriptRow";
     let row = this[rowKey];
-    const transcript = document.querySelector("#voiceTranscript");
     if (!row || !row.isConnected) {
       row = document.createElement("p");
       const label = document.createElement("b");
@@ -3438,25 +3450,11 @@ class DrEcoVoiceLive {
       row.append(label, textNode);
       transcript.append(row);
       this[rowKey] = row;
-      while (transcript.children.length > 8) transcript.firstElementChild.remove();
+      while (transcript.children.length > 2) transcript.firstElementChild.remove();
     }
     row.querySelector("span").textContent = clean;
     document.querySelector("#voiceCaption").textContent = speaker + ": " + clean;
     document.querySelector("#voiceMiniTranscript").textContent = speaker + ": " + clean;
-
-    const articleKey = isUser ? "currentUserChatMessage" : "currentAssistantChatMessage";
-    let article = this[articleKey];
-    if (!article || !article.isConnected) {
-      article = appendChatMessage(clean, kind);
-      article.classList.add("voice-call-message");
-      article.setAttribute("aria-live", "off");
-      this[articleKey] = article;
-    }
-    const paragraph = article.querySelector("p");
-    if (kind === "assistant") renderDrEcoFormatting(paragraph, clean);
-    else paragraph.textContent = clean;
-    const nearBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 96;
-    if (nearBottom) chatMessages.scrollTop = chatMessages.scrollHeight;
   }
 
   async startSession(courseCode, level, openingPrompt = "") {
@@ -3516,7 +3514,7 @@ class DrEcoVoiceLive {
       };
       this.socket.onmessage = (event) => this.handleSocketMessage(event);
       this.socket.onerror = () => {
-        if (!this.stopped) this.setStatus("ERROR", "Gemini Live connection failed. Please try again.");
+        if (!this.stopped) this.setStatus("ERROR", drEcoUnavailableMessage());
       };
       this.socket.onclose = () => {
         if (!this.stopped) {
@@ -3526,7 +3524,7 @@ class DrEcoVoiceLive {
       };
     } catch (error) {
       console.error("Could not start Dr. Eco Live:", error);
-      this.setStatus("ERROR", error.message || "Could not start the live call.");
+      this.setStatus("ERROR", drEcoUnavailableMessage());
       this.stopSession();
     }
   }
@@ -3578,6 +3576,12 @@ class DrEcoVoiceLive {
       }
       if (content.turnComplete) {
         publishVoiceTranscript(this.currentUserTranscript, this.currentAssistantTranscript);
+        const transcript = document.querySelector("#voiceTranscript");
+        transcript.classList.add("is-settling");
+        this.transcriptClearTimer = window.setTimeout(() => {
+          transcript.replaceChildren();
+          transcript.classList.remove("is-settling");
+        }, 2600);
         this.currentUserTranscript = "";
         this.currentAssistantTranscript = "";
         this.currentUserTranscriptRow = null;
@@ -3588,7 +3592,7 @@ class DrEcoVoiceLive {
       }
     } catch (error) {
       console.error("Could not process Gemini Live response:", error);
-      this.setStatus("ERROR", "Received an unreadable response from Gemini Live.");
+      this.setStatus("ERROR", drEcoUnavailableMessage());
     }
   }
   startMicStream() {
@@ -3866,7 +3870,7 @@ async function submitChatQuestion(question) {
     sfx.msg();
   } catch (error) {
     console.error("Dr. Eco could not answer the question:", error);
-    renderDrEcoFormatting(responseMessage.querySelector("p"), `Dr. Eco could not respond: ${error.message}`);
+    renderDrEcoFormatting(responseMessage.querySelector("p"), drEcoUnavailableMessage());
   } finally {
     chatRequestInProgress = false;
   }
@@ -4019,7 +4023,7 @@ document.querySelector("#openTest").addEventListener("click", async () => {
   } catch (error) {
     console.error("Could not generate practice questions:", error);
     document.querySelector("#testProgress").textContent = "PRACTICE UNAVAILABLE";
-    document.querySelector("#testQuestion").textContent = `Could not generate questions: ${error.message}`;
+    document.querySelector("#testQuestion").textContent = "Dr. Eco isn’t available at the moment. Close this check and try again shortly.";
     document.querySelector("#testOptions").replaceChildren();
     testAnswerDrawer.classList.remove("on", "is-correct", "is-wrong");
     document.querySelector("#lecturerTipHeading").textContent = "Try again";
@@ -6031,8 +6035,8 @@ async function handleAuthSubmit(fullName, regNumber, phone, passcode, password) 
     pendingResultsAfterAuth = false;
     activateTab(showResults ? "results" : "home");
     if (!showResults) {
-      if (!studyProgress.onboardingComplete) openLearningPathSetup();
-      else startStudentTour();
+      if (studyProgress.onboardingComplete) startStudentTour();
+      else if (!learningProfileLoadFailed) openLearningPathSetup();
     }
     void refreshStudentMaterials().catch(() => {});
     void syncLeaderboardEntry();
@@ -6125,8 +6129,8 @@ async function restoreAuthSession() {
     showStage("studentApp");
     renderProfile();
     activateTab("home");
-    if (!studyProgress.onboardingComplete) openLearningPathSetup();
-    else startStudentTour();
+    if (studyProgress.onboardingComplete) startStudentTour();
+    else if (!learningProfileLoadFailed) openLearningPathSetup();
     void refreshStudentMaterials().catch(() => {});
     void syncLeaderboardEntry();
     return true;
