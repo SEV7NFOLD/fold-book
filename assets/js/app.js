@@ -2087,20 +2087,34 @@ async function refreshPublicQuizList() {
   try {
     const data = await quizApi("list", { courseCode: currentCourse, level: currentStudentLevel });
     const open = Array.isArray(data.quizzes) ? data.quizzes : [];
-    const selected = open.find((quiz) => quiz.status === "live" || quiz.status === "lobby");
-    card.hidden = !selected;
-    if (selected) {
-      activeQuiz = selected;
-      card.querySelector("h2").textContent = selected.status === "live" ? "Quiz is live" : "Join a live quiz";
-      card.querySelector(".section-kicker").textContent = selected.quiz_type === "contest" ? "DR. ECO’S CONTEST" : "DR. ECO’S CHALLENGE";
-      card.querySelector("#quizJoinCode").value = selected.join_code;
+    let list = document.querySelector("#quizAvailableList");
+    if (!list) {
+      list = document.createElement("div");
+      list.id = "quizAvailableList";
+      list.className = "quiz-available-list";
+      card.querySelector("#quizJoinForm")?.before(list);
     }
+    list.replaceChildren();
+    card.hidden = !open.length && !new URLSearchParams(window.location.search).has("quiz");
+    card.querySelector("h2").textContent = open.length ? "Choose a challenge" : "Join a quiz";
+    card.querySelector(".section-kicker").textContent = "DR. ECO’S QUIZZES";
+    open.forEach((quiz) => {
+      const pick = document.createElement("button");
+      pick.type = "button";
+      pick.className = "quiz-available-item";
+      pick.textContent = quiz.title + " · " + quiz.course_code + (quiz.quiz_type === "contest" ? " · Contest lobby" : " · Open quiz");
+      pick.addEventListener("click", () => {
+        card.querySelector("#quizJoinCode").value = quiz.join_code;
+        card.querySelector("#quizJoinForm")?.requestSubmit();
+      });
+      list.append(pick);
+    });
   } catch (error) { console.warn("Public quiz list could not be loaded:", error.message); }
 }
 async function renderQuizQuestion() {
   if (!activeQuiz) return;
   const data = await quizApi("state", { joinCode: activeQuiz.join_code });
-  const questionState = `${data.quiz.status}:${data.questionIndex}:${data.answered ? "answered" : "open"}`;
+  const questionState = `${data.quiz.status}:${data.questionIndex}:${data.answered ? "answered" : "open"}:${data.studentFinished ? "finished-for-student" : "active"}`;
   if (questionState === lastQuizQuestionState) return;
   lastQuizQuestionState = questionState;
   activeQuiz = data.quiz;
@@ -2111,7 +2125,7 @@ async function renderQuizQuestion() {
     card.querySelector("#quizJoinStatus").textContent = "Dr. Eco will begin when the host starts the quiz.";
     return;
   }
-  if (activeQuiz.status === "finished") {
+  if (activeQuiz.status === "finished" || data.studentFinished) {
     card.querySelector("h2").textContent = "Quiz complete";
     card.querySelector("#quizJoinStatus").textContent = "You scored " + (data.score || 0) + " points. Nice work!";
     window.clearInterval(quizPollTimer); return;
@@ -2224,16 +2238,21 @@ async function renderAdminQuizzes(){
    startButton.addEventListener("click",async()=>{try{await adminQuizApi("control",{id:q.id,status:"live",current_question:0});await renderAdminQuizzes();}catch(e){document.querySelector("#quizAdminStatus").textContent=e.message;}});
    card.append(startButton);
   }
-  if(q.status==="live"){
+  if(q.status==="live"&&q.quiz_type==="contest"){
    if(q.current_question<q.questions.length-1){
     const next=document.createElement("button");next.type="button";next.className="results-submit";next.textContent="Next question →";
     next.addEventListener("click",async()=>{try{await adminQuizApi("control",{id:q.id,status:"live",current_question:q.current_question+1});await renderAdminQuizzes();}catch(e){document.querySelector("#quizAdminStatus").textContent=e.message;}});
     card.append(next);
    } else {
-    const finish=document.createElement("button");finish.type="button";finish.className="card-secondary-button";finish.textContent="Finish quiz";
+    const finish=document.createElement("button");finish.type="button";finish.className="card-secondary-button";finish.textContent="Finish contest";
     finish.addEventListener("click",async()=>{try{await adminQuizApi("control",{id:q.id,status:"finished"});await renderAdminQuizzes();}catch(e){document.querySelector("#quizAdminStatus").textContent=e.message;}});
     card.append(finish);
    }
+  }
+  if(q.status==="live"&&q.quiz_type==="open"){
+   const close=document.createElement("button");close.type="button";close.className="card-secondary-button";close.textContent="Close open quiz";
+   close.addEventListener("click",async()=>{try{await adminQuizApi("control",{id:q.id,status:"finished"});await renderAdminQuizzes();}catch(e){document.querySelector("#quizAdminStatus").textContent=e.message;}});
+   card.append(close);
   }
   const share=document.createElement("a");share.href=location.origin+"/?quiz="+q.join_code;share.textContent="Share join link";share.target="_blank";share.rel="noopener noreferrer";card.append(share);
   return card;

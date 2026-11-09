@@ -1780,3 +1780,7 @@ body.answer-feedback-open { overflow: hidden; }
 .quiz-admin-card .quiz-host-leaderboard li { padding:4px 0; }
 .path-resolution-heading [hidden] { display:none !important; }
 @media(max-width:540px){ .quiz-host-leaderboard { grid-template-columns:1fr; } }
+
+.quiz-available-list { display:grid; gap:8px; grid-column:1/-1; }
+.quiz-available-item { width:100%; min-height:44px; padding:10px 12px; border:1px solid var(--fb-color-border); border-radius:12px; background:var(--fb-color-surface-2); color:var(--fb-color-text); text-align:left; font:inherit; }
+.quiz-available-item:active { transform:scale(.99); }
