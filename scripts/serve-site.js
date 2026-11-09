@@ -28,6 +28,11 @@ const files = new Map([
   ["/assets/css/styles.css", "assets/css/styles.css"],
   ["/assets/css/pwa.css", "assets/css/pwa.css"],
   ["/assets/js/app.js", "assets/js/app.js"],
+  ["/assets/js/mascots.js", "assets/js/mascots.js"],
+  ["/assets/js/foldbook-characters.js", "assets/js/foldbook-characters.js"],
+  ["/assets/js/foldbook-ui.js", "assets/js/foldbook-ui.js"],
+  ["/assets/js/ui-animations.js", "assets/js/ui-animations.js"],
+  ["/assets/vendor/lottie-5.12.2.min.js", "assets/vendor/lottie-5.12.2.min.js"],
   ["/assets/lottie/manifest.json", "assets/lottie/manifest.json"],
   ["/data/announcements.csv", "data/announcements.csv"],
   ["/data/timetable.csv", "data/timetable.csv"],
@@ -42,6 +47,14 @@ const lottieDirectory = path.join(projectRoot, "assets", "lottie");
 for (const entry of fs.readdirSync(lottieDirectory, { withFileTypes: true })) {
   if (entry.isFile() && entry.name.toLowerCase().endsWith(".json")) {
     files.set(`/assets/lottie/${encodeURIComponent(entry.name)}`, path.join("assets", "lottie", entry.name));
+  }
+}
+// Character and UI animation data, so the local preview plays the same Lottie files as production.
+for (const [folder, extension] of [["mascots", ".b64"], ["ui", ".json"]]) {
+  for (const entry of fs.readdirSync(path.join(lottieDirectory, folder), { withFileTypes: true })) {
+    if (entry.isFile() && entry.name.toLowerCase().endsWith(extension)) {
+      files.set(`/assets/lottie/${folder}/${encodeURIComponent(entry.name)}`, path.join("assets", "lottie", folder, entry.name));
+    }
   }
 }
 const sfxDirectory = path.join(projectRoot, "assets", "sfx");
@@ -62,6 +75,7 @@ const contentTypes = new Map([
   [".jpg", "image/jpeg"],
   [".png", "image/png"],
   [".svg", "image/svg+xml"],
+  [".b64", "text/plain; charset=utf-8"],
 ]);
 
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
