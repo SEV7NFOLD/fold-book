@@ -79,6 +79,7 @@ function cleanStudentState(value) {
   const attemptsByCourse = {};
   const sources = {};
   const titles = {};
+  const deletedPaths = Array.isArray(value.deletedPaths) ? [...new Set(value.deletedPaths.map((code) => cleanText(code, 12).toUpperCase()).filter((code) => COURSE_CODE.test(code)))].slice(0, 30) : [];
   const sourcePaths = value.studyPaths && typeof value.studyPaths === "object" && !Array.isArray(value.studyPaths)
     ? Object.entries(value.studyPaths).slice(0, 30) : [];
   for (const [rawCode, modules] of sourcePaths) {
@@ -110,6 +111,7 @@ function cleanStudentState(value) {
     moduleAttempts: attemptsByCourse,
     studyPathSources: sources,
     studyPathTitles: titles,
+    deletedPaths,
     learnerProfile: {
       goal: cleanText(learnerProfile.goal, 100),
       difficulties: cleanText(learnerProfile.difficulties, 600),
@@ -138,7 +140,7 @@ function cleanStudentState(value) {
 function mergeStudentState(existing, mode, courseCode, completed, attempts, path, payload) {
   const current = cleanStudentState(existing) || {
     version: 1, activeCourse: "", studyPaths: {}, courseCompleted: {}, moduleAttempts: {},
-    studyPathSources: {}, studyPathTitles: {},
+    studyPathSources: {}, studyPathTitles: {}, deletedPaths: [],
     learnerProfile: { goal: "", difficulties: "", note: "", pace: "balanced" }, onboardingComplete: false, migrationComplete: false,
     accountStatsReady: false,
     accountStats: { xp: 0, gems: 0, streak: 0, fuel: 100, referralCount: 0, referralRewardClaimed: false, demoPassExpiresAt: 0, examRewardClaimed: false, lastStudyDate: "", activityDays: [] },
@@ -153,6 +155,20 @@ function mergeStudentState(existing, mode, courseCode, completed, attempts, path
   if (path.length) next.studyPaths = { ...current.studyPaths, [courseCode]: path };
   next.courseCompleted = { ...current.courseCompleted, [courseCode]: completed };
   next.moduleAttempts = { ...current.moduleAttempts, [courseCode]: attempts };
+  const deleted = new Set(current.deletedPaths || []);
+  for (const code of Array.isArray(payload.deletedPaths) ? payload.deletedPaths : []) {
+    const normalized = cleanText(code, 12).toUpperCase();
+    if (COURSE_CODE.test(normalized)) deleted.add(normalized);
+  }
+  if (path.length) deleted.delete(courseCode);
+  next.deletedPaths = [...deleted].slice(-30);
+  for (const code of next.deletedPaths) {
+    delete next.studyPaths[code];
+    delete next.courseCompleted[code];
+    delete next.moduleAttempts[code];
+    delete next.studyPathSources[code];
+    delete next.studyPathTitles[code];
+  }
   if (mode === "path" || mode === "import_path") {
     next.studyPathSources = { ...current.studyPathSources, [courseCode]: cleanText(payload.pathSource, 500) };
     next.studyPathTitles = { ...current.studyPathTitles, [courseCode]: cleanText(payload.courseTitle, 120) };
@@ -222,6 +238,11 @@ module.exports = async function learningProfileHandler(request, response) {
   let payload;
   try { payload = await readBody(request); }
   catch (error) { return sendJson(response, error instanceof RangeError ? 413 : 400, { error: "Enter a valid learning profile." }); }
+  if (["list", "join", "state", "answer"].includes(payload?.action)) {
+    request.body = payload;
+    return require("../../lib/api-handlers/student/quiz.js")(request, response);
+  }
+
   const courseCode = cleanText(payload?.courseCode, 12).toUpperCase();
   if (!COURSE_CODE.test(courseCode)) return sendJson(response, 400, { error: "Enter a valid course code." });
   const completed = Array.isArray(payload.completedModuleIds)

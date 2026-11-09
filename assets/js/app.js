@@ -148,6 +148,8 @@ const DEFAULT_STUDY_PROGRESS = {
   activityDays: [],
   soundEnabled: true,
   examRewardClaimed: false,
+  mockExamCompleted: {},
+  deletedPaths: [],
   attempts: {},
   studyTone: "friendly",
   studyPace: "balanced",
@@ -421,6 +423,8 @@ function loadStudyProgress(storageKey = STUDY_PROGRESS_KEY) {
       lastStudyDate,
       soundEnabled: typeof parsed.soundEnabled === "boolean" ? parsed.soundEnabled : true,
       examRewardClaimed: parsed.examRewardClaimed === true,
+      mockExamCompleted: parsed.mockExamCompleted && typeof parsed.mockExamCompleted === "object" ? parsed.mockExamCompleted : {},
+      deletedPaths: Array.isArray(parsed.deletedPaths) ? parsed.deletedPaths.filter((code) => COURSE_CODE_PATTERN.test(String(code))).map((code) => String(code).toUpperCase()).slice(0, 30) : [],
       attempts: parsed.attempts && typeof parsed.attempts === "object" ? parsed.attempts : {},
       studyTone: ["friendly", "calm", "direct"].includes(parsed.studyTone) ? parsed.studyTone : "friendly",
       studyPace: ["gentle", "balanced", "quick"].includes(parsed.studyPace) ? parsed.studyPace : "balanced",
@@ -497,8 +501,14 @@ function scheduleStudentStatsSync() {
 
 function applySyncedStudyState(state, { preserveLocal = false } = {}) {
   if (!state || state.version !== 1) return false;
+  const deletedCourses = new Set([
+    ...(Array.isArray(state.deletedPaths) ? state.deletedPaths : []),
+    ...(preserveLocal && Array.isArray(studyProgress.deletedPaths) ? studyProgress.deletedPaths.filter((code) => !state.studyPaths?.[String(code).toUpperCase()]) : []),
+  ].map((code) => String(code).toUpperCase()));
+  studyProgress.deletedPaths = [...deletedCourses].slice(0, 30);
   const paths = {};
   for (const [rawCode, items] of Object.entries(state.studyPaths || {})) {
+    if (deletedCourses.has(String(rawCode).toUpperCase())) continue;
     const code = rawCode.toUpperCase();
     if (!COURSE_CODE_PATTERN.test(code)) continue;
     const modules = sanitizeStudyModules(items, code).map((module) => {
@@ -512,12 +522,15 @@ function applySyncedStudyState(state, { preserveLocal = false } = {}) {
     if (modules.length) paths[code] = modules;
   }
   studyProgress.studyPaths = preserveLocal ? { ...studyProgress.studyPaths, ...paths } : paths;
+  for (const code of deletedCourses) delete studyProgress.studyPaths[code];
   studyProgress.studyPathSources = preserveLocal
     ? { ...studyProgress.studyPathSources, ...(state.studyPathSources || {}) }
     : (state.studyPathSources || {});
+  for (const code of deletedCourses) delete studyProgress.studyPathSources[code];
   studyProgress.studyPathTitles = preserveLocal
     ? { ...studyProgress.studyPathTitles, ...(state.studyPathTitles || {}) }
     : (state.studyPathTitles || {});
+  for (const code of deletedCourses) delete studyProgress.studyPathTitles[code];
   studyProgress.courseCompleted = preserveLocal ? { ...studyProgress.courseCompleted } : {};
   studyProgress.attempts = preserveLocal ? { ...studyProgress.attempts } : {};
   for (const [code, modules] of Object.entries(paths)) {
@@ -599,6 +612,7 @@ function syncLearningProfile(mode = "progress", courseCode = currentCourse) {
     pathSource: studyProgress.studyPathSources[courseCode] || "",
     activeCourse: courseCode,
     accountStats: getAccountStudyStats(),
+    deletedPaths: Array.isArray(studyProgress.deletedPaths) ? studyProgress.deletedPaths : [],
   };
   if (mode === "path" || mode === "import_path") payload.learnerProfile = JSON.parse(JSON.stringify(studyProgress.learnerProfile || {}));
   const run = async () => {
@@ -608,7 +622,7 @@ function syncLearningProfile(mode = "progress", courseCode = currentCourse) {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(mode === "delete_path" ? { mode, courseCode } : payload),
       });
       if (!response.ok) {
         const result = await response.json().catch(() => ({}));
@@ -751,10 +765,10 @@ let consecutiveCorrectCount = 0;
 const sfxEngine = {
   correct: new Audio("/assets/sfx/duolingo-correct-answer-10-streak.mp3"),
   wrong: new Audio("/assets/sfx/duolingo-wrong.mp3"),
-  fah: new Audio("assets/sfx/faaah.mp3"),
-  failTest: new Audio("assets/sfx/oh-my-god-bro-oh-hell-nah-man.mp3"),
-  deadClick: new Audio("assets/sfx/vine-boom.mp3"),
-  complete: new Audio("assets/sfx/Complete%20test.mp3"),
+  fah: new Audio("/assets/sfx/faaah.mp3"),
+  failTest: new Audio("/assets/sfx/oh-my-god-bro-oh-hell-nah-man.mp3"),
+  deadClick: new Audio("/assets/sfx/vine-boom.mp3"),
+  complete: new Audio("/assets/sfx/Complete%20test.mp3"),
 };
 Object.values(sfxEngine).forEach((audio) => {
   audio.preload = "auto";
@@ -1693,8 +1707,9 @@ document.querySelector("#pathCompleteCall")?.addEventListener("click", () => {
   activateTab("chat");
   toggleVoiceCallRoom(true, "I have just completed my full learning path. Congratulate me warmly, mention the effort I put in, and ask what I would like to study next.");
 });
-document.querySelector("#pathResolveButton")?.addEventListener("click", () => {
-  removeActiveStudyPath();
+document.querySelector("#pathResolveButton")?.addEventListener("click", async () => {
+  const removed = await removeActiveStudyPath();
+  if (!removed) return;
   document.querySelector("#lessonPage").hidden = true;
   lessonPanel.hidden = true;
   activateTab("home");
@@ -1703,6 +1718,7 @@ document.querySelector("#pathRestartButton")?.addEventListener("click", () => {
   if (!window.confirm("Restart this path from the beginning? Saved module progress will be cleared.")) return;
   studyProgress.completed = [];
   studyProgress.courseCompleted[currentCourse] = [];
+  if (studyProgress.mockExamCompleted) delete studyProgress.mockExamCompleted[currentCourse];
   for (const module of activeModules) delete studyProgress.attempts[module.id];
   saveStudyProgress();
   void syncLearningProfile("progress", currentCourse);
@@ -1871,22 +1887,38 @@ lessonNextQuestion.addEventListener("click", () => {
   }
 });
 
-function removeActiveStudyPath() {
+async function removeActiveStudyPath() {
   const code = currentCourse;
-  if (!Array.isArray(studyProgress.studyPaths?.[code])) return;
-  if (!window.confirm("Delete this path and its saved progress? This cannot be undone.")) return;
+  if (!Array.isArray(studyProgress.studyPaths?.[code])) return false;
+  if (!window.confirm("Delete this path and its saved progress? This cannot be undone.")) return false;
+  const previous = {
+    path: studyProgress.studyPaths[code], completed: studyProgress.courseCompleted[code],
+    source: studyProgress.studyPathSources[code], title: studyProgress.studyPathTitles[code],
+  };
   delete studyProgress.studyPaths[code];
   delete studyProgress.courseCompleted[code];
   delete studyProgress.studyPathSources[code];
   delete studyProgress.studyPathTitles[code];
+  studyProgress.deletedPaths = [...new Set([...(studyProgress.deletedPaths || []), code])].slice(-30);
   studyProgress.completed = [];
   activeModules = [];
   saveStudyProgress();
-  void syncLearningProfile("delete_path", code);
+  const removed = await syncLearningProfile("progress", code);
+  if (!removed) {
+    studyProgress.deletedPaths = (studyProgress.deletedPaths || []).filter((item) => item !== code);
+    studyProgress.studyPaths[code] = previous.path;
+    if (previous.completed) studyProgress.courseCompleted[code] = previous.completed;
+    if (previous.source) studyProgress.studyPathSources[code] = previous.source;
+    if (previous.title) studyProgress.studyPathTitles[code] = previous.title;
+    activeModules = previous.path;
+    studyProgress.completed = previous.completed || [];
+    saveStudyProgress();
+    showNotice("Could not remove the saved path from your account. Please try again.");
+  } else showNotice("Path removed. Your other paths are still here.");
   renderStudyCourseSwitcher();
   renderStudyPath();
   updateStudySummary();
-  showNotice("Path deleted. Your other paths are still here.");
+  return Boolean(removed);
 }
 document.querySelector("#deleteActivePath")?.addEventListener("click", removeActiveStudyPath);
 
@@ -1908,11 +1940,26 @@ function renderStudyPath() {
     : "Dr. Eco can help map your next study quest.";
   const activePathDelete = document.querySelector("#deleteActivePath");
   if (activePathDelete) activePathDelete.hidden = activeModules.length === 0;
-  const completedPath = activeModules.length > 0 && completedCount >= activeModules.length;
+  const modulesComplete = activeModules.length > 0 && completedCount >= activeModules.length;
+  const mockComplete = studyProgress.mockExamCompleted?.[currentCourse] === true;
   const completeHeading = document.querySelector("#pathResolutionHeading");
-  if (completeHeading) completeHeading.hidden = !completedPath;
+  if (completeHeading) {
+    completeHeading.hidden = !modulesComplete;
+    const kicker = completeHeading.querySelector(".section-kicker");
+    const title = completeHeading.querySelector("h2");
+    const message = completeHeading.querySelector("p:not(.section-kicker)");
+    if (kicker) kicker.textContent = mockComplete ? "PATH COMPLETE" : "FINAL STEP";
+    if (title) title.textContent = mockComplete ? "You finished your journey!" : "One last challenge!";
+    if (message) message.textContent = mockComplete
+      ? "Congratulations! Your mock is complete. Resolve this path or restart it for another run."
+      : "Complete a short mock test with Dr. Eco to finish this path.";
+  }
   const takeMock = document.querySelector("#pathTakeMockButton");
-  if (takeMock) takeMock.disabled = !completedPath;
+  const resolvePath = document.querySelector("#pathResolveButton");
+  const restartPath = document.querySelector("#pathRestartButton");
+  if (takeMock) { takeMock.disabled = !modulesComplete; takeMock.hidden = mockComplete; }
+  if (resolvePath) resolvePath.hidden = !mockComplete;
+  if (restartPath) restartPath.hidden = !mockComplete;
   if (!activeModules.length) {
     const empty = document.createElement("p");
     empty.className = "learning-path-empty";
@@ -2010,22 +2057,23 @@ function showStage(stage, updateHash = true) {
   if (typeof window.scrollTo === "function") window.scrollTo(0, 0);
 }
 
-const QUIZ_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 let activeQuiz = null;
 let quizPollTimer = null;
+let lastQuizQuestionState = "";
 
-function randomQuizCode() {
-  return Array.from({ length: 6 }, () => QUIZ_CODE_ALPHABET[Math.floor(Math.random() * QUIZ_CODE_ALPHABET.length)]).join("");
-}
-function safeQuizPayload(quiz, includeQuestions = false) {
+function safeQuizPayload(quiz, includeQuestions = false, questionIndex = -1) {
   const output = { id: quiz.id, join_code: quiz.join_code, title: quiz.title, course_code: quiz.course_code,
     quiz_type: quiz.quiz_type, status: quiz.status, current_question: quiz.current_question,
     started_at: quiz.started_at, finished_at: quiz.finished_at };
   if (includeQuestions) output.questions = quiz.questions;
+  else if (Number.isInteger(questionIndex) && questionIndex >= 0 && quiz.questions?.[questionIndex]) {
+    const q = quiz.questions[questionIndex];
+    output.question = { prompt: q.prompt, options: q.options, explanation: q.explanation };
+  }
   return output;
 }
 async function quizApi(action, data = {}) {
-  const response = await fetch("/api/student/quiz", {
+  const response = await fetch("/api/student/learning-profile", {
     method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action, ...data }),
   });
@@ -2052,6 +2100,9 @@ async function refreshPublicQuizList() {
 async function renderQuizQuestion() {
   if (!activeQuiz) return;
   const data = await quizApi("state", { joinCode: activeQuiz.join_code });
+  const questionState = `${data.quiz.status}:${data.questionIndex}:${data.answered ? "answered" : "open"}`;
+  if (questionState === lastQuizQuestionState) return;
+  lastQuizQuestionState = questionState;
   activeQuiz = data.quiz;
   const card = document.querySelector("#quizJoinCard");
   card.hidden = false;
@@ -2076,16 +2127,17 @@ async function renderQuizQuestion() {
   q.options.forEach((label,index) => {
     const button = document.createElement("button");
     button.type = "button"; button.className = "quiz-choice"; button.textContent = label;
+    button.disabled = data.answered === true;
     button.addEventListener("click", async () => {
       for (const item of choices.children) item.disabled = true;
       try { await quizApi("answer", { joinCode: activeQuiz.join_code, questionIndex: data.questionIndex, answerIndex: index });
         document.querySelector("#quizJoinStatus").textContent = "Answer saved. Waiting for the next question…";
-      } catch(error) { document.querySelector("#quizJoinStatus").textContent = error.message; }
+      } catch(error) { lastQuizQuestionState = ""; document.querySelector("#quizJoinStatus").textContent = error.message; }
     });
     choices.append(button);
   });
   form.replaceChildren(choices);
-  document.querySelector("#quizJoinStatus").textContent = "Choose your answer.";
+  document.querySelector("#quizJoinStatus").textContent = data.answered ? "Answer saved. Waiting for the next question…" : "Choose your answer.";
 }
 const fromQuizLink = new URLSearchParams(window.location.search).get("quiz");
 if (fromQuizLink) {
@@ -2100,6 +2152,7 @@ document.querySelector("#quizJoinForm")?.addEventListener("submit", async (event
   try {
     const data = await quizApi("join", { joinCode: code });
     activeQuiz = data.quiz;
+    lastQuizQuestionState = "";
     document.querySelector("#quizJoinCard").hidden = false;
     await renderQuizQuestion();
     window.clearInterval(quizPollTimer);
@@ -2131,9 +2184,13 @@ async function draftQuizQuestions(){
   const course=document.querySelector("#quizCourse").value,level=document.querySelector("#quizLevel").value;
   const material=await retrieveCourseMaterialContext(course,level,5);
   if(!material)throw new Error("No indexed course materials are available for this course yet.");
-  const response=await fetch("/api/gemini/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({courseCode:course,level,message:`Create exactly ${count} multiple-choice Economics quiz questions based on indexed course material. Return JSON only as an array: [{prompt,options:[4 strings],answerIndex:0-based integer,explanation}]. No markdown.`,courseNotes:material,history:[]})});
+  const response=await fetch("/api/dr-eco",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+   system_instruction:{parts:[{text:"You are Dr. Eco, a Nigerian Economics professor. Use only the indexed course material supplied below. Return only a valid JSON array, no markdown. Each item must have prompt, options (exactly four strings), answerIndex (zero-based integer), and explanation.\n\nINDEXED MATERIAL:\n"+String(material).slice(0,3500)}]},
+   contents:[{role:"user",parts:[{text:`Create exactly ${count} multiple-choice Economics quiz questions for ${course}. Ensure clear wording, plausible distractors, and one correct answer each.`}]}],
+   generationConfig:{responseMimeType:"application/json",temperature:0.35}
+  })});
   const result=await response.json();if(!response.ok)throw new Error(result.error||"Dr. Eco could not draft questions.");
-  const text=String(result.reply||result.text||"").replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,"");
+  const text=String(result.candidates?.[0]?.content?.parts?.map(part=>part.text||"").join("")||"");
   const questions=JSON.parse(text);if(!Array.isArray(questions)||questions.length!==count)throw new Error("The draft did not contain the requested number of questions. Try again.");
   document.querySelector("#quizQuestionsJson").value=JSON.stringify(questions,null,2);status.textContent="Draft ready. Review the wording and answer indexes before saving.";
  }catch(e){status.textContent=e.message;}finally{button.disabled=false;}
@@ -2141,8 +2198,7 @@ async function draftQuizQuestions(){
 async function createAdminQuiz(){
  const status=document.querySelector("#quizAdminStatus"),button=document.querySelector("#createQuiz");button.disabled=true;status.textContent="Saving quiz…";
  try{
-  const joinCode=randomQuizCode();
-  const data=await adminQuizApi("create",{join_code:joinCode,title:document.querySelector("#quizTitle").value,course_code:document.querySelector("#quizCourse").value,
+  const data=await adminQuizApi("create",{title:document.querySelector("#quizTitle").value,course_code:document.querySelector("#quizCourse").value,
    target_type:document.querySelector("#quizTarget").value,target_level:document.querySelector("#quizLevel").value,
    target_registrations:document.querySelector("#quizRegistrations").value.split(/[\s,;]+/).filter(Boolean),
    quiz_type:document.querySelector("#quizMode").value,questions:quizQuestionsFromEditor()});
@@ -2155,17 +2211,29 @@ async function renderAdminQuizzes(){
  try{const data=await adminQuizApi("list");box.replaceChildren(...(data.quizzes||[]).map(q=>{
   const card=document.createElement("article");card.className="quiz-admin-card";
   const title=document.createElement("strong");title.textContent=q.title+" · "+q.join_code;
-  const meta=document.createElement("p");meta.textContent=q.course_code+" · "+q.status.toUpperCase()+" · "+q.quiz_type;
+  const players=Array.isArray(q.foldbook_quiz_participants)?q.foldbook_quiz_participants:[];
+  const meta=document.createElement("p");meta.textContent=q.course_code+" · "+q.status.toUpperCase()+" · "+q.quiz_type+(q.status==="live"?" · Question "+(q.current_question+1)+" of "+q.questions.length:"")+" · "+players.length+" joined";
   card.append(title,meta);
-  for(const [label,status] of [["Open lobby","lobby"],["Start quiz","live"],["Finish","finished"]]){
-   const b=document.createElement("button");b.type="button";b.className="card-secondary-button";b.textContent=label;b.addEventListener("click",async()=>{
-    try{await adminQuizApi("control",{id:q.id,status,current_question:Math.max(0,q.current_question)});status.textContent="";await renderAdminQuizzes();}
-    catch(e){document.querySelector("#quizAdminStatus").textContent=e.message;}
-   });card.append(b);
+  if(players.length){
+   const board=document.createElement("ol");board.className="quiz-host-leaderboard";
+   players.sort((x,y)=>(Number(y.score)||0)-(Number(x.score)||0)).slice(0,10).forEach(player=>{const row=document.createElement("li");row.textContent=(player.display_name||"Student")+" · "+(Number(player.score)||0)+" pts";board.append(row);});
+   card.append(board);
   }
-  if(q.status==="live"&&q.current_question<q.questions.length-1){
-   const next=document.createElement("button");next.type="button";next.className="results-submit";next.textContent="Next question →";
-   next.addEventListener("click",async()=>{try{await adminQuizApi("control",{id:q.id,status:"live",current_question:q.current_question+1});await renderAdminQuizzes();}catch(e){document.querySelector("#quizAdminStatus").textContent=e.message;}});card.append(next);
+  if(q.status==="lobby"){
+   const startButton=document.createElement("button");startButton.type="button";startButton.className="results-submit";startButton.textContent="Start contest";
+   startButton.addEventListener("click",async()=>{try{await adminQuizApi("control",{id:q.id,status:"live",current_question:0});await renderAdminQuizzes();}catch(e){document.querySelector("#quizAdminStatus").textContent=e.message;}});
+   card.append(startButton);
+  }
+  if(q.status==="live"){
+   if(q.current_question<q.questions.length-1){
+    const next=document.createElement("button");next.type="button";next.className="results-submit";next.textContent="Next question →";
+    next.addEventListener("click",async()=>{try{await adminQuizApi("control",{id:q.id,status:"live",current_question:q.current_question+1});await renderAdminQuizzes();}catch(e){document.querySelector("#quizAdminStatus").textContent=e.message;}});
+    card.append(next);
+   } else {
+    const finish=document.createElement("button");finish.type="button";finish.className="card-secondary-button";finish.textContent="Finish quiz";
+    finish.addEventListener("click",async()=>{try{await adminQuizApi("control",{id:q.id,status:"finished"});await renderAdminQuizzes();}catch(e){document.querySelector("#quizAdminStatus").textContent=e.message;}});
+    card.append(finish);
+   }
   }
   const share=document.createElement("a");share.href=location.origin+"/?quiz="+q.join_code;share.textContent="Share join link";share.target="_blank";share.rel="noopener noreferrer";card.append(share);
   return card;
@@ -2318,6 +2386,14 @@ function finishMockExam() {
   window.playFoldBookUI?.("rewards", "badge-reveal", document.querySelector("#mockExamAnimation"));
   mockExamNext.disabled = true;
   mockExamNext.textContent = "Mock complete";
+
+  if (activeModules.length && studyProgress.completed.length >= activeModules.length) {
+    studyProgress.mockExamCompleted ||= {};
+    studyProgress.mockExamCompleted[currentCourse] = true;
+    saveStudyProgress();
+    renderStudyPath();
+    showNotice("Mock complete! Your path is ready to resolve or restart.");
+  }
 
   if (!studyProgress.examRewardClaimed) {
     studyProgress.examRewardClaimed = true;
@@ -3579,6 +3655,8 @@ document.querySelector("#learningPathSetupForm").addEventListener("submit", asyn
     document.querySelector("#learningPathDialogue").textContent = "I recommend " + result.modules.length + " steps for this journey. " + routeRecommendation;
     document.querySelector("#learningPathSetupStatus").textContent = "Your " + result.modules.length + "-step learning route is ready.";
     studyProgress.studyPaths[courseCode] = result.modules;
+    if (studyProgress.mockExamCompleted) delete studyProgress.mockExamCompleted[courseCode];
+    studyProgress.deletedPaths = (studyProgress.deletedPaths || []).filter((code) => code !== courseCode);
     studyProgress.studyPathSources[courseCode] = result.sourceNote;
     studyProgress.studyPathTitles[courseCode] = displayTitle;
     studyProgress.courseCompleted[courseCode] = [];
