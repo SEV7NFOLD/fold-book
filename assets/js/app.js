@@ -1922,6 +1922,39 @@ async function removeActiveStudyPath() {
 }
 document.querySelector("#deleteActivePath")?.addEventListener("click", removeActiveStudyPath);
 
+function drawStudyPathTrail() {
+  const tree = document.querySelector("#pathTree");
+  if (!tree) return;
+  const nodes = [...tree.querySelectorAll(".node")];
+  tree.querySelector(".path-route")?.remove();
+  if (nodes.length < 2 || tree.clientWidth < 1) return;
+  const bounds = tree.getBoundingClientRect();
+  const width = tree.clientWidth;
+  const height = tree.scrollHeight;
+  const points = nodes.map((node) => {
+    const rect = node.getBoundingClientRect();
+    return { x: rect.left - bounds.left + rect.width / 2, y: rect.top - bounds.top + rect.height / 2 };
+  });
+  const curve = points.slice(0, -1).map((point, index) => {
+    const next = points[index + 1];
+    const middle = (point.y + next.y) / 2;
+    return `C ${point.x} ${middle}, ${next.x} ${middle}, ${next.x} ${next.y}`;
+  }).join(" ");
+  const route = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  route.classList.add("path-route");
+  route.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  route.setAttribute("preserveAspectRatio", "none");
+  route.setAttribute("aria-hidden", "true");
+  const track = document.createElementNS(route.namespaceURI, "path");
+  track.setAttribute("d", `M ${points[0].x} ${points[0].y} ${curve}`);
+  track.setAttribute("class", "path-route-track");
+  const trail = track.cloneNode();
+  trail.setAttribute("class", "path-route-dash");
+  route.append(track, trail);
+  tree.insertBefore(route, tree.firstChild);
+}
+window.addEventListener("resize", () => requestAnimationFrame(drawStudyPathTrail), { passive: true });
+
 function renderStudyPath() {
   pathTree.replaceChildren();
   const completedCount = studyProgress.completed.length;
@@ -1979,36 +2012,62 @@ function renderStudyPath() {
     }
   }
 
+  const activityIcons = {
+    lesson: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 7.5c4.4-1.7 7.7-.9 10 1.2v17c-2.8-2-6.1-2.8-10-1.2zM26 7.5c-4.4-1.7-7.7-.9-10 1.2v17c2.8-2 6.1-2.8 10-1.2z"/><path d="M10 12h3m-3 4h3m6-4h3m-3 4h3"/></svg>',
+    video: '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="5" y="8" width="22" height="16" rx="4"/><path d="m13 12 8 4-8 4z"/></svg>',
+    article: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 4h10l5 5v19H9z"/><path d="M19 4v6h5M13 15h7m-7 4h7m-7 4h5"/></svg>',
+    live: '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="12" y="5" width="8" height="16" rx="4"/><path d="M8 15a8 8 0 0 0 16 0m-8 8v5m-5 0h10"/></svg>',
+    chat: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 8.5A4.5 4.5 0 0 1 9.5 4h13A4.5 4.5 0 0 1 27 8.5v9a4.5 4.5 0 0 1-4.5 4.5H14l-7 5v-6.2a4.5 4.5 0 0 1-2-3.8z"/><path d="M11 12h10m-10 4h7"/></svg>',
+    test: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="m16 3 3.8 7.7 8.5 1.2-6.1 6 .0 0 1.5 8.5L16 22.4l-7.7 4 1.5-8.5-6.1-6 8.5-1.2z"/><path d="m12.5 16 2.3 2.3 4.8-5"/></svg>',
+  };
+  const activityNames = { lesson: "Learn", video: "Watch", article: "Read", live: "Talk", chat: "Discuss", test: "Practice" };
+  const activityTypes = ["lesson", "video", "article", "live", "chat", "test"];
   activeModules.forEach((module, index) => {
+    if (index % 5 === 0) {
+      const section = document.createElement("header");
+      section.className = "path-section-heading";
+      const kicker = document.createElement("small");
+      kicker.textContent = `SECTION ${Math.floor(index / 5) + 1} · UNIT ${index + 1}`;
+      const heading = document.createElement("h2");
+      heading.textContent = module.title;
+      section.append(kicker, heading);
+      pathTree.append(section);
+    }
     const isComplete = studyProgress.completed.includes(module.id);
     const isUnlocked = isComplete || index === studyProgress.completed.length;
-    const offset = Math.round(Math.sin(index * 1.1) * Math.min(36, window.innerWidth * 0.028));
+    const activityType = activityTypes.includes(module.activityType) ? module.activityType : "lesson";
+    const offset = [0, 62, 12, -62, -12][index % 5];
     const row = document.createElement("div");
     const node = document.createElement("button");
     const label = document.createElement("div");
     const title = document.createElement("b");
     const detail = document.createElement("span");
-    row.className = `row${offset > 0 ? " flip" : ""}`;
+    row.className = `row${offset < 0 ? " flip" : ""}${isUnlocked && !isComplete ? " is-current" : ""}`;
     row.style.setProperty("--path-offset", `${offset}px`);
+    if (index % 5 === 3) row.classList.add("has-mascot");
     node.type = "button";
-    node.disabled = false;
-    node.className = `node ${isComplete ? "done" : isUnlocked ? "active" : "locked"}`;
-    node.setAttribute("aria-label", `${isComplete ? "Review" : isUnlocked ? "Start" : "Locked"} module ${index + 1}: ${module.title}`);
+    node.className = `node ${isComplete ? "done" : isUnlocked ? "active" : "locked"} activity-${activityType}`;
+    node.setAttribute("aria-label", `${isComplete ? "Review" : isUnlocked ? "Start" : "Locked"} ${activityNames[activityType].toLowerCase()} activity ${index + 1}: ${module.title}`);
     node.setAttribute("aria-disabled", String(!isUnlocked));
     node.innerHTML = isComplete
-      ? '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>'
-      : isUnlocked
-        ? '<svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>'
-        : '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zm2 0h6V8a3 3 0 0 0-6 0z"/></svg>';
+      ? '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="3.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 17 6 6L26 9"/></svg>'
+      : activityIcons[activityType];
+    if (!isUnlocked && !isComplete) {
+      const lockBadge = document.createElement("span");
+      lockBadge.className = "node-lock-badge";
+      lockBadge.setAttribute("aria-hidden", "true");
+      lockBadge.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 7V5a4 4 0 0 1 8 0v2h1v7H3V7zm2 0h4V5a2 2 0 0 0-4 0z"/></svg>';
+      node.append(lockBadge);
+    }
     label.className = "lab";
     title.textContent = module.title;
     const history = studyProgress.attempts[module.id];
     const accuracy = history?.attempts ? Math.round((history.correct / history.attempts) * 100) : null;
     detail.textContent = isComplete
-      ? `COMPLETED · ${accuracy === null ? "SCORE NOT RECORDED" : `OVERALL ${accuracy}%`} · Review lesson`
+      ? `COMPLETED · ${accuracy === null ? "SCORE NOT RECORDED" : `OVERALL ${accuracy}%`}`
       : history?.wrong >= 2 && accuracy < 70
-        ? `Needs a little practice · ${accuracy}% so far`
-        : `${5} min · +20 XP`;
+        ? `Needs practice · ${accuracy}%`
+        : activityNames[activityType];
     if (history?.wrong >= 2 && accuracy < 70) node.classList.add("needs-review");
     label.append(title, detail);
     node.addEventListener("click", () => {
@@ -2020,16 +2079,19 @@ function renderStudyPath() {
       }
       showStudyLesson(index);
     });
-    if (index % 4 === 2) {
-      const activity = document.createElement("small");
-      activity.className = "path-activity-label";
-      activity.textContent = module.activityType === "video" ? "Watch" : module.activityType === "article" ? "Read" : module.activityType === "live" ? "Talk" : module.activityType === "test" ? "Practice" : "Learn";
-      row.classList.add("has-activity");
-      row.append(activity);
+    if (index % 5 === 3) {
+      const mascot = document.createElement("img");
+      mascot.className = "path-side-mascot";
+      mascot.alt = "";
+      mascot.setAttribute("aria-hidden", "true");
+      mascot.src = String(currentCourse || "").toUpperCase().startsWith("ECO")
+        ? "/assets/brand/eco-avatar.svg" : "/assets/brand/foldo-icon.svg";
+      row.append(mascot);
     }
     row.append(node, label);
     pathTree.append(row);
   });
+  requestAnimationFrame(drawStudyPathTrail);
   const review = activeModules.map((module) => ({ module, stats: studyProgress.attempts[module.id] }))
     .filter(({ stats }) => stats?.wrong >= 2 && stats.correct / stats.attempts < 0.7)
     .sort((a, b) => (b.stats.wrong - a.stats.wrong));
