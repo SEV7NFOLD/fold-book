@@ -749,8 +749,8 @@ let consecutiveWrongCount = 0;
 let consecutiveCorrectCount = 0;
 
 const sfxEngine = {
-  correct: new Audio("assets/sfx/duolingo-correct-answer-10-streak.mp3"),
-  wrong: new Audio("assets/sfx/duolingo-wrong.mp3"),
+  correct: new Audio("/assets/sfx/duolingo-correct-answer-10-streak.mp3"),
+  wrong: new Audio("/assets/sfx/duolingo-wrong.mp3"),
   fah: new Audio("assets/sfx/faaah.mp3"),
   failTest: new Audio("assets/sfx/oh-my-god-bro-oh-hell-nah-man.mp3"),
   deadClick: new Audio("assets/sfx/vine-boom.mp3"),
@@ -766,7 +766,14 @@ function playCustomSfx(key, { loop = false } = {}) {
   if (!audio) return;
   audio.currentTime = 0;
   audio.loop = loop;
-  void audio.play().catch((error) => console.warn(`FoldBook sound "${key}" could not be played:`, error));
+  if (AC?.state === "suspended") void AC.resume().catch(() => {});
+  void audio.play().catch((error) => {
+    window.setTimeout(() => {
+      if (!soundOn) return;
+      audio.currentTime = 0;
+      void audio.play().catch(() => console.warn(`FoldBook sound "${key}" could not be played:`, error));
+    }, 80);
+  });
 }
 
 function stopCustomSfx(key) {
@@ -1686,6 +1693,28 @@ document.querySelector("#pathCompleteCall")?.addEventListener("click", () => {
   activateTab("chat");
   toggleVoiceCallRoom(true, "I have just completed my full learning path. Congratulate me warmly, mention the effort I put in, and ask what I would like to study next.");
 });
+document.querySelector("#pathResolveButton")?.addEventListener("click", () => {
+  removeActiveStudyPath();
+  document.querySelector("#lessonPage").hidden = true;
+  lessonPanel.hidden = true;
+  activateTab("home");
+});
+document.querySelector("#pathRestartButton")?.addEventListener("click", () => {
+  if (!window.confirm("Restart this path from the beginning? Saved module progress will be cleared.")) return;
+  studyProgress.completed = [];
+  studyProgress.courseCompleted[currentCourse] = [];
+  for (const module of activeModules) delete studyProgress.attempts[module.id];
+  saveStudyProgress();
+  void syncLearningProfile("progress", currentCourse);
+  renderStudyPath();
+  updateStudySummary();
+  showNotice("Fresh start! Your path is ready to follow again.");
+});
+document.querySelector("#pathTakeMockButton")?.addEventListener("click", () => {
+  const button = document.querySelector("#examPredictorButton");
+  button?.click();
+});
+
 document.querySelector("#pathCompleteBuild")?.addEventListener("click", () => {
   document.querySelector("#lessonPage").hidden = true;
   lessonPanel.hidden = true;
@@ -1842,6 +1871,25 @@ lessonNextQuestion.addEventListener("click", () => {
   }
 });
 
+function removeActiveStudyPath() {
+  const code = currentCourse;
+  if (!Array.isArray(studyProgress.studyPaths?.[code])) return;
+  if (!window.confirm("Delete this path and its saved progress? This cannot be undone.")) return;
+  delete studyProgress.studyPaths[code];
+  delete studyProgress.courseCompleted[code];
+  delete studyProgress.studyPathSources[code];
+  delete studyProgress.studyPathTitles[code];
+  studyProgress.completed = [];
+  activeModules = [];
+  saveStudyProgress();
+  void syncLearningProfile("delete_path", code);
+  renderStudyCourseSwitcher();
+  renderStudyPath();
+  updateStudySummary();
+  showNotice("Path deleted. Your other paths are still here.");
+}
+document.querySelector("#deleteActivePath")?.addEventListener("click", removeActiveStudyPath);
+
 function renderStudyPath() {
   pathTree.replaceChildren();
   const completedCount = studyProgress.completed.length;
@@ -1851,13 +1899,20 @@ function renderStudyPath() {
   document.querySelector("#courseTitle").textContent = courseTitleFor(currentCourse);
   const source = studyProgress.studyPathSources?.[currentCourse] || "";
   document.querySelector("#learningPathSource").textContent = activeModules.length
-    ? source || "Source details weren’t saved for this path. Refresh it to see whether course materials were used."
+    ? source || "Your route, built around your study goal and course topics."
     : "";
   const buildButton = document.querySelector("#personalizePathButton");
-  if (buildButton) buildButton.textContent = activeModules.length ? "✨ Refresh my learning path" : "✨ Build my learning path";
+  if (buildButton) buildButton.textContent = activeModules.length ? "✨ Refresh path" : "✨ Build my path";
   document.querySelector("#learningPathIntro").textContent = activeModules.length
-    ? activeModules.length + " steps mapped for your learning journey. Complete one at a time with Dr. Eco."
-    : "Your course journey will appear here, built around your goal and the topics you want help with.";
+    ? "Follow the trail, one activity at a time."
+    : "Dr. Eco can help map your next study quest.";
+  const activePathDelete = document.querySelector("#deleteActivePath");
+  if (activePathDelete) activePathDelete.hidden = activeModules.length === 0;
+  const completedPath = activeModules.length > 0 && completedCount >= activeModules.length;
+  const completeHeading = document.querySelector("#pathResolutionHeading");
+  if (completeHeading) completeHeading.hidden = !completedPath;
+  const takeMock = document.querySelector("#pathTakeMockButton");
+  if (takeMock) takeMock.disabled = !completedPath;
   if (!activeModules.length) {
     const empty = document.createElement("p");
     empty.className = "learning-path-empty";
@@ -1880,14 +1935,14 @@ function renderStudyPath() {
   activeModules.forEach((module, index) => {
     const isComplete = studyProgress.completed.includes(module.id);
     const isUnlocked = isComplete || index === studyProgress.completed.length;
-    const offset = Math.round(Math.sin(index * 1.1) * Math.min(70, window.innerWidth * 0.045));
+    const offset = Math.round(Math.sin(index * 1.1) * Math.min(36, window.innerWidth * 0.028));
     const row = document.createElement("div");
     const node = document.createElement("button");
     const label = document.createElement("div");
     const title = document.createElement("b");
     const detail = document.createElement("span");
     row.className = `row${offset > 0 ? " flip" : ""}`;
-    row.style.transform = `translateX(${offset}px)`;
+    row.style.setProperty("--path-offset", `${offset}px`);
     node.type = "button";
     node.disabled = false;
     node.className = `node ${isComplete ? "done" : isUnlocked ? "active" : "locked"}`;
@@ -1918,6 +1973,13 @@ function renderStudyPath() {
       }
       showStudyLesson(index);
     });
+    if (index % 4 === 2) {
+      const activity = document.createElement("small");
+      activity.className = "path-activity-label";
+      activity.textContent = module.activityType === "video" ? "Watch" : module.activityType === "article" ? "Read" : module.activityType === "live" ? "Talk" : module.activityType === "test" ? "Practice" : "Learn";
+      row.classList.add("has-activity");
+      row.append(activity);
+    }
     row.append(node, label);
     pathTree.append(row);
   });
@@ -1947,6 +2009,170 @@ function showStage(stage, updateHash = true) {
   if (updateHash) window.location.hash = `#${stage}`;
   if (typeof window.scrollTo === "function") window.scrollTo(0, 0);
 }
+
+const QUIZ_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+let activeQuiz = null;
+let quizPollTimer = null;
+
+function randomQuizCode() {
+  return Array.from({ length: 6 }, () => QUIZ_CODE_ALPHABET[Math.floor(Math.random() * QUIZ_CODE_ALPHABET.length)]).join("");
+}
+function safeQuizPayload(quiz, includeQuestions = false) {
+  const output = { id: quiz.id, join_code: quiz.join_code, title: quiz.title, course_code: quiz.course_code,
+    quiz_type: quiz.quiz_type, status: quiz.status, current_question: quiz.current_question,
+    started_at: quiz.started_at, finished_at: quiz.finished_at };
+  if (includeQuestions) output.questions = quiz.questions;
+  return output;
+}
+async function quizApi(action, data = {}) {
+  const response = await fetch("/api/student/quiz", {
+    method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, ...data }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || "Quiz service is unavailable.");
+  return result;
+}
+async function refreshPublicQuizList() {
+  const card = document.querySelector("#quizJoinCard");
+  if (!card || !currentStudent || isMasterAdmin) return;
+  try {
+    const data = await quizApi("list", { courseCode: currentCourse, level: currentStudentLevel });
+    const open = Array.isArray(data.quizzes) ? data.quizzes : [];
+    const selected = open.find((quiz) => quiz.status === "live" || quiz.status === "lobby");
+    card.hidden = !selected;
+    if (selected) {
+      activeQuiz = selected;
+      card.querySelector("h2").textContent = selected.status === "live" ? "Quiz is live" : "Join a live quiz";
+      card.querySelector(".section-kicker").textContent = selected.quiz_type === "contest" ? "DR. ECO’S CONTEST" : "DR. ECO’S CHALLENGE";
+      card.querySelector("#quizJoinCode").value = selected.join_code;
+    }
+  } catch (error) { console.warn("Public quiz list could not be loaded:", error.message); }
+}
+async function renderQuizQuestion() {
+  if (!activeQuiz) return;
+  const data = await quizApi("state", { joinCode: activeQuiz.join_code });
+  activeQuiz = data.quiz;
+  const card = document.querySelector("#quizJoinCard");
+  card.hidden = false;
+  if (activeQuiz.status === "lobby") {
+    card.querySelector("h2").textContent = "You’re in the lobby";
+    card.querySelector("#quizJoinStatus").textContent = "Dr. Eco will begin when the host starts the quiz.";
+    return;
+  }
+  if (activeQuiz.status === "finished") {
+    card.querySelector("h2").textContent = "Quiz complete";
+    card.querySelector("#quizJoinStatus").textContent = "You scored " + (data.score || 0) + " points. Nice work!";
+    window.clearInterval(quizPollTimer); return;
+  }
+  const q = data.question;
+  if (!q) return;
+  card.querySelector("h2").textContent = q.prompt;
+  card.querySelector(".section-kicker").textContent = "QUESTION " + (data.questionIndex + 1);
+  const form = card.querySelector("#quizJoinForm");
+  form.replaceChildren();
+  const choices = document.createElement("div");
+  choices.className = "quiz-choices";
+  q.options.forEach((label,index) => {
+    const button = document.createElement("button");
+    button.type = "button"; button.className = "quiz-choice"; button.textContent = label;
+    button.addEventListener("click", async () => {
+      for (const item of choices.children) item.disabled = true;
+      try { await quizApi("answer", { joinCode: activeQuiz.join_code, questionIndex: data.questionIndex, answerIndex: index });
+        document.querySelector("#quizJoinStatus").textContent = "Answer saved. Waiting for the next question…";
+      } catch(error) { document.querySelector("#quizJoinStatus").textContent = error.message; }
+    });
+    choices.append(button);
+  });
+  form.replaceChildren(choices);
+  document.querySelector("#quizJoinStatus").textContent = "Choose your answer.";
+}
+const fromQuizLink = new URLSearchParams(window.location.search).get("quiz");
+if (fromQuizLink) {
+  document.querySelector("#quizJoinCard").hidden = false;
+  document.querySelector("#quizJoinCode").value = fromQuizLink.toUpperCase().slice(0,6);
+  document.querySelector("#quizJoinCard").scrollIntoView?.({ block: "center" });
+}
+document.querySelector("#quizJoinForm")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const code = document.querySelector("#quizJoinCode").value.trim().toUpperCase();
+  if (!/^[A-Z0-9]{6}$/.test(code)) { document.querySelector("#quizJoinStatus").textContent = "Enter the six-character quiz code."; return; }
+  try {
+    const data = await quizApi("join", { joinCode: code });
+    activeQuiz = data.quiz;
+    document.querySelector("#quizJoinCard").hidden = false;
+    await renderQuizQuestion();
+    window.clearInterval(quizPollTimer);
+    quizPollTimer = window.setInterval(() => { void renderQuizQuestion().catch(() => {}); }, 2200);
+  } catch(error) { document.querySelector("#quizJoinStatus").textContent = error.message; }
+});
+
+document.querySelector("#quizJoinCode")?.addEventListener("input",(event)=>{event.currentTarget.value=event.currentTarget.value.toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,6);});
+document.querySelector("#quizTarget")?.addEventListener("change",(event)=>{document.querySelector("#quizRegistrations").disabled=event.currentTarget.value!=="students";document.querySelector("#quizLevel").disabled=event.currentTarget.value!=="level";});
+document.querySelector("#quizMode")?.addEventListener("change",(event)=>{if(event.currentTarget.value==="contest")document.querySelector("#quizAdminStatus").textContent="Contest mode creates a lobby. Share the code, then use Start quiz when everyone is ready.";});
+async function adminQuizApi(action,payload={}) {
+  const r=await fetch("/api/admin?route=quizzes",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,...payload})});
+  const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||"Admin quiz request failed.");return data;
+}
+function quizQuestionsFromEditor(){try{return JSON.parse(document.querySelector("#quizQuestionsJson").value);}catch{throw new Error("Questions need to be valid JSON. Draft them with Dr. Eco, then review the answer indexes.");}}
+async function loadQuizCourseOptions(){
+ const select=document.querySelector("#quizCourse");if(!select)return;
+ try{
+  const response=await fetch("/api/course-catalog",{cache:"no-store"});const data=await response.json();
+  const courses=Array.isArray(data.courses)?data.courses:[];
+  select.replaceChildren(...courses.map(course=>{const option=document.createElement("option");option.value=course.course_code;option.textContent=course.course_code+" · "+course.title;return option;}));
+  document.querySelector("#quizLevel").value=currentStudentLevel||"100L";
+ }catch(error){document.querySelector("#quizAdminStatus").textContent="Course catalog unavailable. "+error.message;}
+}
+async function draftQuizQuestions(){
+ const status=document.querySelector("#quizAdminStatus");const button=document.querySelector("#generateQuizQuestions");button.disabled=true;status.textContent="Dr. Eco is preparing the question draft…";
+ try{
+  const count=Math.max(3,Math.min(20,Number(document.querySelector("#quizQuestionCount").value)||10));
+  const course=document.querySelector("#quizCourse").value,level=document.querySelector("#quizLevel").value;
+  const material=await retrieveCourseMaterialContext(course,level,5);
+  if(!material)throw new Error("No indexed course materials are available for this course yet.");
+  const response=await fetch("/api/gemini/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({courseCode:course,level,message:`Create exactly ${count} multiple-choice Economics quiz questions based on indexed course material. Return JSON only as an array: [{prompt,options:[4 strings],answerIndex:0-based integer,explanation}]. No markdown.`,courseNotes:material,history:[]})});
+  const result=await response.json();if(!response.ok)throw new Error(result.error||"Dr. Eco could not draft questions.");
+  const text=String(result.reply||result.text||"").replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,"");
+  const questions=JSON.parse(text);if(!Array.isArray(questions)||questions.length!==count)throw new Error("The draft did not contain the requested number of questions. Try again.");
+  document.querySelector("#quizQuestionsJson").value=JSON.stringify(questions,null,2);status.textContent="Draft ready. Review the wording and answer indexes before saving.";
+ }catch(e){status.textContent=e.message;}finally{button.disabled=false;}
+}
+async function createAdminQuiz(){
+ const status=document.querySelector("#quizAdminStatus"),button=document.querySelector("#createQuiz");button.disabled=true;status.textContent="Saving quiz…";
+ try{
+  const joinCode=randomQuizCode();
+  const data=await adminQuizApi("create",{join_code:joinCode,title:document.querySelector("#quizTitle").value,course_code:document.querySelector("#quizCourse").value,
+   target_type:document.querySelector("#quizTarget").value,target_level:document.querySelector("#quizLevel").value,
+   target_registrations:document.querySelector("#quizRegistrations").value.split(/[\s,;]+/).filter(Boolean),
+   quiz_type:document.querySelector("#quizMode").value,questions:quizQuestionsFromEditor()});
+  status.textContent="Quiz saved. Join code: "+data.quiz.join_code;
+  await renderAdminQuizzes();
+ }catch(e){status.textContent=e.message;}finally{button.disabled=false;}
+}
+async function renderAdminQuizzes(){
+ const box=document.querySelector("#quizAdminList");if(!box)return;
+ try{const data=await adminQuizApi("list");box.replaceChildren(...(data.quizzes||[]).map(q=>{
+  const card=document.createElement("article");card.className="quiz-admin-card";
+  const title=document.createElement("strong");title.textContent=q.title+" · "+q.join_code;
+  const meta=document.createElement("p");meta.textContent=q.course_code+" · "+q.status.toUpperCase()+" · "+q.quiz_type;
+  card.append(title,meta);
+  for(const [label,status] of [["Open lobby","lobby"],["Start quiz","live"],["Finish","finished"]]){
+   const b=document.createElement("button");b.type="button";b.className="card-secondary-button";b.textContent=label;b.addEventListener("click",async()=>{
+    try{await adminQuizApi("control",{id:q.id,status,current_question:Math.max(0,q.current_question)});status.textContent="";await renderAdminQuizzes();}
+    catch(e){document.querySelector("#quizAdminStatus").textContent=e.message;}
+   });card.append(b);
+  }
+  if(q.status==="live"&&q.current_question<q.questions.length-1){
+   const next=document.createElement("button");next.type="button";next.className="results-submit";next.textContent="Next question →";
+   next.addEventListener("click",async()=>{try{await adminQuizApi("control",{id:q.id,status:"live",current_question:q.current_question+1});await renderAdminQuizzes();}catch(e){document.querySelector("#quizAdminStatus").textContent=e.message;}});card.append(next);
+  }
+  const share=document.createElement("a");share.href=location.origin+"/?quiz="+q.join_code;share.textContent="Share join link";share.target="_blank";share.rel="noopener noreferrer";card.append(share);
+  return card;
+ }));}catch(e){document.querySelector("#quizAdminStatus").textContent=e.message;}
+}
+document.querySelector("#generateQuizQuestions")?.addEventListener("click",draftQuizQuestions);
+document.querySelector("#createQuiz")?.addEventListener("click",createAdminQuiz);
 
 function showAccessRestrictedNotice() {
   const notice = "Access Restricted: SevenFold Authorized Personnel Only";
@@ -3453,7 +3679,8 @@ class DrEcoVoiceLive {
       while (transcript.children.length > 2) transcript.firstElementChild.remove();
     }
     row.querySelector("span").textContent = clean;
-    document.querySelector("#voiceCaption").textContent = speaker + ": " + clean;
+    const caption = document.querySelector("#voiceCaption");
+    if (caption) caption.hidden = true;
     document.querySelector("#voiceMiniTranscript").textContent = speaker + ": " + clean;
   }
 
@@ -6034,6 +6261,7 @@ async function handleAuthSubmit(fullName, regNumber, phone, passcode, password) 
     const showResults = pendingResultsAfterAuth;
     pendingResultsAfterAuth = false;
     activateTab(showResults ? "results" : "home");
+    void refreshPublicQuizList();
     if (!showResults) {
       if (studyProgress.onboardingComplete) startStudentTour();
       else if (!learningProfileLoadFailed) openLearningPathSetup();
@@ -6162,6 +6390,7 @@ document.querySelectorAll("[data-admin-view]").forEach((button) => {
     if (button.dataset.adminView === "students") loadStudentRecords();
     if (button.dataset.adminView === "whatsapp") void loadWhatsAppBotSettings();
     if (button.dataset.adminView === "mobile-reminders") void loadMobileReminderSettings();
+    if (button.dataset.adminView === "quizzes") { void loadQuizCourseOptions(); void renderAdminQuizzes(); }
   });
 });
 

@@ -228,7 +228,16 @@ module.exports = async function learningProfileHandler(request, response) {
     ? payload.completedModuleIds.filter((id) => typeof id === "string" && id.length <= 100).slice(0, 12)
     : [];
   const mode = payload.mode;
-  if (!["path", "progress", "import_path", "finish_import", "account_stats"].includes(mode)) return sendJson(response, 400, { error: "Choose a valid profile update." });
+  if (!["path", "progress", "import_path", "finish_import", "account_stats", "delete_path"].includes(mode)) return sendJson(response, 400, { error: "Choose a valid profile update." });
+  if (mode === "delete_path") {
+    try {
+      await databaseRequest(database, `?reg_number=eq.${regNumber}&course_code=eq.${encodeURIComponent(courseCode)}`, { method: "DELETE" });
+      return sendJson(response, 200, { ok: true });
+    } catch (error) {
+      console.error("Student path deletion failed:", error.message);
+      return sendJson(response, 503, { error: "Could not remove the saved path from your account yet." });
+    }
+  }
   const path = cleanPath(payload.studyPath, courseCode);
   if (["path", "import_path"].includes(mode) && !path.length) return sendJson(response, 400, { error: "A valid personalized path is required." });
   const attempts = cleanModuleAttempts(payload.moduleAttempts);
