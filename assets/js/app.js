@@ -148,6 +148,8 @@ const DEFAULT_STUDY_PROGRESS = {
   activityDays: [],
   soundEnabled: true,
   examRewardClaimed: false,
+  mockExamCompleted: {},
+  deletedPaths: [],
   attempts: {},
   studyTone: "friendly",
   studyPace: "balanced",
@@ -421,6 +423,8 @@ function loadStudyProgress(storageKey = STUDY_PROGRESS_KEY) {
       lastStudyDate,
       soundEnabled: typeof parsed.soundEnabled === "boolean" ? parsed.soundEnabled : true,
       examRewardClaimed: parsed.examRewardClaimed === true,
+      mockExamCompleted: parsed.mockExamCompleted && typeof parsed.mockExamCompleted === "object" ? parsed.mockExamCompleted : {},
+      deletedPaths: Array.isArray(parsed.deletedPaths) ? parsed.deletedPaths.filter((code) => COURSE_CODE_PATTERN.test(String(code))).map((code) => String(code).toUpperCase()).slice(0, 30) : [],
       attempts: parsed.attempts && typeof parsed.attempts === "object" ? parsed.attempts : {},
       studyTone: ["friendly", "calm", "direct"].includes(parsed.studyTone) ? parsed.studyTone : "friendly",
       studyPace: ["gentle", "balanced", "quick"].includes(parsed.studyPace) ? parsed.studyPace : "balanced",
@@ -497,8 +501,14 @@ function scheduleStudentStatsSync() {
 
 function applySyncedStudyState(state, { preserveLocal = false } = {}) {
   if (!state || state.version !== 1) return false;
+  const deletedCourses = new Set([
+    ...(Array.isArray(state.deletedPaths) ? state.deletedPaths : []),
+    ...(preserveLocal && Array.isArray(studyProgress.deletedPaths) ? studyProgress.deletedPaths.filter((code) => !state.studyPaths?.[String(code).toUpperCase()]) : []),
+  ].map((code) => String(code).toUpperCase()));
+  studyProgress.deletedPaths = [...deletedCourses].slice(0, 30);
   const paths = {};
   for (const [rawCode, items] of Object.entries(state.studyPaths || {})) {
+    if (deletedCourses.has(String(rawCode).toUpperCase())) continue;
     const code = rawCode.toUpperCase();
     if (!COURSE_CODE_PATTERN.test(code)) continue;
     const modules = sanitizeStudyModules(items, code).map((module) => {
@@ -512,12 +522,15 @@ function applySyncedStudyState(state, { preserveLocal = false } = {}) {
     if (modules.length) paths[code] = modules;
   }
   studyProgress.studyPaths = preserveLocal ? { ...studyProgress.studyPaths, ...paths } : paths;
+  for (const code of deletedCourses) delete studyProgress.studyPaths[code];
   studyProgress.studyPathSources = preserveLocal
     ? { ...studyProgress.studyPathSources, ...(state.studyPathSources || {}) }
     : (state.studyPathSources || {});
+  for (const code of deletedCourses) delete studyProgress.studyPathSources[code];
   studyProgress.studyPathTitles = preserveLocal
     ? { ...studyProgress.studyPathTitles, ...(state.studyPathTitles || {}) }
     : (state.studyPathTitles || {});
+  for (const code of deletedCourses) delete studyProgress.studyPathTitles[code];
   studyProgress.courseCompleted = preserveLocal ? { ...studyProgress.courseCompleted } : {};
   studyProgress.attempts = preserveLocal ? { ...studyProgress.attempts } : {};
   for (const [code, modules] of Object.entries(paths)) {
@@ -599,6 +612,7 @@ function syncLearningProfile(mode = "progress", courseCode = currentCourse) {
     pathSource: studyProgress.studyPathSources[courseCode] || "",
     activeCourse: courseCode,
     accountStats: getAccountStudyStats(),
+    deletedPaths: Array.isArray(studyProgress.deletedPaths) ? studyProgress.deletedPaths : [],
   };
   if (mode === "path" || mode === "import_path") payload.learnerProfile = JSON.parse(JSON.stringify(studyProgress.learnerProfile || {}));
   const run = async () => {
@@ -608,7 +622,7 @@ function syncLearningProfile(mode = "progress", courseCode = currentCourse) {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(mode === "delete_path" ? { mode, courseCode } : payload),
       });
       if (!response.ok) {
         const result = await response.json().catch(() => ({}));
@@ -749,12 +763,12 @@ let consecutiveWrongCount = 0;
 let consecutiveCorrectCount = 0;
 
 const sfxEngine = {
-  correct: new Audio("assets/sfx/duolingo-correct-answer-10-streak.mp3"),
-  wrong: new Audio("assets/sfx/duolingo-wrong.mp3"),
-  fah: new Audio("assets/sfx/faaah.mp3"),
-  failTest: new Audio("assets/sfx/oh-my-god-bro-oh-hell-nah-man.mp3"),
-  deadClick: new Audio("assets/sfx/vine-boom.mp3"),
-  complete: new Audio("assets/sfx/Complete%20test.mp3"),
+  correct: new Audio("/assets/sfx/duolingo-correct-answer-10-streak.mp3"),
+  wrong: new Audio("/assets/sfx/duolingo-wrong.mp3"),
+  fah: new Audio("/assets/sfx/faaah.mp3"),
+  failTest: new Audio("/assets/sfx/oh-my-god-bro-oh-hell-nah-man.mp3"),
+  deadClick: new Audio("/assets/sfx/vine-boom.mp3"),
+  complete: new Audio("/assets/sfx/Complete%20test.mp3"),
 };
 Object.values(sfxEngine).forEach((audio) => {
   audio.preload = "auto";
@@ -766,7 +780,14 @@ function playCustomSfx(key, { loop = false } = {}) {
   if (!audio) return;
   audio.currentTime = 0;
   audio.loop = loop;
-  void audio.play().catch((error) => console.warn(`FoldBook sound "${key}" could not be played:`, error));
+  if (AC?.state === "suspended") void AC.resume().catch(() => {});
+  void audio.play().catch((error) => {
+    window.setTimeout(() => {
+      if (!soundOn) return;
+      audio.currentTime = 0;
+      void audio.play().catch(() => console.warn(`FoldBook sound "${key}" could not be played:`, error));
+    }, 80);
+  });
 }
 
 function stopCustomSfx(key) {
@@ -1686,6 +1707,30 @@ document.querySelector("#pathCompleteCall")?.addEventListener("click", () => {
   activateTab("chat");
   toggleVoiceCallRoom(true, "I have just completed my full learning path. Congratulate me warmly, mention the effort I put in, and ask what I would like to study next.");
 });
+document.querySelector("#pathResolveButton")?.addEventListener("click", async () => {
+  const removed = await removeActiveStudyPath();
+  if (!removed) return;
+  document.querySelector("#lessonPage").hidden = true;
+  lessonPanel.hidden = true;
+  activateTab("home");
+});
+document.querySelector("#pathRestartButton")?.addEventListener("click", () => {
+  if (!window.confirm("Restart this path from the beginning? Saved module progress will be cleared.")) return;
+  studyProgress.completed = [];
+  studyProgress.courseCompleted[currentCourse] = [];
+  if (studyProgress.mockExamCompleted) delete studyProgress.mockExamCompleted[currentCourse];
+  for (const module of activeModules) delete studyProgress.attempts[module.id];
+  saveStudyProgress();
+  void syncLearningProfile("progress", currentCourse);
+  renderStudyPath();
+  updateStudySummary();
+  showNotice("Fresh start! Your path is ready to follow again.");
+});
+document.querySelector("#pathTakeMockButton")?.addEventListener("click", () => {
+  const button = document.querySelector("#examPredictorButton");
+  button?.click();
+});
+
 document.querySelector("#pathCompleteBuild")?.addEventListener("click", () => {
   document.querySelector("#lessonPage").hidden = true;
   lessonPanel.hidden = true;
@@ -1842,6 +1887,41 @@ lessonNextQuestion.addEventListener("click", () => {
   }
 });
 
+async function removeActiveStudyPath() {
+  const code = currentCourse;
+  if (!Array.isArray(studyProgress.studyPaths?.[code])) return false;
+  if (!window.confirm("Delete this path and its saved progress? This cannot be undone.")) return false;
+  const previous = {
+    path: studyProgress.studyPaths[code], completed: studyProgress.courseCompleted[code],
+    source: studyProgress.studyPathSources[code], title: studyProgress.studyPathTitles[code],
+  };
+  delete studyProgress.studyPaths[code];
+  delete studyProgress.courseCompleted[code];
+  delete studyProgress.studyPathSources[code];
+  delete studyProgress.studyPathTitles[code];
+  studyProgress.deletedPaths = [...new Set([...(studyProgress.deletedPaths || []), code])].slice(-30);
+  studyProgress.completed = [];
+  activeModules = [];
+  saveStudyProgress();
+  const removed = await syncLearningProfile("progress", code);
+  if (!removed) {
+    studyProgress.deletedPaths = (studyProgress.deletedPaths || []).filter((item) => item !== code);
+    studyProgress.studyPaths[code] = previous.path;
+    if (previous.completed) studyProgress.courseCompleted[code] = previous.completed;
+    if (previous.source) studyProgress.studyPathSources[code] = previous.source;
+    if (previous.title) studyProgress.studyPathTitles[code] = previous.title;
+    activeModules = previous.path;
+    studyProgress.completed = previous.completed || [];
+    saveStudyProgress();
+    showNotice("Could not remove the saved path from your account. Please try again.");
+  } else showNotice("Path removed. Your other paths are still here.");
+  renderStudyCourseSwitcher();
+  renderStudyPath();
+  updateStudySummary();
+  return Boolean(removed);
+}
+document.querySelector("#deleteActivePath")?.addEventListener("click", removeActiveStudyPath);
+
 function renderStudyPath() {
   pathTree.replaceChildren();
   const completedCount = studyProgress.completed.length;
@@ -1851,13 +1931,35 @@ function renderStudyPath() {
   document.querySelector("#courseTitle").textContent = courseTitleFor(currentCourse);
   const source = studyProgress.studyPathSources?.[currentCourse] || "";
   document.querySelector("#learningPathSource").textContent = activeModules.length
-    ? source || "Source details weren’t saved for this path. Refresh it to see whether course materials were used."
+    ? source || "Your route, built around your study goal and course topics."
     : "";
   const buildButton = document.querySelector("#personalizePathButton");
-  if (buildButton) buildButton.textContent = activeModules.length ? "✨ Refresh my learning path" : "✨ Build my learning path";
+  if (buildButton) buildButton.textContent = activeModules.length ? "✨ Refresh path" : "✨ Build my path";
   document.querySelector("#learningPathIntro").textContent = activeModules.length
-    ? activeModules.length + " steps mapped for your learning journey. Complete one at a time with Dr. Eco."
-    : "Your course journey will appear here, built around your goal and the topics you want help with.";
+    ? "Follow the trail, one activity at a time."
+    : "Dr. Eco can help map your next study quest.";
+  const activePathDelete = document.querySelector("#deleteActivePath");
+  if (activePathDelete) activePathDelete.hidden = activeModules.length === 0;
+  const modulesComplete = activeModules.length > 0 && completedCount >= activeModules.length;
+  const mockComplete = studyProgress.mockExamCompleted?.[currentCourse] === true;
+  const completeHeading = document.querySelector("#pathResolutionHeading");
+  if (completeHeading) {
+    completeHeading.hidden = !modulesComplete;
+    const kicker = completeHeading.querySelector(".section-kicker");
+    const title = completeHeading.querySelector("h2");
+    const message = completeHeading.querySelector("p:not(.section-kicker)");
+    if (kicker) kicker.textContent = mockComplete ? "PATH COMPLETE" : "FINAL STEP";
+    if (title) title.textContent = mockComplete ? "You finished your journey!" : "One last challenge!";
+    if (message) message.textContent = mockComplete
+      ? "Congratulations! Your mock is complete. Resolve this path or restart it for another run."
+      : "Complete a short mock test with Dr. Eco to finish this path.";
+  }
+  const takeMock = document.querySelector("#pathTakeMockButton");
+  const resolvePath = document.querySelector("#pathResolveButton");
+  const restartPath = document.querySelector("#pathRestartButton");
+  if (takeMock) { takeMock.disabled = !modulesComplete; takeMock.hidden = mockComplete; }
+  if (resolvePath) resolvePath.hidden = !mockComplete;
+  if (restartPath) restartPath.hidden = !mockComplete;
   if (!activeModules.length) {
     const empty = document.createElement("p");
     empty.className = "learning-path-empty";
@@ -1880,14 +1982,14 @@ function renderStudyPath() {
   activeModules.forEach((module, index) => {
     const isComplete = studyProgress.completed.includes(module.id);
     const isUnlocked = isComplete || index === studyProgress.completed.length;
-    const offset = Math.round(Math.sin(index * 1.1) * Math.min(70, window.innerWidth * 0.045));
+    const offset = Math.round(Math.sin(index * 1.1) * Math.min(36, window.innerWidth * 0.028));
     const row = document.createElement("div");
     const node = document.createElement("button");
     const label = document.createElement("div");
     const title = document.createElement("b");
     const detail = document.createElement("span");
     row.className = `row${offset > 0 ? " flip" : ""}`;
-    row.style.transform = `translateX(${offset}px)`;
+    row.style.setProperty("--path-offset", `${offset}px`);
     node.type = "button";
     node.disabled = false;
     node.className = `node ${isComplete ? "done" : isUnlocked ? "active" : "locked"}`;
@@ -1918,6 +2020,13 @@ function renderStudyPath() {
       }
       showStudyLesson(index);
     });
+    if (index % 4 === 2) {
+      const activity = document.createElement("small");
+      activity.className = "path-activity-label";
+      activity.textContent = module.activityType === "video" ? "Watch" : module.activityType === "article" ? "Read" : module.activityType === "live" ? "Talk" : module.activityType === "test" ? "Practice" : "Learn";
+      row.classList.add("has-activity");
+      row.append(activity);
+    }
     row.append(node, label);
     pathTree.append(row);
   });
@@ -1947,6 +2056,210 @@ function showStage(stage, updateHash = true) {
   if (updateHash) window.location.hash = `#${stage}`;
   if (typeof window.scrollTo === "function") window.scrollTo(0, 0);
 }
+
+let activeQuiz = null;
+let quizPollTimer = null;
+let lastQuizQuestionState = "";
+
+function safeQuizPayload(quiz, includeQuestions = false, questionIndex = -1) {
+  const output = { id: quiz.id, join_code: quiz.join_code, title: quiz.title, course_code: quiz.course_code,
+    quiz_type: quiz.quiz_type, status: quiz.status, current_question: quiz.current_question,
+    started_at: quiz.started_at, finished_at: quiz.finished_at };
+  if (includeQuestions) output.questions = quiz.questions;
+  else if (Number.isInteger(questionIndex) && questionIndex >= 0 && quiz.questions?.[questionIndex]) {
+    const q = quiz.questions[questionIndex];
+    output.question = { prompt: q.prompt, options: q.options, explanation: q.explanation };
+  }
+  return output;
+}
+async function quizApi(action, data = {}) {
+  const response = await fetch("/api/student/learning-profile", {
+    method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, ...data }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || "Quiz service is unavailable.");
+  return result;
+}
+async function refreshPublicQuizList() {
+  const card = document.querySelector("#quizJoinCard");
+  if (!card || !currentStudent || isMasterAdmin) return;
+  try {
+    const data = await quizApi("list", { courseCode: currentCourse, level: currentStudentLevel });
+    const open = Array.isArray(data.quizzes) ? data.quizzes : [];
+    let list = document.querySelector("#quizAvailableList");
+    if (!list) {
+      list = document.createElement("div");
+      list.id = "quizAvailableList";
+      list.className = "quiz-available-list";
+      card.querySelector("#quizJoinForm")?.before(list);
+    }
+    list.replaceChildren();
+    card.hidden = !open.length && !new URLSearchParams(window.location.search).has("quiz");
+    card.querySelector("h2").textContent = open.length ? "Choose a challenge" : "Join a quiz";
+    card.querySelector(".section-kicker").textContent = "DR. ECO’S QUIZZES";
+    open.forEach((quiz) => {
+      const pick = document.createElement("button");
+      pick.type = "button";
+      pick.className = "quiz-available-item";
+      pick.textContent = quiz.title + " · " + quiz.course_code + (quiz.quiz_type === "contest" ? " · Contest lobby" : " · Open quiz");
+      pick.addEventListener("click", () => {
+        card.querySelector("#quizJoinCode").value = quiz.join_code;
+        card.querySelector("#quizJoinForm")?.requestSubmit();
+      });
+      list.append(pick);
+    });
+  } catch (error) { console.warn("Public quiz list could not be loaded:", error.message); }
+}
+async function renderQuizQuestion() {
+  if (!activeQuiz) return;
+  const data = await quizApi("state", { joinCode: activeQuiz.join_code });
+  const questionState = `${data.quiz.status}:${data.questionIndex}:${data.answered ? "answered" : "open"}:${data.studentFinished ? "finished-for-student" : "active"}`;
+  if (questionState === lastQuizQuestionState) return;
+  lastQuizQuestionState = questionState;
+  activeQuiz = data.quiz;
+  const card = document.querySelector("#quizJoinCard");
+  card.hidden = false;
+  if (activeQuiz.status === "lobby") {
+    card.querySelector("h2").textContent = "You’re in the lobby";
+    card.querySelector("#quizJoinStatus").textContent = "Dr. Eco will begin when the host starts the quiz.";
+    return;
+  }
+  if (activeQuiz.status === "finished" || data.studentFinished) {
+    card.querySelector("h2").textContent = "Quiz complete";
+    card.querySelector("#quizJoinStatus").textContent = "You scored " + (data.score || 0) + " points. Nice work!";
+    window.clearInterval(quizPollTimer); return;
+  }
+  const q = data.question;
+  if (!q) return;
+  card.querySelector("h2").textContent = q.prompt;
+  card.querySelector(".section-kicker").textContent = "QUESTION " + (data.questionIndex + 1);
+  const form = card.querySelector("#quizJoinForm");
+  form.replaceChildren();
+  const choices = document.createElement("div");
+  choices.className = "quiz-choices";
+  q.options.forEach((label,index) => {
+    const button = document.createElement("button");
+    button.type = "button"; button.className = "quiz-choice"; button.textContent = label;
+    button.disabled = data.answered === true;
+    button.addEventListener("click", async () => {
+      for (const item of choices.children) item.disabled = true;
+      try { await quizApi("answer", { joinCode: activeQuiz.join_code, questionIndex: data.questionIndex, answerIndex: index });
+        document.querySelector("#quizJoinStatus").textContent = "Answer saved. Waiting for the next question…";
+      } catch(error) { lastQuizQuestionState = ""; document.querySelector("#quizJoinStatus").textContent = error.message; }
+    });
+    choices.append(button);
+  });
+  form.replaceChildren(choices);
+  document.querySelector("#quizJoinStatus").textContent = data.answered ? "Answer saved. Waiting for the next question…" : "Choose your answer.";
+}
+const fromQuizLink = new URLSearchParams(window.location.search).get("quiz");
+if (fromQuizLink) {
+  document.querySelector("#quizJoinCard").hidden = false;
+  document.querySelector("#quizJoinCode").value = fromQuizLink.toUpperCase().slice(0,6);
+  document.querySelector("#quizJoinCard").scrollIntoView?.({ block: "center" });
+}
+document.querySelector("#quizJoinForm")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const code = document.querySelector("#quizJoinCode").value.trim().toUpperCase();
+  if (!/^[A-Z0-9]{6}$/.test(code)) { document.querySelector("#quizJoinStatus").textContent = "Enter the six-character quiz code."; return; }
+  try {
+    const data = await quizApi("join", { joinCode: code });
+    activeQuiz = data.quiz;
+    lastQuizQuestionState = "";
+    document.querySelector("#quizJoinCard").hidden = false;
+    await renderQuizQuestion();
+    window.clearInterval(quizPollTimer);
+    quizPollTimer = window.setInterval(() => { void renderQuizQuestion().catch(() => {}); }, 2200);
+  } catch(error) { document.querySelector("#quizJoinStatus").textContent = error.message; }
+});
+
+document.querySelector("#quizJoinCode")?.addEventListener("input",(event)=>{event.currentTarget.value=event.currentTarget.value.toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,6);});
+document.querySelector("#quizTarget")?.addEventListener("change",(event)=>{document.querySelector("#quizRegistrations").disabled=event.currentTarget.value!=="students";document.querySelector("#quizLevel").disabled=event.currentTarget.value!=="level";});
+document.querySelector("#quizMode")?.addEventListener("change",(event)=>{if(event.currentTarget.value==="contest")document.querySelector("#quizAdminStatus").textContent="Contest mode creates a lobby. Share the code, then use Start quiz when everyone is ready.";});
+async function adminQuizApi(action,payload={}) {
+  const r=await fetch("/api/admin?route=quizzes",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,...payload})});
+  const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||"Admin quiz request failed.");return data;
+}
+function quizQuestionsFromEditor(){try{return JSON.parse(document.querySelector("#quizQuestionsJson").value);}catch{throw new Error("Questions need to be valid JSON. Draft them with Dr. Eco, then review the answer indexes.");}}
+async function loadQuizCourseOptions(){
+ const select=document.querySelector("#quizCourse");if(!select)return;
+ try{
+  const response=await fetch("/api/course-catalog",{cache:"no-store"});const data=await response.json();
+  const courses=Array.isArray(data.courses)?data.courses:[];
+  select.replaceChildren(...courses.map(course=>{const option=document.createElement("option");option.value=course.course_code;option.textContent=course.course_code+" · "+course.title;return option;}));
+  document.querySelector("#quizLevel").value=currentStudentLevel||"100L";
+ }catch(error){document.querySelector("#quizAdminStatus").textContent="Course catalog unavailable. "+error.message;}
+}
+async function draftQuizQuestions(){
+ const status=document.querySelector("#quizAdminStatus");const button=document.querySelector("#generateQuizQuestions");button.disabled=true;status.textContent="Dr. Eco is preparing the question draft…";
+ try{
+  const count=Math.max(3,Math.min(20,Number(document.querySelector("#quizQuestionCount").value)||10));
+  const course=document.querySelector("#quizCourse").value,level=document.querySelector("#quizLevel").value;
+  const material=await retrieveCourseMaterialContext(course,level,5);
+  if(!material)throw new Error("No indexed course materials are available for this course yet.");
+  const response=await fetch("/api/dr-eco",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+   system_instruction:{parts:[{text:"You are Dr. Eco, a Nigerian Economics professor. Use only the indexed course material supplied below. Return only a valid JSON array, no markdown. Each item must have prompt, options (exactly four strings), answerIndex (zero-based integer), and explanation.\n\nINDEXED MATERIAL:\n"+String(material).slice(0,3500)}]},
+   contents:[{role:"user",parts:[{text:`Create exactly ${count} multiple-choice Economics quiz questions for ${course}. Ensure clear wording, plausible distractors, and one correct answer each.`}]}],
+   generationConfig:{responseMimeType:"application/json",temperature:0.35}
+  })});
+  const result=await response.json();if(!response.ok)throw new Error(result.error||"Dr. Eco could not draft questions.");
+  const text=String(result.candidates?.[0]?.content?.parts?.map(part=>part.text||"").join("")||"");
+  const questions=JSON.parse(text);if(!Array.isArray(questions)||questions.length!==count)throw new Error("The draft did not contain the requested number of questions. Try again.");
+  document.querySelector("#quizQuestionsJson").value=JSON.stringify(questions,null,2);status.textContent="Draft ready. Review the wording and answer indexes before saving.";
+ }catch(e){status.textContent=e.message;}finally{button.disabled=false;}
+}
+async function createAdminQuiz(){
+ const status=document.querySelector("#quizAdminStatus"),button=document.querySelector("#createQuiz");button.disabled=true;status.textContent="Saving quiz…";
+ try{
+  const data=await adminQuizApi("create",{title:document.querySelector("#quizTitle").value,course_code:document.querySelector("#quizCourse").value,
+   target_type:document.querySelector("#quizTarget").value,target_level:document.querySelector("#quizLevel").value,
+   target_registrations:document.querySelector("#quizRegistrations").value.split(/[\s,;]+/).filter(Boolean),
+   quiz_type:document.querySelector("#quizMode").value,questions:quizQuestionsFromEditor()});
+  status.textContent="Quiz saved. Join code: "+data.quiz.join_code;
+  await renderAdminQuizzes();
+ }catch(e){status.textContent=e.message;}finally{button.disabled=false;}
+}
+async function renderAdminQuizzes(){
+ const box=document.querySelector("#quizAdminList");if(!box)return;
+ try{const data=await adminQuizApi("list");box.replaceChildren(...(data.quizzes||[]).map(q=>{
+  const card=document.createElement("article");card.className="quiz-admin-card";
+  const title=document.createElement("strong");title.textContent=q.title+" · "+q.join_code;
+  const players=Array.isArray(q.foldbook_quiz_participants)?q.foldbook_quiz_participants:[];
+  const meta=document.createElement("p");meta.textContent=q.course_code+" · "+q.status.toUpperCase()+" · "+q.quiz_type+(q.status==="live"?" · Question "+(q.current_question+1)+" of "+q.questions.length:"")+" · "+players.length+" joined";
+  card.append(title,meta);
+  if(players.length){
+   const board=document.createElement("ol");board.className="quiz-host-leaderboard";
+   players.sort((x,y)=>(Number(y.score)||0)-(Number(x.score)||0)).slice(0,10).forEach(player=>{const row=document.createElement("li");row.textContent=(player.display_name||"Student")+" · "+(Number(player.score)||0)+" pts";board.append(row);});
+   card.append(board);
+  }
+  if(q.status==="lobby"){
+   const startButton=document.createElement("button");startButton.type="button";startButton.className="results-submit";startButton.textContent="Start contest";
+   startButton.addEventListener("click",async()=>{try{await adminQuizApi("control",{id:q.id,status:"live",current_question:0});await renderAdminQuizzes();}catch(e){document.querySelector("#quizAdminStatus").textContent=e.message;}});
+   card.append(startButton);
+  }
+  if(q.status==="live"&&q.quiz_type==="contest"){
+   if(q.current_question<q.questions.length-1){
+    const next=document.createElement("button");next.type="button";next.className="results-submit";next.textContent="Next question →";
+    next.addEventListener("click",async()=>{try{await adminQuizApi("control",{id:q.id,status:"live",current_question:q.current_question+1});await renderAdminQuizzes();}catch(e){document.querySelector("#quizAdminStatus").textContent=e.message;}});
+    card.append(next);
+   } else {
+    const finish=document.createElement("button");finish.type="button";finish.className="card-secondary-button";finish.textContent="Finish contest";
+    finish.addEventListener("click",async()=>{try{await adminQuizApi("control",{id:q.id,status:"finished"});await renderAdminQuizzes();}catch(e){document.querySelector("#quizAdminStatus").textContent=e.message;}});
+    card.append(finish);
+   }
+  }
+  if(q.status==="live"&&q.quiz_type==="open"){
+   const close=document.createElement("button");close.type="button";close.className="card-secondary-button";close.textContent="Close open quiz";
+   close.addEventListener("click",async()=>{try{await adminQuizApi("control",{id:q.id,status:"finished"});await renderAdminQuizzes();}catch(e){document.querySelector("#quizAdminStatus").textContent=e.message;}});
+   card.append(close);
+  }
+  const share=document.createElement("a");share.href=location.origin+"/?quiz="+q.join_code;share.textContent="Share join link";share.target="_blank";share.rel="noopener noreferrer";card.append(share);
+  return card;
+ }));}catch(e){document.querySelector("#quizAdminStatus").textContent=e.message;}
+}
+document.querySelector("#generateQuizQuestions")?.addEventListener("click",draftQuizQuestions);
+document.querySelector("#createQuiz")?.addEventListener("click",createAdminQuiz);
 
 function showAccessRestrictedNotice() {
   const notice = "Access Restricted: SevenFold Authorized Personnel Only";
@@ -2092,6 +2405,14 @@ function finishMockExam() {
   window.playFoldBookUI?.("rewards", "badge-reveal", document.querySelector("#mockExamAnimation"));
   mockExamNext.disabled = true;
   mockExamNext.textContent = "Mock complete";
+
+  if (activeModules.length && studyProgress.completed.length >= activeModules.length) {
+    studyProgress.mockExamCompleted ||= {};
+    studyProgress.mockExamCompleted[currentCourse] = true;
+    saveStudyProgress();
+    renderStudyPath();
+    showNotice("Mock complete! Your path is ready to resolve or restart.");
+  }
 
   if (!studyProgress.examRewardClaimed) {
     studyProgress.examRewardClaimed = true;
@@ -3353,6 +3674,8 @@ document.querySelector("#learningPathSetupForm").addEventListener("submit", asyn
     document.querySelector("#learningPathDialogue").textContent = "I recommend " + result.modules.length + " steps for this journey. " + routeRecommendation;
     document.querySelector("#learningPathSetupStatus").textContent = "Your " + result.modules.length + "-step learning route is ready.";
     studyProgress.studyPaths[courseCode] = result.modules;
+    if (studyProgress.mockExamCompleted) delete studyProgress.mockExamCompleted[courseCode];
+    studyProgress.deletedPaths = (studyProgress.deletedPaths || []).filter((code) => code !== courseCode);
     studyProgress.studyPathSources[courseCode] = result.sourceNote;
     studyProgress.studyPathTitles[courseCode] = displayTitle;
     studyProgress.courseCompleted[courseCode] = [];
@@ -3453,7 +3776,8 @@ class DrEcoVoiceLive {
       while (transcript.children.length > 2) transcript.firstElementChild.remove();
     }
     row.querySelector("span").textContent = clean;
-    document.querySelector("#voiceCaption").textContent = speaker + ": " + clean;
+    const caption = document.querySelector("#voiceCaption");
+    if (caption) caption.hidden = true;
     document.querySelector("#voiceMiniTranscript").textContent = speaker + ": " + clean;
   }
 
@@ -6034,6 +6358,7 @@ async function handleAuthSubmit(fullName, regNumber, phone, passcode, password) 
     const showResults = pendingResultsAfterAuth;
     pendingResultsAfterAuth = false;
     activateTab(showResults ? "results" : "home");
+    void refreshPublicQuizList();
     if (!showResults) {
       if (studyProgress.onboardingComplete) startStudentTour();
       else if (!learningProfileLoadFailed) openLearningPathSetup();
@@ -6162,6 +6487,7 @@ document.querySelectorAll("[data-admin-view]").forEach((button) => {
     if (button.dataset.adminView === "students") loadStudentRecords();
     if (button.dataset.adminView === "whatsapp") void loadWhatsAppBotSettings();
     if (button.dataset.adminView === "mobile-reminders") void loadMobileReminderSettings();
+    if (button.dataset.adminView === "quizzes") { void loadQuizCourseOptions(); void renderAdminQuizzes(); }
   });
 });
 

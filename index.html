@@ -73,13 +73,31 @@
       </nav>
     <main id="top">
       <section id="home" class="learn-section hide" hidden>
+          <section class="quiz-join-card" id="quizJoinCard" hidden>
+            <div class="quiz-join-mascot" id="quizJoinMascot" aria-hidden="true"></div>
+            <div><p class="section-kicker">DR. ECO’S CHALLENGE</p><h2>Join a quiz</h2><p>Enter the code your host shared with you.</p></div>
+            <form id="quizJoinForm"><label for="quizJoinCode">Quiz code</label><div class="quiz-join-form-row"><input id="quizJoinCode" maxlength="6" autocomplete="one-time-code" placeholder="ABC123"><button class="results-submit" type="submit">Join</button></div></form>
+            <p id="quizJoinStatus" role="status" aria-live="polite"></p>
+          </section>
+
         <div class="main-path-area">
           <div class="course-switcher" id="courseSwitcher" aria-label="Your active paths" hidden>
             <label for="savedPathSelect">Active paths</label>
             <select id="savedPathSelect" aria-label="Switch between active study paths"></select>
+            <button class="path-delete-button" id="deleteActivePath" type="button">Delete path</button>
             <button class="course-new-path-button" id="newLearningPathButton" type="button" aria-label="Begin a new learning path">＋ Begin new path</button>
           </div>
           <header class="course-header-card wk">
+            <div class="path-resolution-heading" id="pathResolutionHeading" hidden>
+              <div class="path-resolution-mascot" id="pathResolutionMascot" aria-hidden="true"></div>
+              <p class="section-kicker">PATH COMPLETE</p><h2>You finished your journey!</h2>
+              <p>Take a mock test, resolve this path, or restart it for a fresh run.</p>
+              <div class="path-resolution-actions">
+                <button id="pathTakeMockButton" type="button" class="results-submit">Take mock test</button>
+                <button id="pathResolveButton" type="button" class="card-secondary-button">Resolve path</button>
+                <button id="pathRestartButton" type="button" class="card-secondary-button">Restart path</button>
+              </div>
+            </div>
             <div class="meta"><small class="mono course-code-label" id="courseCodeLabel">ECO 128 · STUDY PATH</small><small id="wkdays">YOUR STUDY ROADMAP</small></div>
             <h1 id="courseTitle">Transportation Economics</h1>
             <p id="learningPathIntro">Short lessons, one clear idea at a time. Complete a node to unlock the next.</p>
@@ -458,6 +476,7 @@
           <button type="button" class="admin-nav-button" data-admin-view="whatsapp">💬 WhatsApp Bot</button>
           <button type="button" class="admin-nav-button" data-admin-view="mobile-reminders">🔔 Mobile Reminders</button>
           <button type="button" class="admin-nav-button" data-admin-view="students">👥 Student Records</button>
+          <button type="button" class="admin-nav-button" data-admin-view="quizzes">🎓 Quiz Studio</button>
         </nav>
         <div class="admin-portal-content">
           <section class="admin-view-panel" id="adminView-broadsheets">
@@ -533,6 +552,26 @@
             <p id="studentMaterialsAdminStatus" class="admin-material-status" role="status" aria-live="polite"></p>
             <div id="studentMaterialsAdminList" class="student-material-admin-list"></div>
             </section>
+          </section>
+          <section class="admin-view-panel" id="adminView-quizzes" hidden>
+            <h2>🎓 Dr. Eco Quiz Studio</h2>
+            <p>Create an open practice quiz or a live contest with a join code. Dr. Eco can draft questions from indexed course materials.</p>
+            <div class="admin-material-fields">
+              <label>Quiz title<input id="quizTitle" maxlength="120" placeholder="e.g. Inflation challenge"></label>
+              <label>Course<select id="quizCourse"></select></label>
+              <label>Who can join<select id="quizTarget"><option value="all">All students</option><option value="level">One level</option><option value="students">Selected students</option></select></label>
+              <label>Level<select id="quizLevel"><option>100L</option><option>200L</option><option>300L</option><option>400L</option></select></label>
+              <label>Registration numbers<textarea id="quizRegistrations" rows="2" placeholder="Only used for selected students"></textarea></label>
+              <label>Quiz mode<select id="quizMode"><option value="open">Open quiz</option><option value="contest">Live contest with lobby</option></select></label>
+              <label>Number of questions<input id="quizQuestionCount" type="number" min="3" max="20" value="10"></label>
+            </div>
+            <div class="admin-material-fields">
+              <button id="generateQuizQuestions" class="card-secondary-button" type="button">✨ Draft with Dr. Eco</button>
+              <button id="createQuiz" class="results-submit" type="button">Save quiz</button>
+            </div>
+            <textarea id="quizQuestionsJson" class="admin-material-control" rows="10" placeholder="Dr. Eco’s questions appear here for review. You can edit before saving."></textarea>
+            <p id="quizAdminStatus" class="admin-material-status" role="status" aria-live="polite"></p>
+            <h3>Your quizzes</h3><div id="quizAdminList"></div>
           </section>
           <section class="admin-view-panel" id="adminView-students" hidden>
             <h2>Student Records</h2>
@@ -624,7 +663,7 @@
           <span class="voice-call-pulse"></span>
         </div>
         <p class="voice-call-status" id="voiceCallStatus" role="status" aria-live="polite">Starting voice session…</p>
-        <div class="voice-call-caption" id="voiceCaption" aria-live="polite">Dr. Eco is listening…</div>
+        <div class="voice-call-caption" id="voiceCaption" aria-live="polite" hidden></div>
         <div class="voice-transcript" id="voiceTranscript" aria-label="Call transcript" aria-live="polite"></div>
         <div class="voice-call-controls">
           <button type="button" class="voice-call-control" id="voiceMuteButton" aria-pressed="false">🎙️ Mute mic</button>
