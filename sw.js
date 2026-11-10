@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "foldbook-shell-v13";
+const CACHE_NAME = "foldbook-shell-v14";
 const SHELL_FILES = [
   "/",
   "/index.html",

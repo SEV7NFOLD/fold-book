@@ -10,6 +10,7 @@
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const SHAPES = ["▲", "◆", "●", "■", "★", "⬟"];
+  const OPEN_ADVANCE_SECONDS = 4;
   const REG = /^(?:[0-9]{12}[A-Z]{2}|[0-9]{2}\/SS\/EC\/[0-9]{1,4})$/;
   const COURSE = /^[A-Z]{2,5}\s?\d{3,4}$/i;
 
@@ -595,11 +596,25 @@
       if (result.explanation) { explain.textContent = result.explanation; explain.hidden = false; }
       setPlayHeader(quiz.title, `${quiz.course_code} · Code ${quiz.join_code}`, result.score);
       next.hidden = false; next.focus();
+      autoAdvance();
+    };
+    // Open quizzes run themselves: after a few seconds on the answer, move on automatically.
+    const label = next.textContent;
+    const autoAdvance = () => {
+      let left = OPEN_ADVANCE_SECONDS;
+      next.textContent = `${label} (${left})`;
+      window.clearInterval(player.ticker);
+      player.ticker = window.setInterval(() => {
+        left -= 1;
+        if (!next.isConnected || next.disabled) { window.clearInterval(player.ticker); return; }
+        if (left <= 0) { window.clearInterval(player.ticker); next.click(); return; }
+        next.textContent = `${label} (${left})`;
+      }, 1000);
     };
     const submit = async (payload, grid) => {
       try { finish(await studentApi("answer", { joinCode: player.code, questionIndex: index, ...payload }), grid); }
       catch (error) {
-        if (error.status === 409) { player.holdOpen = true; window.clearInterval(player.ticker); next.hidden = false; note.textContent = error.message; return; }
+        if (error.status === 409) { player.holdOpen = true; next.hidden = false; note.textContent = error.message; autoAdvance(); return; }
         busy = false;
         grid.querySelectorAll(".lq-tile").forEach((item) => { item.disabled = false; item.classList.remove("is-picked"); });
         note.textContent = error.message;
@@ -727,12 +742,14 @@
   }
 
   function draftActions(quiz) {
-    const startLabel = "Open lobby";
+    const startLabel = quiz.quiz_type === "contest" ? "Open lobby" : "Publish to students";
     return [
       { label: "Close", run: async () => { closeHost(); } },
       { label: startLabel, primary: true, run: async () => {
         const data = await adminApi("control", { id: quiz.id, step: "open_lobby" });
-        studioStatus(`Lobby open for “${quiz.title}”. Code ${quiz.join_code}. Press Start when everyone’s in.`);
+        studioStatus(quiz.quiz_type === "contest"
+          ? `Lobby open for “${quiz.title}”. Code ${quiz.join_code}. Press Start when everyone’s in.`
+          : `“${quiz.title}” is live. Students can join with ${quiz.join_code} and it runs on its own timer.`);
         startHosting(data);
         void renderAdminList();
       } },
@@ -1012,7 +1029,7 @@
       h("div", null, h("b", { class: "mono", text: `${average}/${total}` }), h("span", { text: "average correct" })));
     if (existing) { existing.querySelector(".lq-stats").replaceWith(stats); existing.querySelector(".lq-open-list").replaceChildren(list); return; }
     hostStage().replaceChildren(h("div", { class: "lq-host-open", id: "quizHostOpen" },
-      h("div", { class: "lq-open-head" }, h("p", { class: "lq-lobby-code lq-lobby-code-small mono", text: quiz.join_code }), h("p", { class: "lq-muted", text: "Students join with this code and answer at their own pace. Close the quiz to crown the winner." })),
+      h("div", { class: "lq-open-head" }, h("p", { class: "lq-lobby-code lq-lobby-code-small mono", text: quiz.join_code }), h("p", { class: "lq-muted", text: `Running on its own: students join with this code and each question has ${quiz.question_seconds || 20} s. You can close this screen. Close the quiz whenever you want to stop new answers and crown the winner.` })),
       stats,
       h("div", { class: "lq-open-list" }, list),
       actionsEl([{ label: "Close quiz and show winner", primary: true, run: () => { if (window.confirm("Close this quiz? Students can’t answer after it closes.")) void hostControl("finish"); } }])));
@@ -1044,7 +1061,7 @@
         const buttons = [];
         if (quiz.status === "draft") {
           buttons.push(h("button", { type: "button", class: "card-secondary-button", text: "Preview", onclick: () => openPreview(quiz, draftActions(quiz)) }));
-          buttons.push(h("button", { type: "button", class: "results-submit", text: "Open lobby", onclick: async (event) => {
+          buttons.push(h("button", { type: "button", class: "results-submit", text: quiz.quiz_type === "contest" ? "Open lobby" : "Publish", onclick: async (event) => {
             event.currentTarget.disabled = true;
             try { startHosting(await adminApi("control", { id: quiz.id, step: "open_lobby" })); void renderAdminList(); }
             catch (e) { studioStatus(e.message); event.currentTarget.disabled = false; }
@@ -1125,11 +1142,13 @@
         studioStatus(`Saved “${data.quiz.title}” as a draft. Open its lobby from the list when you’re ready.`);
         closeHost();
       } },
-      { label: "Create and open lobby", primary: true, run: async () => {
+      { label: form.quiz_type === "contest" ? "Create and open lobby" : "Create and publish", primary: true, run: async () => {
         const created = (await adminApi("create", form)).quiz;
         setQuizDraft([]); $("#quizTitle").value = "";
         const data = await adminApi("control", { id: created.id, step: "open_lobby" });
-        studioStatus(`Lobby open for “${created.title}”. Code ${created.join_code}. Press Start when everyone’s in.`);
+        studioStatus(created.quiz_type === "contest"
+          ? `Lobby open for “${created.title}”. Code ${created.join_code}. Press Start when everyone’s in.`
+          : `“${created.title}” is live. Students can join with ${created.join_code} and it runs on its own timer.`);
         startHosting(data);
         void renderAdminList();
       } },
@@ -1221,7 +1240,7 @@
       if (quizEditingId) return;
       studioStatus(event.currentTarget.value === "contest"
         ? "Live contest: you open a lobby, students join with the code, and you move through each question with a timer, answer reveal and leaderboard."
-        : "Open quiz: after you start it, students work through the questions at their own pace, each with the timer you set, and see the right answer straight away.");
+        : "Open quiz: goes live as soon as you create it. Each student starts when they join and it moves through the questions on the timer you set. You don’t need to run it.");
     });
     if ($("#quizQuestionSeconds")) $("#quizQuestionSeconds").disabled = false;
 
