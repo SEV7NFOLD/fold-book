@@ -610,6 +610,7 @@
     player.code = ""; player.key = ""; player.active = false;
     hideOverlay($("#quizPlayOverlay"));
     void refreshAvailable();
+    applyPendingUpdate();
   }
 
   // =====================================================================
@@ -981,6 +982,7 @@
     host.id = ""; host.key = ""; host.data = null;
     hideOverlay($("#quizHostOverlay"));
     void renderAdminList();
+    applyPendingUpdate();
   }
 
   // ----- Quiz Studio list -----
@@ -1107,6 +1109,42 @@
   }
 
   // =====================================================================
+  //  Staying up to date
+  // =====================================================================
+  // Phones (and the Android app resumed from the background) can keep one page open for days, so a
+  // new release never reaches them. Remember which release this page started on; when a newer one
+  // is published, reload, but never in the middle of a quiz, and at most once per release.
+  const update = { started: "", pending: false };
+  async function liveVersion() {
+    try {
+      const text = await (await fetch("/sw.js", { cache: "no-store" })).text();
+      return (text.match(/CACHE_NAME\s*=\s*"([^"]+)"/) || [])[1] || "";
+    } catch { return ""; }
+  }
+  function inQuiz() {
+    return Boolean((player.code && player.data?.quiz?.status !== "finished") || (host.id && host.data?.quiz?.status !== "finished"));
+  }
+  function reloadForUpdate(version, reopenJoin = false) {
+    try {
+      if (sessionStorage.getItem("foldbook.reloadedFor") === version) return false;
+      sessionStorage.setItem("foldbook.reloadedFor", version);
+      if (reopenJoin) sessionStorage.setItem("foldbook.reopenJoin", "1");
+    } catch { /* storage blocked: still reload once */ }
+    window.location.reload();
+    return true;
+  }
+  async function checkForUpdate({ reopenJoin = false } = {}) {
+    const version = await liveVersion();
+    if (!version || !update.started) { if (version && !update.started) update.started = version; return false; }
+    if (version === update.started) return false;
+    if (inQuiz()) { update.pending = version; return false; }
+    return reloadForUpdate(version, reopenJoin);
+  }
+  function applyPendingUpdate() {
+    if (update.pending && !inQuiz()) reloadForUpdate(update.pending);
+  }
+
+  // =====================================================================
   //  Wiring
   // =====================================================================
   function syncHostSoundButton() {
@@ -1120,7 +1158,10 @@
   function init() {
     const unlock = () => { if (AC && AC.state === "running" && audio.loading) return; unlockAudio(); };
     ["pointerdown", "touchend", "keydown"].forEach((type) => document.addEventListener(type, unlock, { capture: true, passive: true }));
-    $("#quizJoinButton")?.addEventListener("click", () => openJoin());
+    $("#quizJoinButton")?.addEventListener("click", async () => {
+      if (await checkForUpdate({ reopenJoin: true })) return;
+      openJoin();
+    });
     $("#quizLiveBanner")?.addEventListener("click", () => {
       if (player.available.length === 1) openJoin(player.available[0].join_code, true);
       else openJoin();
@@ -1149,8 +1190,11 @@
       if (!$("#quizHostOverlay").hidden && host.key === "preview") closeHost();
       else if (!$("#quizPlayOverlay").hidden && !player.code) closePlayer();
     });
+    void liveVersion().then((version) => { update.started = version; });
+    window.setInterval(() => { if (document.visibilityState === "visible") void checkForUpdate(); }, 60000);
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState !== "visible") return;
+      void checkForUpdate();
       if (player.code && !$("#quizPlayOverlay").hidden) void pollPlayer();
     });
     $("#studentSignOut")?.addEventListener("click", () => { closePlayer(); stopAvailabilityPolling(); });
@@ -1164,9 +1208,12 @@
       const query = params.toString();
       window.history.replaceState(null, "", window.location.pathname + (query ? `?${query}` : "") + window.location.hash);
     }
+    let reopenJoin = false;
+    try { reopenJoin = sessionStorage.getItem("foldbook.reopenJoin") === "1"; sessionStorage.removeItem("foldbook.reopenJoin"); } catch { /* optional */ }
     const onStage = (stage) => {
       if (stage === "studentApp" && studentReady()) {
         startAvailabilityPolling();
+        if (reopenJoin && !pendingCode) { reopenJoin = false; openJoin(); }
         if (pendingCode) { const code = pendingCode; pendingCode = ""; openJoin(code, true); }
       } else {
         stopAvailabilityPolling();
