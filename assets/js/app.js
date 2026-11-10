@@ -2517,26 +2517,61 @@ async function loadQuizCourseOptions(){
  try{
   const response=await fetch("/api/course-catalog",{cache:"no-store"});const data=await response.json();
   const courses=Array.isArray(data.courses)?data.courses:[];
-  select.replaceChildren(...courses.map(course=>{const option=document.createElement("option");option.value=course.course_code;option.textContent=course.course_code+" · "+course.title;return option;}));
-  document.querySelector("#quizLevel").value=currentStudentLevel||"100L";
+  select.replaceChildren(...courses.map(course=>{const option=document.createElement("option");option.value=course.course_code;option.dataset.level=course.level||"";option.dataset.title=course.title||"";option.textContent=course.course_code+" · "+course.title+(course.level?" ("+course.level+")":"");return option;}));
+  syncQuizLevelToCourse();
  }catch(error){document.querySelector("#quizAdminStatus").textContent="Course catalog unavailable. "+error.message;}
 }
+// The selected course's catalogue level is the level its materials are indexed under.
+function selectedQuizCourseLevel(){
+ const option=document.querySelector("#quizCourse")?.selectedOptions?.[0];
+ const level=option?.dataset.level||"";
+ return /^(100L|200L|300L|400L)$/.test(level)?level:"";
+}
+function syncQuizLevelToCourse(){
+ const level=selectedQuizCourseLevel(),levelSelect=document.querySelector("#quizLevel");
+ if(levelSelect)levelSelect.value=level||currentStudentLevel||"100L";
+}
+document.querySelector("#quizCourse")?.addEventListener("change",syncQuizLevelToCourse);
+// Look up indexed materials for the course: its own level first, then the other levels
+// (materials are sometimes indexed under a different level than the catalogue lists).
+async function findQuizCourseMaterial(course,preferredLevel){
+ const levels=[...new Set([preferredLevel,"100L","200L","300L","400L"].filter(Boolean))];
+ for(const level of levels){
+  try{const material=await retrieveCourseMaterialContext(course,level,5,`${course} key concepts, definitions, theories and examples for exam questions`);if(material&&material.trim())return{material,level};}
+  catch(error){console.warn(`Quiz material lookup for ${course} (${level}) found nothing:`,error.message);}
+ }
+ return{material:"",level:preferredLevel};
+}
 async function draftQuizQuestions(){
- const status=document.querySelector("#quizAdminStatus");const button=document.querySelector("#generateQuizQuestions");button.disabled=true;status.textContent="Dr. Eco is preparing the question draft…";
+ const status=document.querySelector("#quizAdminStatus");const button=document.querySelector("#generateQuizQuestions");button.disabled=true;status.textContent="Dr. Eco is looking for course materials…";
  try{
   const count=Math.max(3,Math.min(20,Number(document.querySelector("#quizQuestionCount").value)||10));
-  const course=document.querySelector("#quizCourse").value,level=document.querySelector("#quizLevel").value;
-  const material=await retrieveCourseMaterialContext(course,level,5);
-  if(!material)throw new Error("No indexed course materials are available for this course yet.");
+  const courseSelect=document.querySelector("#quizCourse");const course=courseSelect.value;
+  if(!course)throw new Error("Choose a course first.");
+  const courseTitle=courseSelect.selectedOptions?.[0]?.dataset.title||"";
+  const preferredLevel=selectedQuizCourseLevel()||document.querySelector("#quizLevel").value;
+  const {material,level}=await findQuizCourseMaterial(course,preferredLevel);
+  const fromMaterial=Boolean(material);
+  status.textContent=fromMaterial?`Found ${course} materials (${level}). Drafting questions…`:`No indexed materials for ${course}; drafting from Dr. Eco's general knowledge…`;
+  const format="Return only a valid JSON array, no markdown. Each item must have prompt, options (exactly four strings), answerIndex (zero-based integer), and explanation.";
+  const systemText=fromMaterial
+   ?`You are Dr. Eco, a Nigerian university Economics professor. Base the questions on the indexed course material supplied below. If the material is too thin for the requested number of questions, complete the set with standard ${course} topics at the same level. ${format}\n\nINDEXED MATERIAL:\n${String(material).slice(0,8000)}`
+   :`You are Dr. Eco, a Nigerian university Economics professor at the University of Uyo. No course notes are available, so use your general knowledge of the standard Nigerian university syllabus for ${course}${courseTitle?` (${courseTitle})`:""} at ${preferredLevel||"undergraduate"} level. Stick to well-established, uncontroversial facts and concepts. ${format}`;
   const response=await fetch("/api/dr-eco",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-   system_instruction:{parts:[{text:"You are Dr. Eco, a Nigerian Economics professor. Use only the indexed course material supplied below. Return only a valid JSON array, no markdown. Each item must have prompt, options (exactly four strings), answerIndex (zero-based integer), and explanation.\n\nINDEXED MATERIAL:\n"+String(material).slice(0,3500)}]},
-   contents:[{role:"user",parts:[{text:`Create exactly ${count} multiple-choice Economics quiz questions for ${course}. Ensure clear wording, plausible distractors, and one correct answer each.`}]}],
+   system_instruction:{parts:[{text:systemText}]},
+   contents:[{role:"user",parts:[{text:`Create exactly ${count} multiple-choice quiz questions for ${course}${courseTitle?` (${courseTitle})`:""}. Ensure clear wording, plausible distractors, and one correct answer each.`}]}],
    generationConfig:{responseMimeType:"application/json",temperature:0.35}
   })});
-  const result=await response.json();if(!response.ok)throw new Error(result.error||"Dr. Eco could not draft questions.");
+  const result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error?.message||result.error||"Dr. Eco could not draft questions.");
   const text=String(result.candidates?.[0]?.content?.parts?.map(part=>part.text||"").join("")||"");
-  const questions=JSON.parse(text);if(!Array.isArray(questions)||questions.length!==count)throw new Error("The draft did not contain the requested number of questions. Try again.");
-  document.querySelector("#quizQuestionsJson").value=JSON.stringify(questions,null,2);status.textContent="Draft ready. Review the wording and answer indexes before saving.";
+  let questions;try{questions=parseGeminiJson(text,"quiz draft");}catch{throw new Error("Dr. Eco returned a badly formatted draft. Please try again.");}
+  if(questions&&!Array.isArray(questions)&&Array.isArray(questions.questions))questions=questions.questions;
+  if(!Array.isArray(questions))throw new Error("Dr. Eco returned an unreadable draft. Try again.");
+  questions=questions.filter(q=>q&&typeof q.prompt==="string"&&Array.isArray(q.options)&&q.options.length===4&&Number.isInteger(q.answerIndex)&&q.answerIndex>=0&&q.answerIndex<4).slice(0,count);
+  if(questions.length<Math.min(3,count))throw new Error("The draft did not contain enough usable questions. Try again.");
+  document.querySelector("#quizQuestionsJson").value=JSON.stringify(questions,null,2);
+  const shortBy=count-questions.length;
+  status.textContent=(fromMaterial?`Draft ready from ${course} course materials.`:`Draft ready from Dr. Eco's general ${course} knowledge (no indexed materials found) — check facts against the syllabus.`)+(shortBy?` Only ${questions.length} of ${count} questions were usable.`:"")+" Review the wording and answer indexes before saving.";
  }catch(e){status.textContent=e.message;}finally{button.disabled=false;}
 }
 async function createAdminQuiz(){
