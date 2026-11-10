@@ -37,8 +37,75 @@
   const ordinal = (n) => { const s = ["th", "st", "nd", "rd"], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
 
   // ---------- Sound ----------
-  function sound(key) { try { playCustomSfx(key); } catch { /* sound is optional */ } }
-  function tick(urgent) { try { tone(urgent ? 1180 : 880, 0, 0.07, "square", 0.035); } catch { /* optional */ } }
+  // Phones only allow sound that a tap started. Quiz sounds fire from polling (reveal, leaderboard,
+  // results), so the first tap unlocks one shared Web Audio context, and every sound after that plays
+  // through it from preloaded buffers. Falls back to app.js's <audio> elements if Web Audio is missing.
+  const SFX_FILES = {
+    correct: "/assets/sfx/duolingo-correct-answer-10-streak.mp3",
+    wrong: "/assets/sfx/duolingo-wrong.mp3",
+    fah: "/assets/sfx/faaah.mp3",
+    failTest: "/assets/sfx/oh-my-god-bro-oh-hell-nah-man.mp3",
+    deadClick: "/assets/sfx/vine-boom.mp3",
+    complete: "/assets/sfx/Complete%20test.mp3",
+    momentsLater: "/assets/sfx/a-few-moments-later-sponge-bob-sfx-fun.mp3",
+  };
+  const audio = { buffers: {}, loading: null, playing: {} };
+  function audioContext() {
+    const Constructor = window.AudioContext || window.webkitAudioContext;
+    if (!Constructor) return null;
+    try { if (!AC) AC = new Constructor(); return AC; } catch { return null; }
+  }
+  function loadSounds() {
+    const ctx = audioContext();
+    if (!ctx || audio.loading) return audio.loading;
+    audio.loading = Promise.all(Object.entries(SFX_FILES).map(async ([key, url]) => {
+      try {
+        const data = await (await fetch(url)).arrayBuffer();
+        audio.buffers[key] = await new Promise((resolve, reject) => ctx.decodeAudioData(data, resolve, reject));
+      } catch (error) { console.warn(`Quiz sound "${key}" did not load:`, error?.message || error); }
+    }));
+    return audio.loading;
+  }
+  function unlockAudio() {
+    // iOS: play quiz sounds even when the ringer switch is on silent (Safari 16.4+).
+    try { if (navigator.audioSession && navigator.audioSession.type !== "playback") navigator.audioSession.type = "playback"; } catch { /* optional */ }
+    const ctx = audioContext();
+    if (!ctx) return;
+    if (ctx.state !== "running") void ctx.resume().catch(() => {});
+    try { // a silent blip inside the tap is what actually unlocks iOS
+      const source = ctx.createBufferSource();
+      source.buffer = ctx.createBuffer(1, 1, 22050);
+      source.connect(ctx.destination); source.start(0);
+    } catch { /* optional */ }
+    void loadSounds();
+  }
+  function sound(key, volume = 0.9) {
+    if (!soundOn) return;
+    const ctx = AC, buffer = audio.buffers[key];
+    if (ctx && buffer) {
+      if (ctx.state !== "running") void ctx.resume().catch(() => {});
+      try {
+        const source = ctx.createBufferSource(), gain = ctx.createGain();
+        source.buffer = buffer; gain.gain.value = volume;
+        source.connect(gain).connect(ctx.destination); source.start();
+        audio.playing[key] = source;
+        return;
+      } catch { /* fall through */ }
+    }
+    try { playCustomSfx(key); } catch { /* sound is optional */ }
+  }
+  // Long sounds (the 7-second win jingle) shouldn't run over the next question's countdown.
+  function stopSound(key) {
+    try { audio.playing[key]?.stop(); } catch { /* already finished */ }
+    delete audio.playing[key];
+    try { stopCustomSfx(key); } catch { /* optional */ }
+  }
+  function tick(urgent) { try { tone(urgent ? 1180 : 760, 0, urgent ? 0.08 : 0.05, "square", urgent ? 0.05 : 0.025); } catch { /* optional */ } }
+  function chime(notes) { try { notes.forEach(([frequency, start], i) => tone(frequency, start, 0.16, "triangle", 0.09 + i * 0.01)); } catch { /* optional */ } }
+  const lockInSound = () => chime([[660, 0], [990, 0.07]]);
+  const fanfare = () => chime([[523, 0], [659, 0.12], [784, 0.24], [1047, 0.38], [784, 0.56], [1047, 0.7]]);
+  const winSound = () => sound("complete");
+  const finalWinSound = () => { sound("complete"); window.setTimeout(fanfare, 900); };
 
   // ---------- Server clock (timers stay in sync across phones) ----------
   let clockOffset = 0;
@@ -132,6 +199,66 @@
     }));
   }
 
+  function countUp(element, from, to, ms) {
+    if (!ms || from === to) { element.textContent = points(to); return; }
+    const started = performance.now();
+    const step = (time) => {
+      const k = Math.min(1, (time - started) / ms), eased = 1 - Math.pow(1 - k, 3);
+      element.textContent = points(Math.round(from + (to - from) * eased));
+      if (k < 1) requestAnimationFrame(step);
+    };
+    element.textContent = points(from);
+    requestAnimationFrame(step);
+  }
+
+  // Kahoot-style board: rows start in last round's order with last round's scores, then slide
+  // into the new order while scores count up, and the leader gets the crown.
+  function animatedBoardEl(rows, { onLeader } = {}) {
+    const list = h("ol", { class: "lq-board lq-board-anim" });
+    const items = new Map();
+    [...rows].sort((a, b) => (a.previousRank || a.rank) - (b.previousRank || b.rank)).forEach((row) => {
+      const scoreEl = h("span", { class: "lq-board-score mono", text: points(row.score - (row.round || 0)) });
+      const rankEl = h("span", { class: "lq-board-rank mono", text: String(row.previousRank || row.rank) });
+      const changeEl = h("span", { class: "lq-board-change", "aria-hidden": "true" });
+      const li = h("li", { class: "lq-board-row" + (row.me ? " is-me" : "") }, rankEl, h("span", { class: "lq-board-name", text: row.name }),
+        changeEl, row.round ? h("span", { class: "lq-board-round mono", text: "+" + points(row.round) }) : null, scoreEl);
+      items.set(row, { li, scoreEl, rankEl, changeEl });
+      list.append(li);
+    });
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let played = false;
+    list.play = () => {
+      if (played || !list.isConnected) return;
+      played = true;
+      const firstTop = new Map([...items].map(([row, item]) => [row, item.li.getBoundingClientRect().top]));
+      const ordered = [...rows].sort((a, b) => a.rank - b.rank);
+      ordered.forEach((row) => list.append(items.get(row).li));
+      ordered.forEach((row) => {
+        const item = items.get(row);
+        const dy = firstTop.get(row) - item.li.getBoundingClientRect().top;
+        item.rankEl.textContent = String(row.rank);
+        const delta = (row.previousRank || row.rank) - row.rank;
+        if (delta) { item.changeEl.textContent = (delta > 0 ? "▲" : "▼") + Math.abs(delta); item.changeEl.classList.add(delta > 0 ? "is-up" : "is-down"); }
+        if (!reduce && dy) {
+          item.li.style.transition = "none";
+          item.li.style.transform = `translateY(${dy}px)`;
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            item.li.style.transition = "transform .75s cubic-bezier(.2,.9,.3,1.12)";
+            item.li.style.transform = "";
+          }));
+        }
+        countUp(item.scoreEl, row.score - (row.round || 0), row.score, reduce ? 0 : 1000);
+      });
+      window.setTimeout(() => {
+        const leader = items.get(ordered[0])?.li;
+        leader?.classList.add("is-first", "is-crowned");
+        onLeader?.();
+      }, reduce ? 0 : 850);
+    };
+    window.setTimeout(() => list.play(), reduce ? 0 : 650);
+    return list;
+  }
+
   function podiumEl(top) {
     return h("div", { class: "lq-podium" }, [1, 0, 2].map((position) => {
       const player = top[position];
@@ -191,8 +318,9 @@
   }
 
   function describeAvailability(quiz) {
-    if (quiz.quiz_type === "open") return "Open quiz · go at your own pace";
-    return quiz.status === "lobby" ? "Live contest · lobby open" : "Live contest · in progress";
+    const kind = quiz.quiz_type === "open" ? "Open quiz" : "Live contest";
+    if (quiz.status === "lobby") return `${kind} · lobby open, waiting to start`;
+    return quiz.quiz_type === "open" ? "Open quiz · go at your own pace" : "Live contest · in progress";
   }
 
   function startAvailabilityPolling() {
@@ -286,12 +414,15 @@
     window.clearInterval(player.ticker); player.ticker = 0;
 
     // Transition sounds
-    if (previous === "lobby" && key.startsWith("c:")) sound("momentsLater");
+    if (previous === "lobby" && (key.startsWith("c:") || key.startsWith("open:"))) sound("momentsLater");
     if (previous && /^c:\d+:question$/.test(previous) && key.endsWith(":reveal")) {
       if (!data.myAnswer) sound("fah");
       else sound(data.myAnswer.correct ? "correct" : "wrong");
     }
-    if (previous && previous !== "finished" && key === "finished") sound(quiz.quiz_type === "contest" && data.me.correct === 0 ? "failTest" : "complete");
+    if (previous && previous !== "finished" && key === "finished") {
+      if (quiz.quiz_type === "contest" && data.me.correct === 0) sound("failTest");
+      else finalWinSound();
+    }
 
     if (key === "lobby") return playerLobby(data);
     if (key === "finished") return playerFinished(data);
@@ -320,6 +451,7 @@
   }
 
   function playerContestQuestion(data) {
+    stopSound("complete");
     const quiz = data.quiz, question = data.question;
     if (!question) return;
     const opensAt = Date.parse(quiz.question_started_at || "") || now();
@@ -334,6 +466,7 @@
       onPick: (index, tile, grid) => {
         if (player.locked) return;
         player.locked = true;
+        lockInSound();
         grid.querySelectorAll(".lq-tile").forEach((item) => { item.disabled = true; if (item !== tile) item.classList.add("is-dim"); });
         tile.classList.add("is-picked");
         note.textContent = "Locked in. Waiting for everyone else…";
@@ -365,7 +498,7 @@
       const remaining = opensAt + totalMs - t;
       timer.update(remaining, totalMs);
       const second = Math.ceil(remaining / 1000);
-      if (second <= 5 && second > 0 && second !== player.lastTick && !player.locked) { player.lastTick = second; tick(second <= 3); }
+      if (second > 0 && second !== player.lastTick && !player.locked) { player.lastTick = second; tick(second <= 5); }
       if (remaining <= 0 && !player.locked) {
         player.locked = true;
         tiles.querySelectorAll(".lq-tile").forEach((item) => { item.disabled = true; item.classList.add("is-dim"); });
@@ -390,12 +523,14 @@
   }
 
   function playerLeaderboard(data) {
-    const rank = data.myRank;
+    const rank = data.myRank, before = data.myPreviousRank;
+    const moved = rank && before ? before - rank : 0;
     playStage().replaceChildren(centerCard(
       h("p", { class: "lq-muted", text: data.isLastQuestion ? "Final results are next" : "Next question coming up" }),
-      h("h2", { class: "lq-big mono", text: rank ? ordinal(rank) : "—" }),
-      h("p", { text: rank ? `of ${data.playerCount} · ${points(data.me.score)} pts` : `${points(data.me.score)} pts` }),
-      boardEl(data.top || [])));
+      h("h2", { class: "lq-big mono lq-rank-pop", text: rank ? ordinal(rank) : "—" }),
+      h("p", null, rank ? `of ${data.playerCount} · ${points(data.me.score)} pts` : `${points(data.me.score)} pts`,
+        moved ? h("span", { class: "lq-board-change " + (moved > 0 ? "is-up" : "is-down"), text: ` ${moved > 0 ? "▲" : "▼"}${Math.abs(moved)}` }) : null),
+      animatedBoardEl(data.top || [], { onLeader: winSound })));
   }
 
   function playerFinished(data) {
@@ -469,11 +604,12 @@
   // =====================================================================
   //  ADMIN: Quiz Studio, preview, host screen
   // =====================================================================
-  const host = { id: "", data: null, key: "", poll: 0, ticker: 0, busy: false, seen: new Set(), autoReveal: -1, lastTick: 0, previewIndex: 0 };
+  const host = { id: "", data: null, key: "", poll: 0, ticker: 0, autoBoard: 0, busy: false, seen: new Set(), autoReveal: -1, lastTick: 0, previewIndex: 0 };
   const hostStage = () => $("#quizHostStage");
   const studioStatus = (text) => { const el = $("#quizAdminStatus"); if (el) el.textContent = text; };
 
   function stopHostTimers() {
+    window.clearTimeout(host.autoBoard); host.autoBoard = 0;
     window.clearTimeout(host.poll); host.poll = 0;
     window.clearInterval(host.ticker); host.ticker = 0;
   }
@@ -538,12 +674,12 @@
   }
 
   function draftActions(quiz) {
-    const startLabel = quiz.quiz_type === "contest" ? "Open lobby" : "Publish to students";
+    const startLabel = "Open lobby";
     return [
       { label: "Close", run: async () => { closeHost(); } },
       { label: startLabel, primary: true, run: async () => {
-        const data = await adminApi("control", { id: quiz.id, step: quiz.quiz_type === "contest" ? "open_lobby" : "publish" });
-        studioStatus(quiz.quiz_type === "contest" ? `Lobby open for “${quiz.title}”. Code ${quiz.join_code}.` : `“${quiz.title}” is live for students.`);
+        const data = await adminApi("control", { id: quiz.id, step: "open_lobby" });
+        studioStatus(`Lobby open for “${quiz.title}”. Code ${quiz.join_code}. Press Start when everyone’s in.`);
         startHosting(data);
         void renderAdminList();
       } },
@@ -633,10 +769,11 @@
     host.key = key;
     window.clearInterval(host.ticker); host.ticker = 0;
 
+    window.clearTimeout(host.autoBoard);
     if (!initial) {
-      if (previous === "lobby" && key.startsWith("c:")) sound("momentsLater");
+      if (previous === "lobby" && (key.startsWith("c:") || key === "open")) sound("momentsLater");
       if (/^c:\d+:question$/.test(previous) && key.endsWith(":reveal")) sound("correct");
-      if (previous && key === "finished") sound("complete");
+      if (previous && key === "finished") finalWinSound();
     }
 
     if (key === "lobby") return hostLobby(data);
@@ -671,7 +808,7 @@
       h("section", { class: "lq-lobby-join" },
         h("p", { class: "lq-lobby-how", text: "On FoldBook, tap 🎮 Join quiz and enter" }),
         h("p", { class: "lq-lobby-code mono", "aria-label": `Join code ${quiz.join_code.split("").join(" ")}`, text: quiz.join_code }),
-        h("p", { class: "lq-muted", text: `${quiz.questions.length} questions · ${quiz.question_seconds || 20} s each · ${audienceLabel(quiz)}` }),
+        h("p", { class: "lq-muted", text: `${quiz.questions.length} questions · ${quiz.quiz_type === "contest" ? `${quiz.question_seconds || 20} s each` : "self-paced once you start"} · ${audienceLabel(quiz)}` }),
         copy),
       h("section", { class: "lq-lobby-players", "aria-label": "Players in the lobby" },
         h("div", { class: "lq-lobby-count" }, h("b", { class: "mono", id: "quizHostPlayerCount", text: "0" }), h("span", { id: "quizHostPlayerLabel", text: "players" })),
@@ -719,6 +856,7 @@
   }
 
   function hostQuestion(data) {
+    stopSound("complete");
     const quiz = data.quiz, index = quiz.current_question, question = quiz.questions[index];
     const opensAt = Date.parse(quiz.question_started_at || "") || now();
     const totalMs = (quiz.question_seconds || 20) * 1000;
@@ -742,7 +880,7 @@
       const remaining = opensAt + totalMs - t;
       timer.update(remaining, totalMs);
       const second = Math.ceil(remaining / 1000);
-      if (second <= 5 && second > 0 && second !== host.lastTick) { host.lastTick = second; tick(second <= 3); }
+      if (second > 0 && second !== host.lastTick) { host.lastTick = second; tick(second <= 5); }
       const everyone = host.data.playerCount > 0 && host.data.answeredCount >= host.data.playerCount;
       // Auto-reveal once time runs out (plus a beat for late taps) or everyone has answered.
       if ((remaining <= -800 || everyone) && host.autoReveal !== index && !host.busy) {
@@ -765,7 +903,9 @@
       distributionEl(question.options, data.distribution, question.answerIndex),
       tilesEl(question.options, { correctIndex: question.answerIndex }),
       question.explanation ? h("p", { class: "lq-explain", text: question.explanation }) : null,
-      actionsEl([{ label: "End quiz", danger: true, run: confirmEnd }, { label: "Show leaderboard", primary: true, run: () => hostControl("leaderboard") }])));
+      actionsEl([{ label: "End quiz", danger: true, run: confirmEnd }, { label: "Show leaderboard now", primary: true, run: () => hostControl("leaderboard") }])));
+    const revealKey = host.key;
+    host.autoBoard = window.setTimeout(() => { if (host.key === revealKey && !host.busy) void hostControl("leaderboard"); }, 5000);
   }
 
   function hostLeaderboard(data) {
@@ -775,7 +915,7 @@
     hostStage().replaceChildren(h("div", { class: "lq-host-board" },
       h("h2", { class: "lq-big", text: "Leaderboard" }),
       h("p", { class: "lq-muted", text: `After question ${index + 1} of ${quiz.questions.length}` }),
-      rows.length ? boardEl(rows, { showChange: index > 0 }) : h("p", { class: "lq-muted", text: "No one has scored yet." }),
+      rows.length ? animatedBoardEl(rows, { onLeader: winSound }) : h("p", { class: "lq-muted", text: "No one has scored yet." }),
       actionsEl([
         { label: "End quiz", danger: true, run: confirmEnd },
         last ? { label: "Show final results", primary: true, run: () => hostControl("finish") }
@@ -850,9 +990,9 @@
         const buttons = [];
         if (quiz.status === "draft") {
           buttons.push(h("button", { type: "button", class: "card-secondary-button", text: "Preview", onclick: () => openPreview(quiz, draftActions(quiz)) }));
-          buttons.push(h("button", { type: "button", class: "results-submit", text: quiz.quiz_type === "contest" ? "Open lobby" : "Publish", onclick: async (event) => {
+          buttons.push(h("button", { type: "button", class: "results-submit", text: "Open lobby", onclick: async (event) => {
             event.currentTarget.disabled = true;
-            try { startHosting(await adminApi("control", { id: quiz.id, step: quiz.quiz_type === "contest" ? "open_lobby" : "publish" })); void renderAdminList(); }
+            try { startHosting(await adminApi("control", { id: quiz.id, step: "open_lobby" })); void renderAdminList(); }
             catch (e) { studioStatus(e.message); event.currentTarget.disabled = false; }
           } }));
         }
@@ -925,17 +1065,19 @@
     }
     openPreview(form, [
       { label: "Back to editing", run: async () => closeHost() },
-      { label: "Create quiz", primary: true, run: async () => {
+      { label: "Save as draft", run: async () => {
         const data = await adminApi("create", form);
-        const quiz = data.quiz;
         setQuizDraft([]); $("#quizTitle").value = "";
-        studioStatus(`Created “${quiz.title}” as a draft. Code ${quiz.join_code}.`);
+        studioStatus(`Saved “${data.quiz.title}” as a draft. Open its lobby from the list when you’re ready.`);
+        closeHost();
+      } },
+      { label: "Create and open lobby", primary: true, run: async () => {
+        const created = (await adminApi("create", form)).quiz;
+        setQuizDraft([]); $("#quizTitle").value = "";
+        const data = await adminApi("control", { id: created.id, step: "open_lobby" });
+        studioStatus(`Lobby open for “${created.title}”. Code ${created.join_code}. Press Start when everyone’s in.`);
+        startHosting(data);
         void renderAdminList();
-        setHostHeader(`Created · ${quiz.title}`, `Draft · Code ${quiz.join_code} · students can’t see it yet`);
-        renderPreview(quiz, [
-          { label: "Later", run: async () => closeHost() },
-          ...draftActions(quiz).slice(1),
-        ]);
       } },
     ]);
   }
@@ -965,6 +1107,8 @@
   }
 
   function init() {
+    const unlock = () => { if (AC && AC.state === "running" && audio.loading) return; unlockAudio(); };
+    ["pointerdown", "touchend", "keydown"].forEach((type) => document.addEventListener(type, unlock, { capture: true, passive: true }));
     $("#quizJoinButton")?.addEventListener("click", () => openJoin());
     $("#quizLiveBanner")?.addEventListener("click", () => {
       if (player.available.length === 1) openJoin(player.available[0].join_code, true);
