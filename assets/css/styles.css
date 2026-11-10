@@ -2166,6 +2166,11 @@ button.lq-tile:active:not(:disabled) { transform:translateY(4px); box-shadow:non
 .lq-board-row.is-crowned { animation:lq-bump .5s ease-out both; }
 .lq-board-row.is-crowned .lq-board-name::before { content:"👑 "; }
 .lq-rank-pop { animation:lq-pop .5s .15s cubic-bezier(.2,1.6,.4,1) both; }
+.lq-everyone { display:grid; width:min(100%, 560px); gap:8px; margin-top:6px; text-align:left; }
+.lq-everyone h3 { margin:0; color:var(--fb-color-muted); font-size:13px; font-weight:600; }
+.lq-board-full { width:100%; max-height:40vh; overflow-y:auto; margin:0; padding-right:2px; }
+.lq-board-full .lq-board-row { animation:none; padding:10px 12px; }
+.lq-board-correct { color:var(--fb-color-muted); }
 @keyframes lq-rise { from { transform:translateY(10px); opacity:0; } to { transform:none; opacity:1; } }
 
 .lq-podium { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); align-items:end; gap:10px; width:min(100%, 520px); margin:14px auto 6px; }

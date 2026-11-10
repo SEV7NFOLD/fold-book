@@ -271,6 +271,20 @@
     }));
   }
 
+  // Full ranking under the podium: everyone from 4th down, with your row highlighted.
+  function everyoneEl(data) {
+    const rest = (data.everyone || []).filter((row) => row.rank > 3);
+    if (!rest.length) return null;
+    const total = data.quiz?.total_questions || 0;
+    return h("section", { class: "lq-everyone", "aria-label": "Full leaderboard" },
+      h("h3", { text: `Everyone · ${data.playerCount} players` }),
+      h("ol", { class: "lq-board lq-board-full" }, rest.map((row) => h("li", { class: "lq-board-row" + (row.me ? " is-me" : "") },
+        h("span", { class: "lq-board-rank mono", text: String(row.rank) }),
+        h("span", { class: "lq-board-name", text: row.me ? `${row.name} (you)` : row.name }),
+        total ? h("span", { class: "lq-board-round mono lq-board-correct", text: `${row.correct}/${total}` }) : null,
+        h("span", { class: "lq-board-score mono", text: points(row.score) })))));
+  }
+
   function centerCard(...children) { return h("div", { class: "lq-center" }, ...children); }
 
   // =====================================================================
@@ -410,6 +424,10 @@
     const quiz = data.quiz;
     setPlayHeader(quiz.title, `${quiz.course_code} · Code ${quiz.join_code}`, quiz.status === "lobby" ? null : data.me.score);
     if (key === previous) { updatePlayer(data); return; }
+    // Open quiz: once a question is answered, stay on its feedback until the student taps Next,
+    // instead of letting the background refresh jump ahead.
+    if (player.holdOpen && quiz.status === "live" && key.startsWith("open:")) return;
+    player.holdOpen = false;
     player.key = key;
     window.clearInterval(player.ticker); player.ticker = 0;
 
@@ -552,46 +570,67 @@
       podiumEl(data.top || []),
       h("p", { class: "lq-result-line", text: rank ? `You finished ${ordinal(rank)} of ${data.playerCount} with ${points(data.me.score)} pts` : `${points(data.me.score)} pts` }),
       h("p", { class: "lq-muted", text: `${data.me.correct} of ${data.quiz.total_questions} answered correctly` }),
-      (data.top || []).length > 3 ? boardEl(data.top.slice(3)) : null,
+      everyoneEl(data),
       h("button", { class: "lq-primary", type: "button", text: "Done", onclick: closePlayer })));
   }
 
   function playerOpenQuestion(data) {
     const quiz = data.quiz, question = data.question, index = data.questionIndex;
     if (!question) return;
+    const totalMs = (quiz.question_seconds || 20) * 1000;
+    const startedAt = performance.now();
+    const timer = timerEl();
     const note = h("p", { class: "lq-note", role: "status" });
     const next = h("button", { class: "lq-primary", type: "button", hidden: true, text: index + 1 >= quiz.total_questions ? "See my result" : "Next question" });
-    next.addEventListener("click", () => { next.disabled = true; player.key = ""; void pollPlayer(); });
+    next.addEventListener("click", () => { next.disabled = true; player.holdOpen = false; player.key = ""; void pollPlayer(); });
     const explain = h("p", { class: "lq-explain", hidden: true });
     let busy = false;
+    const finish = (result, grid) => {
+      player.holdOpen = true;
+      window.clearInterval(player.ticker); player.ticker = 0;
+      grid.querySelectorAll(".lq-tile").forEach((item, i) => item.classList.add(i === result.answerIndex ? "is-correct" : "is-dim"));
+      note.textContent = result.timedOut ? "Time’s up!" : result.correct ? `Correct! +${result.points}` : "Not quite.";
+      note.className = "lq-note " + (result.correct ? "is-right" : "is-wrong");
+      sound(result.timedOut ? "fah" : result.correct ? "correct" : "wrong");
+      if (result.explanation) { explain.textContent = result.explanation; explain.hidden = false; }
+      setPlayHeader(quiz.title, `${quiz.course_code} · Code ${quiz.join_code}`, result.score);
+      next.hidden = false; next.focus();
+    };
+    const submit = async (payload, grid) => {
+      try { finish(await studentApi("answer", { joinCode: player.code, questionIndex: index, ...payload }), grid); }
+      catch (error) {
+        if (error.status === 409) { player.holdOpen = true; window.clearInterval(player.ticker); next.hidden = false; note.textContent = error.message; return; }
+        busy = false;
+        grid.querySelectorAll(".lq-tile").forEach((item) => { item.disabled = false; item.classList.remove("is-picked"); });
+        note.textContent = error.message;
+      }
+    };
     const tiles = tilesEl(question.options, {
-      onPick: async (picked, tile, grid) => {
+      onPick: (picked, tile, grid) => {
         if (busy) return;
-        busy = true;
+        busy = true; lockInSound();
         grid.querySelectorAll(".lq-tile").forEach((item) => { item.disabled = true; });
         tile.classList.add("is-picked");
-        try {
-          const result = await studentApi("answer", { joinCode: player.code, questionIndex: index, answerIndex: picked });
-          grid.querySelectorAll(".lq-tile").forEach((item, i) => item.classList.add(i === result.answerIndex ? "is-correct" : "is-dim"));
-          note.textContent = result.correct ? `Correct! +${result.points}` : "Not quite.";
-          note.className = "lq-note " + (result.correct ? "is-right" : "is-wrong");
-          sound(result.correct ? "correct" : "wrong");
-          if (result.explanation) { explain.textContent = result.explanation; explain.hidden = false; }
-          setPlayHeader(quiz.title, `${quiz.course_code} · Code ${quiz.join_code}`, result.score);
-          next.hidden = false; next.focus();
-        } catch (error) {
-          if (error.status === 409) { next.hidden = false; note.textContent = error.message; return; }
-          busy = false;
-          grid.querySelectorAll(".lq-tile").forEach((item) => { item.disabled = false; item.classList.remove("is-picked"); });
-          note.textContent = error.message;
-        }
+        void submit({ answerIndex: picked }, grid);
       },
     });
     playStage().replaceChildren(h("div", { class: "lq-question" },
-      h("div", { class: "lq-question-top" },
-        h("span", { class: "lq-step mono", text: `${index + 1} / ${quiz.total_questions}` }),
-        h("span", { class: "lq-progress", "aria-hidden": "true" }, h("i", { style: `transform:scaleX(${index / Math.max(1, quiz.total_questions)})` }))),
+      h("div", { class: "lq-question-top" }, h("span", { class: "lq-step mono", text: `${index + 1} / ${quiz.total_questions}` }), timer),
       h("h2", { class: "lq-prompt", text: question.prompt }), tiles, note, explain, next));
+    player.lastTick = 0;
+    const update = () => {
+      const remaining = totalMs - (performance.now() - startedAt);
+      timer.update(remaining, totalMs);
+      const second = Math.ceil(remaining / 1000);
+      if (!busy && second > 0 && second !== player.lastTick) { player.lastTick = second; tick(second <= 5); }
+      if (remaining <= 0 && !busy) {
+        busy = true;
+        tiles.querySelectorAll(".lq-tile").forEach((item) => { item.disabled = true; });
+        void submit({ timedOut: true }, tiles);
+      }
+    };
+    update();
+    player.ticker = window.setInterval(update, 200);
   }
 
   function playerOpenDone(data) {
@@ -601,12 +640,14 @@
       h("h2", { class: "lq-big", text: "All done!" }),
       h("p", { class: "lq-result-line", text: `${data.me.correct} of ${data.quiz.total_questions} correct · ${points(data.me.score)} pts` }),
       data.myRank ? h("p", { class: "lq-muted", text: `You’re ${ordinal(data.myRank)} of ${data.playerCount} so far` }) : null,
-      boardEl(data.top || []),
+      podiumEl(data.top || []),
+      everyoneEl(data),
       h("button", { class: "lq-primary", type: "button", text: "Done", onclick: closePlayer })));
   }
 
   function closePlayer() {
     stopPlayerTimers();
+    player.holdOpen = false;
     player.code = ""; player.key = ""; player.active = false;
     hideOverlay($("#quizPlayOverlay"));
     void refreshAvailable();
@@ -654,7 +695,7 @@
       h("span", { class: "lq-chip", text: quiz.course_code }),
       h("span", { class: "lq-chip", text: quiz.quiz_type === "contest" ? "Live contest · host-paced" : "Open quiz · self-paced" }),
       h("span", { class: "lq-chip", text: audienceLabel(quiz) }),
-      quiz.quiz_type === "contest" ? h("span", { class: "lq-chip", text: `${quiz.question_seconds || 20} s per question` }) : null,
+      h("span", { class: "lq-chip", text: `${quiz.question_seconds || 20} s per question` }),
       h("span", { class: "lq-chip", text: `${questions.length} questions` }),
       quiz.join_code ? h("span", { class: "lq-chip lq-chip-code mono", text: `Code ${quiz.join_code}` }) : null);
     const strip = h("div", { class: "lq-strip", role: "tablist", "aria-label": "Questions" }, questions.map((_, i) => h("button", {
@@ -663,7 +704,7 @@
     })));
     const card = question ? h("div", { class: "lq-question lq-preview-card" },
       h("div", { class: "lq-question-top" }, h("span", { class: "lq-step mono", text: `Question ${index + 1} of ${questions.length}` }),
-        quiz.quiz_type === "contest" ? h("span", { class: "lq-chip mono", text: `${quiz.question_seconds || 20} s` }) : null),
+        h("span", { class: "lq-chip mono", text: `${quiz.question_seconds || 20} s` })),
       h("h2", { class: "lq-prompt", text: question.prompt }),
       (() => { const tiles = tilesEl(question.options, { correctIndex: question.answerIndex }); tiles.classList.add("lq-tiles-preview"); return tiles; })(),
       question.explanation ? h("p", { class: "lq-explain", text: question.explanation }) : h("p", { class: "lq-muted", text: "No explanation for this question." }))
@@ -820,7 +861,7 @@
       h("section", { class: "lq-lobby-join" },
         h("p", { class: "lq-lobby-how", text: "On FoldBook, tap 🎮 Join quiz and enter" }),
         h("p", { class: "lq-lobby-code mono", "aria-label": `Join code ${quiz.join_code.split("").join(" ")}`, text: quiz.join_code }),
-        h("p", { class: "lq-muted", text: `${quiz.questions.length} questions · ${quiz.quiz_type === "contest" ? `${quiz.question_seconds || 20} s each` : "self-paced once you start"} · ${audienceLabel(quiz)}` }),
+        h("p", { class: "lq-muted", text: `${quiz.questions.length} questions · ${quiz.question_seconds || 20} s each${quiz.quiz_type === "contest" ? "" : ", self-paced once you start"} · ${audienceLabel(quiz)}` }),
         copy),
       h("section", { class: "lq-lobby-players", "aria-label": "Players in the lobby" },
         h("div", { class: "lq-lobby-count" }, h("b", { class: "mono", id: "quizHostPlayerCount", text: "0" }), h("span", { id: "quizHostPlayerLabel", text: "players" })),
@@ -998,7 +1039,7 @@
       box.replaceChildren(...quizzes.map((quiz) => {
         const players = Array.isArray(quiz.foldbook_quiz_participants) ? quiz.foldbook_quiz_participants : [];
         const count = Array.isArray(quiz.questions) ? quiz.questions.length : 0;
-        const meta = [quiz.course_code, quiz.quiz_type === "contest" ? `Live contest · ${quiz.question_seconds || 20} s` : "Open quiz", `${count} questions`, audienceLabel(quiz)];
+        const meta = [quiz.course_code, `${quiz.quiz_type === "contest" ? "Live contest" : "Open quiz"} · ${quiz.question_seconds || 20} s`, `${count} questions`, audienceLabel(quiz)];
         if (quiz.status !== "draft") meta.push(`${players.length} joined`);
         const buttons = [];
         if (quiz.status === "draft") {
@@ -1177,13 +1218,12 @@
     $("#quizHostSound")?.addEventListener("click", () => { soundOn = !soundOn; syncHostSoundButton(); });
     $("#createQuiz")?.addEventListener("click", previewFromStudio);
     $("#quizMode")?.addEventListener("change", (event) => {
-      $("#quizQuestionSeconds").disabled = event.currentTarget.value !== "contest";
       if (quizEditingId) return;
       studioStatus(event.currentTarget.value === "contest"
         ? "Live contest: you open a lobby, students join with the code, and you move through each question with a timer, answer reveal and leaderboard."
-        : "Open quiz: students answer at their own pace and see the right answer straight away.");
+        : "Open quiz: after you start it, students work through the questions at their own pace, each with the timer you set, and see the right answer straight away.");
     });
-    if ($("#quizMode") && $("#quizQuestionSeconds")) $("#quizQuestionSeconds").disabled = $("#quizMode").value !== "contest";
+    if ($("#quizQuestionSeconds")) $("#quizQuestionSeconds").disabled = false;
 
     document.addEventListener("keydown", (event) => {
       if (event.key !== "Escape") return;
