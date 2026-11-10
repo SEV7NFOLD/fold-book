@@ -433,21 +433,32 @@
     return playerLeaderboard(data);
   }
 
-  function updatePlayer(data) {
+  function updatePlayer(data, first = false) {
     const count = $("#quizLobbyCount", playStage());
     if (count && Number.isFinite(data.playerCount)) count.textContent = data.playerCount === 1 ? "1 player is in" : `${data.playerCount} players are in`;
+    const chips = $("#quizLobbyPlayers", playStage());
+    if (!chips || !Array.isArray(data.players)) return;
+    // Add newcomers with a pop, drop anyone who left or was removed; you are always first.
+    const wanted = new Map(data.players.map((p) => [p.key + "|" + p.name, p]));
+    [...chips.children].forEach((chip) => { if (!wanted.has(chip.dataset.key)) chip.remove(); });
+    const present = new Set([...chips.children].map((chip) => chip.dataset.key));
+    data.players.forEach((p) => {
+      const key = p.key + "|" + p.name;
+      if (present.has(key)) return;
+      const chip = h("li", { class: "lq-player-chip" + (p.me ? " is-me" : "") + (first ? "" : " is-new"), "data-key": key, text: p.me ? `${p.name} (you)` : p.name });
+      if (p.me) chips.prepend(chip); else chips.append(chip);
+    });
   }
 
   function playerLobby(data) {
-    const name = (typeof currentStudent !== "undefined" && currentStudent?.name) || "You";
     playStage().replaceChildren(centerCard(
       h("span", { class: "lq-badge-ok", "aria-hidden": "true", text: "✓" }),
       h("h2", { class: "lq-big", text: "You’re in!" }),
-      h("p", { class: "lq-name-tag", text: name }),
       h("p", { text: "Watch the host’s screen. The first question appears here when they press Start." }),
+      h("span", { class: "lq-waiting-dots", "aria-hidden": "true" }, h("i"), h("i"), h("i")),
       h("p", { class: "lq-pill-stat", id: "quizLobbyCount", text: "" }),
-      h("span", { class: "lq-waiting-dots", "aria-hidden": "true" }, h("i"), h("i"), h("i"))));
-    updatePlayer(data);
+      h("ul", { class: "lq-player-chips lq-lobby-list", id: "quizLobbyPlayers", "aria-label": "Players in the lobby" })));
+    updatePlayer(data, true);
   }
 
   function playerContestQuestion(data) {
