@@ -68,6 +68,7 @@ function cleanModuleAttempts(value) {
       questionFirstPassDone: Array.isArray(record.questionFirstPassDone) ? record.questionFirstPassDone.slice(0, 15).map((done) => done === true) : [],
       correctionMode: record.correctionMode === true,
       activityComplete: record.activityComplete === true,
+      rewardClaimed: record.rewardClaimed === true,
     }]];
   }));
 }

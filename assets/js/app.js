@@ -90,6 +90,48 @@ function sanitizeStudyModules(items, courseCode) {
 const STUDY_PROGRESS_KEY = "foldBook.studyProgress";
 const LEGACY_STUDY_PROGRESS_KEY = "foldBookV2.studyProgress";
 let activeStudyProgressKey = STUDY_PROGRESS_KEY;
+const STUDY_TRAIL_OFFSETS = [0, 44, 70, 44, 0, -44, -70, -44];
+const STUDY_TRAIL_TONES = ["lime", "violet", "gold", "green"];
+const STUDY_TRAIL_CHEST_GEMS = 10;
+const STUDY_TRAIL_ACTIVITIES = {
+  lesson: {
+    name: "Learn",
+    detail: "A short lesson, then a quick checkpoint.",
+    icon: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 8c4.5-1.8 8-1 11 1.4v16C13 23 9.5 22.3 5 24z"/><path d="M27 8c-4.5-1.8-8-1-11 1.4v16c3-2.4 6.5-3.1 11-1.4z"/></svg>',
+  },
+  article: {
+    name: "Read",
+    detail: "A short read from Dr. Eco, then a quick checkpoint.",
+    icon: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 4.5h10l5 5v18H9z"/><path d="M19 4.5v5h5M13 15h7m-7 4h7m-7 4h4"/></svg>',
+  },
+  video: {
+    name: "Watch",
+    detail: "A short video lesson, then a quick checkpoint.",
+    icon: '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="4.5" y="8" width="17" height="16" rx="4"/><path d="m21.5 14 6-3.5v11l-6-3.5"/></svg>',
+  },
+  chat: {
+    name: "Chat with Dr. Eco",
+    detail: "Talk the idea through with Dr. Eco, then a quick checkpoint.",
+    icon: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 9a4.5 4.5 0 0 1 4.5-4.5h13A4.5 4.5 0 0 1 27 9v8a4.5 4.5 0 0 1-4.5 4.5H14L7.5 27v-5.8A4.5 4.5 0 0 1 5 17z"/><path d="M11 13h.01M16 13h.01M21 13h.01" stroke-width="3.4"/></svg>',
+  },
+  live: {
+    name: "Call Dr. Eco",
+    detail: "A short voice call with Dr. Eco, then a quick checkpoint.",
+    icon: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 17v-2a9 9 0 0 1 18 0v2"/><rect x="4.5" y="16" width="6" height="9" rx="2.5"/><rect x="21.5" y="16" width="6" height="9" rx="2.5"/><path d="M24.5 25c0 2-2 3-5 3h-2"/></svg>',
+  },
+  test: {
+    name: "Practice",
+    detail: "A warm-up practice round, then a quick checkpoint.",
+    icon: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="m16 4 3.6 7.3 8 1.2-5.8 5.6 1.4 8L16 22.3l-7.2 3.8 1.4-8-5.8-5.6 8-1.2z"/></svg>',
+  },
+};
+const STUDY_TRAIL_REVIEW_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 8a5 5 0 1 1-1.5-3.6M13 2.5v2.8h-2.8"/></svg>';
+const STUDY_TRAIL_GUIDE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3.5" width="14" height="17" rx="2.5"/><path d="M9 8.5h6M9 12h6M9 15.5h3.5"/></svg>';
+const STUDY_TRAIL_CHEST = '<svg viewBox="0 0 72 64" aria-hidden="true"><path class="chest-edge" d="M7 36h58v20a6 6 0 0 1-6 6H13a6 6 0 0 1-6-6z"/><path class="chest-body" d="M7 32h58v20a6 6 0 0 1-6 6H13a6 6 0 0 1-6-6z"/><path class="chest-lid" d="M7 32V21C7 11 18 4 36 4s29 7 29 17v11z"/><path class="chest-band" d="M7 28h58v6H7zM19 6.5h7V58h-7zM46 6.5h7V58h-7z"/><rect class="chest-lock" x="29.5" y="24" width="13" height="15" rx="3.5"/></svg>';
+const STUDY_TRAIL_CHEST_OPEN = '<svg viewBox="0 0 72 64" aria-hidden="true"><path class="chest-lid" d="M9 26 13 9C15 4 21 2 36 2s21 2 23 7l4 17z"/><path class="chest-band" d="M19 4h7l-2 22h-7zM46 4h7l2 22h-7z"/><path class="chest-inner" d="M8 25h56v9H8z"/><path class="chest-edge" d="M7 36h58v20a6 6 0 0 1-6 6H13a6 6 0 0 1-6-6z"/><path class="chest-body" d="M7 32h58v20a6 6 0 0 1-6 6H13a6 6 0 0 1-6-6z"/><path class="chest-band" d="M7 32h58v5H7zM19 32h7v26h-7zM46 32h7v26h-7z"/></svg>';
+const STUDY_TRAIL_TROPHY = '<svg viewBox="0 0 72 72" aria-hidden="true"><path class="trophy-handle" d="M20 14H9v6a12 12 0 0 0 12 12M52 14h11v6a12 12 0 0 1-12 12"/><path class="trophy-cup" d="M20 8h32v16a16 16 0 0 1-32 0z"/><path class="trophy-shine" d="M27 13v10a9 9 0 0 0 4 7.5"/><path class="trophy-stem" d="M32 40h8v10h-8z"/><path class="trophy-base" d="M22 52h28a4 4 0 0 1 4 4v6H18v-6a4 4 0 0 1 4-4z"/></svg>';
+let studyTrailOpenPopover = null;
+let studyTrailGuide = null;
 const navButtons = [...document.querySelectorAll("[data-tab]")];
 const studyPanels = new Map(["home", "chat", "board", "invite", "results"].map((id) => [id, document.querySelector(id === "results" ? "#studentResults" : `#${id}`)]));
 const pathTree = document.querySelector("#pathTree");
@@ -561,6 +603,7 @@ function applySyncedStudyState(state, { preserveLocal = false } = {}) {
         questionFirstPassDone: Array.from({ length: Math.max(remoteFirstPass.length, localFirstPass.length) }, (_, index) => remoteFirstPass[index] === true || localFirstPass[index] === true),
         correctionMode: safeRemote.correctionMode === true || local.correctionMode === true,
         activityComplete: safeRemote.activityComplete === true || local.activityComplete === true,
+        rewardClaimed: safeRemote.rewardClaimed === true || local.rewardClaimed === true,
       };
     }
   }
@@ -1922,40 +1965,196 @@ async function removeActiveStudyPath() {
 }
 document.querySelector("#deleteActivePath")?.addEventListener("click", removeActiveStudyPath);
 
-function drawStudyPathTrail() {
-  const tree = document.querySelector("#pathTree");
-  if (!tree) return;
-  const nodes = [...tree.querySelectorAll(".node")];
-  tree.querySelector(".path-route")?.remove();
-  if (nodes.length < 2 || tree.clientWidth < 1) return;
-  const bounds = tree.getBoundingClientRect();
-  const width = tree.clientWidth;
-  const height = tree.scrollHeight;
-  const points = nodes.map((node) => {
-    const rect = node.getBoundingClientRect();
-    return { x: rect.left - bounds.left + rect.width / 2, y: rect.top - bounds.top + rect.height / 2 };
-  });
-  const curve = points.slice(0, -1).map((point, index) => {
-    const next = points[index + 1];
-    const middle = (point.y + next.y) / 2;
-    return `C ${point.x} ${middle}, ${next.x} ${middle}, ${next.x} ${next.y}`;
-  }).join(" ");
-  const route = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  route.classList.add("path-route");
-  route.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  route.setAttribute("preserveAspectRatio", "none");
-  route.setAttribute("aria-hidden", "true");
-  const track = document.createElementNS(route.namespaceURI, "path");
-  track.setAttribute("d", `M ${points[0].x} ${points[0].y} ${curve}`);
-  track.setAttribute("class", "path-route-track");
-  const trail = track.cloneNode();
-  trail.setAttribute("class", "path-route-dash");
-  route.append(track, trail);
-  tree.insertBefore(route, tree.firstChild);
+function studyTrailTitle(title) {
+  return String(title || "").replace(/^\s*(module|unit|lesson|step)\s*\d+\s*[:.\-–—]\s*/i, "").trim() || String(title || "");
 }
-window.addEventListener("resize", () => requestAnimationFrame(drawStudyPathTrail), { passive: true });
+
+function studyTrailUnits(modules) {
+  if (!modules.length) return [];
+  const unitCount = Math.ceil(modules.length / 5);
+  const size = Math.ceil(modules.length / unitCount);
+  const units = [];
+  for (let start = 0; start < modules.length; start += size) units.push({ start, modules: modules.slice(start, start + size) });
+  return units;
+}
+
+function studyTrailStep(offset) {
+  const item = document.createElement("li");
+  item.className = "trail-step";
+  item.style.setProperty("--trail-x", `${offset}px`);
+  const wrap = document.createElement("div");
+  wrap.className = "trail-node-wrap";
+  item.append(wrap);
+  return { item, wrap };
+}
+
+function studyTrailBubble(text) {
+  const bubble = document.createElement("span");
+  bubble.className = "trail-bubble";
+  bubble.setAttribute("aria-hidden", "true");
+  bubble.textContent = text;
+  return bubble;
+}
+
+function studyTrailCharacter(character, side, animated) {
+  const slot = document.createElement("div");
+  slot.className = `trail-character is-${side}`;
+  slot.setAttribute("aria-hidden", "true");
+  const art = document.createElement("img");
+  art.className = "trail-character-art";
+  art.alt = "";
+  art.src = character === "eco" ? "/assets/brand/eco-avatar.svg" : "/assets/brand/foldo-mark-dark.svg";
+  slot.append(art);
+  if (animated && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+    requestAnimationFrame(() => {
+      if (slot.isConnected) window.playFoldBookMascot?.(character, "idle", slot, character === "eco" ? { cap: "round" } : { flameDays: studyProgress.streak });
+    });
+  }
+  return slot;
+}
+
+function closeStudyTrailPopover({ restoreFocus = false } = {}) {
+  if (!studyTrailOpenPopover) return;
+  const { popover, trigger } = studyTrailOpenPopover;
+  studyTrailOpenPopover = null;
+  popover.parentElement?.classList.remove("is-open");
+  popover.remove();
+  trigger.setAttribute("aria-expanded", "false");
+  if (restoreFocus && trigger.isConnected) trigger.focus({ preventScroll: true });
+}
+
+function toggleStudyTrailPopover(step, trigger, content) {
+  const wasOpen = studyTrailOpenPopover?.trigger === trigger;
+  closeStudyTrailPopover();
+  if (wasOpen) return;
+  const popover = document.createElement("div");
+  const titleId = `trailPopoverTitle${Date.now()}`;
+  popover.className = `trail-popover${content.locked ? " is-locked" : ""}`;
+  popover.setAttribute("role", "dialog");
+  popover.setAttribute("aria-labelledby", titleId);
+  const kind = document.createElement("p");
+  kind.className = "trail-popover-kind";
+  kind.textContent = content.kind;
+  const title = document.createElement("h3");
+  title.id = titleId;
+  title.textContent = content.title;
+  const detail = document.createElement("p");
+  detail.className = "trail-popover-detail";
+  detail.textContent = content.detail;
+  popover.append(kind, title, detail);
+  if (content.action) {
+    const action = document.createElement("button");
+    action.type = "button";
+    action.className = "trail-popover-action";
+    action.textContent = content.action;
+    action.addEventListener("click", () => {
+      closeStudyTrailPopover();
+      content.onAction();
+    });
+    popover.append(action);
+  } else popover.tabIndex = -1;
+  step.append(popover);
+  step.classList.add("is-open");
+  trigger.setAttribute("aria-expanded", "true");
+  studyTrailOpenPopover = { popover, trigger };
+  requestAnimationFrame(() => {
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    popover.scrollIntoView?.({ block: "nearest", behavior: reduceMotion ? "auto" : "smooth" });
+    (popover.querySelector(".trail-popover-action") || popover).focus({ preventScroll: true });
+  });
+}
+
+document.addEventListener("click", (event) => {
+  if (!studyTrailOpenPopover) return;
+  const { popover, trigger } = studyTrailOpenPopover;
+  if (popover.contains(event.target) || trigger.contains(event.target)) return;
+  closeStudyTrailPopover();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && studyTrailOpenPopover) closeStudyTrailPopover({ restoreFocus: true });
+});
+
+function claimStudyTrailChest(anchor) {
+  const record = studyProgress.attempts[anchor.id];
+  if (!record || record.rewardClaimed === true || !studyProgress.completed.includes(anchor.id)) return;
+  record.rewardClaimed = true;
+  studyProgress.gems += STUDY_TRAIL_CHEST_GEMS;
+  saveStudyProgress();
+  void syncLearningProfile("progress", currentCourse);
+  updateStudySummary();
+  renderStudyPath();
+  showNotice(`Chest opened: +${STUDY_TRAIL_CHEST_GEMS} gems.`);
+}
+
+function openStudyTrailGuide(unit, unitIndex, tone, trigger) {
+  if (!studyTrailGuide) {
+    const overlay = document.createElement("div");
+    overlay.className = "profile-modal-overlay trail-guide-overlay";
+    overlay.hidden = true;
+    overlay.innerHTML = '<section class="profile-modal-card trail-guide-card" role="dialog" aria-modal="true" aria-labelledby="trailGuideTitle"><button type="button" class="trail-guide-close" aria-label="Close unit guide">×</button><p class="trail-guide-kicker" id="trailGuideKicker"></p><h2 id="trailGuideTitle"></h2><ol class="trail-guide-list" id="trailGuideList"></ol></section>';
+    document.body.append(overlay);
+    const close = () => {
+      overlay.hidden = true;
+      studyTrailGuide.trigger?.focus({ preventScroll: true });
+    };
+    overlay.addEventListener("click", (event) => { if (event.target === overlay) close(); });
+    overlay.querySelector(".trail-guide-close").addEventListener("click", close);
+    overlay.addEventListener("keydown", (event) => { if (event.key === "Escape") close(); });
+    studyTrailGuide = { overlay, close, trigger: null };
+  }
+  const { overlay } = studyTrailGuide;
+  studyTrailGuide.trigger = trigger;
+  overlay.querySelector(".trail-guide-card").className = `profile-modal-card trail-guide-card tone-${tone}`;
+  overlay.querySelector("#trailGuideKicker").textContent = `Unit ${unitIndex + 1} of ${studyTrailUnits(activeModules).length}`;
+  overlay.querySelector("#trailGuideTitle").textContent = studyTrailTitle(unit.modules[0].title);
+  const list = overlay.querySelector("#trailGuideList");
+  list.replaceChildren();
+  const firstOpenIndex = activeModules.findIndex((module) => !studyProgress.completed.includes(module.id));
+  unit.modules.forEach((module, localIndex) => {
+    const index = unit.start + localIndex;
+    const isComplete = studyProgress.completed.includes(module.id);
+    const isCurrent = !isComplete && index === firstOpenIndex;
+    const activityType = STUDY_TRAIL_ACTIVITIES[module.activityType] ? module.activityType : "lesson";
+    const activity = STUDY_TRAIL_ACTIVITIES[activityType];
+    const history = studyProgress.attempts[module.id];
+    const accuracy = history?.attempts ? Math.round((history.correct / history.attempts) * 100) : null;
+    const item = document.createElement("li");
+    const entry = document.createElement(isComplete || isCurrent ? "button" : "div");
+    entry.className = `trail-guide-item ${isComplete ? "is-done" : isCurrent ? "is-current" : "is-locked"}`;
+    if (entry.tagName === "BUTTON") {
+      entry.type = "button";
+      entry.addEventListener("click", () => {
+        studyTrailGuide.close();
+        showStudyLesson(index);
+      });
+    }
+    const icon = document.createElement("span");
+    icon.className = "trail-guide-icon";
+    icon.innerHTML = activity.icon;
+    const text = document.createElement("span");
+    const name = document.createElement("b");
+    name.textContent = studyTrailTitle(module.title);
+    const state = document.createElement("small");
+    state.textContent = `${activity.name}. ${isComplete ? `Done${accuracy === null ? "" : `, ${accuracy}%`}` : isCurrent ? "Up next" : "Locked"}`;
+    text.append(name, state);
+    entry.append(icon, text);
+    item.append(entry);
+    list.append(item);
+  });
+  overlay.hidden = false;
+  overlay.querySelector(".trail-guide-close").focus({ preventScroll: true });
+}
+
+function syncStudyTrailStickyOffset() {
+  const header = document.querySelector(".top");
+  const height = header && getComputedStyle(header).position !== "static" ? Math.round(header.getBoundingClientRect().height) : 0;
+  pathTree.style.setProperty("--trail-sticky-top", `${height}px`);
+}
+window.addEventListener("resize", () => requestAnimationFrame(syncStudyTrailStickyOffset), { passive: true });
+
 
 function renderStudyPath() {
+  closeStudyTrailPopover();
   pathTree.replaceChildren();
   const completedCount = studyProgress.completed.length;
   document.querySelector("#wkd").textContent = `${currentCourse} · STUDY PATH`;
@@ -2012,86 +2211,154 @@ function renderStudyPath() {
     }
   }
 
-  const activityIcons = {
-    lesson: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 7.5c4.4-1.7 7.7-.9 10 1.2v17c-2.8-2-6.1-2.8-10-1.2zM26 7.5c-4.4-1.7-7.7-.9-10 1.2v17c2.8-2 6.1-2.8 10-1.2z"/><path d="M10 12h3m-3 4h3m6-4h3m-3 4h3"/></svg>',
-    video: '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="5" y="8" width="22" height="16" rx="4"/><path d="m13 12 8 4-8 4z"/></svg>',
-    article: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 4h10l5 5v19H9z"/><path d="M19 4v6h5M13 15h7m-7 4h7m-7 4h5"/></svg>',
-    live: '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="12" y="5" width="8" height="16" rx="4"/><path d="M8 15a8 8 0 0 0 16 0m-8 8v5m-5 0h10"/></svg>',
-    chat: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 8.5A4.5 4.5 0 0 1 9.5 4h13A4.5 4.5 0 0 1 27 8.5v9a4.5 4.5 0 0 1-4.5 4.5H14l-7 5v-6.2a4.5 4.5 0 0 1-2-3.8z"/><path d="M11 12h10m-10 4h7"/></svg>',
-    test: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="m16 3 3.8 7.7 8.5 1.2-6.1 6 .0 0 1.5 8.5L16 22.4l-7.7 4 1.5-8.5-6.1-6 8.5-1.2z"/><path d="m12.5 16 2.3 2.3 4.8-5"/></svg>',
-  };
-  const activityNames = { lesson: "Learn", video: "Watch", article: "Read", live: "Talk", chat: "Discuss", test: "Practice" };
-  const activityTypes = ["lesson", "video", "article", "live", "chat", "test"];
-  activeModules.forEach((module, index) => {
-    if (index % 5 === 0) {
-      const section = document.createElement("header");
-      section.className = "path-section-heading";
-      const kicker = document.createElement("small");
-      kicker.textContent = `SECTION ${Math.floor(index / 5) + 1} · UNIT ${index + 1}`;
-      const heading = document.createElement("h2");
-      heading.textContent = module.title;
-      section.append(kicker, heading);
-      pathTree.append(section);
-    }
-    const isComplete = studyProgress.completed.includes(module.id);
-    const isUnlocked = isComplete || index === studyProgress.completed.length;
-    const activityType = activityTypes.includes(module.activityType) ? module.activityType : "lesson";
-    const offset = [0, 62, 12, -62, -12][index % 5];
-    const row = document.createElement("div");
-    const node = document.createElement("button");
-    const label = document.createElement("div");
-    const title = document.createElement("b");
-    const detail = document.createElement("span");
-    row.className = `row${offset < 0 ? " flip" : ""}${isUnlocked && !isComplete ? " is-current" : ""}`;
-    row.style.setProperty("--path-offset", `${offset}px`);
-    if (index % 5 === 3) row.classList.add("has-mascot");
-    node.type = "button";
-    node.className = `node ${isComplete ? "done" : isUnlocked ? "active" : "locked"} activity-${activityType}`;
-    node.setAttribute("aria-label", `${isComplete ? "Review" : isUnlocked ? "Start" : "Locked"} ${activityNames[activityType].toLowerCase()} activity ${index + 1}: ${module.title}`);
-    node.setAttribute("aria-disabled", String(!isUnlocked));
-    node.innerHTML = isComplete
-      ? '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="3.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 17 6 6L26 9"/></svg>'
-      : activityIcons[activityType];
-    if (!isUnlocked && !isComplete) {
-      const lockBadge = document.createElement("span");
-      lockBadge.className = "node-lock-badge";
-      lockBadge.setAttribute("aria-hidden", "true");
-      lockBadge.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 7V5a4 4 0 0 1 8 0v2h1v7H3V7zm2 0h4V5a2 2 0 0 0-4 0z"/></svg>';
-      node.append(lockBadge);
-    }
-    label.className = "lab";
-    title.textContent = module.title;
-    const history = studyProgress.attempts[module.id];
-    const accuracy = history?.attempts ? Math.round((history.correct / history.attempts) * 100) : null;
-    detail.textContent = isComplete
-      ? `COMPLETED · ${accuracy === null ? "SCORE NOT RECORDED" : `OVERALL ${accuracy}%`}`
-      : history?.wrong >= 2 && accuracy < 70
-        ? `Needs practice · ${accuracy}%`
-        : activityNames[activityType];
-    if (history?.wrong >= 2 && accuracy < 70) node.classList.add("needs-review");
-    label.append(title, detail);
-    node.addEventListener("click", () => {
-      if (!isUnlocked) {
-        node.classList.toggle("shake", false);
-        void node.offsetWidth;
-        node.classList.add("shake");
-        return;
+  const units = studyTrailUnits(activeModules);
+  const firstOpenIndex = activeModules.findIndex((module) => !studyProgress.completed.includes(module.id));
+  const currentUnit = firstOpenIndex >= 0
+    ? units.findIndex((unit) => unit.start <= firstOpenIndex && firstOpenIndex < unit.start + unit.modules.length)
+    : units.length - 1;
+  const character = foldbookCharacterFor(currentCourse);
+  units.forEach((unit, unitIndex) => {
+    const direction = unitIndex % 2 === 0 ? 1 : -1;
+    const tone = STUDY_TRAIL_TONES[unitIndex % STUDY_TRAIL_TONES.length];
+    const section = document.createElement("section");
+    section.className = `trail-unit tone-${tone}`;
+    section.setAttribute("aria-labelledby", `trailUnitTitle${unitIndex}`);
+    const banner = document.createElement("header");
+    banner.className = "trail-banner";
+    const bannerText = document.createElement("div");
+    bannerText.className = "trail-banner-text";
+    const kicker = document.createElement("p");
+    kicker.textContent = `Unit ${unitIndex + 1}`;
+    const heading = document.createElement("h2");
+    heading.id = `trailUnitTitle${unitIndex}`;
+    heading.textContent = studyTrailTitle(unit.modules[0].title);
+    bannerText.append(kicker, heading);
+    const guide = document.createElement("button");
+    guide.type = "button";
+    guide.className = "trail-banner-guide";
+    guide.setAttribute("aria-label", `See every activity in unit ${unitIndex + 1}`);
+    guide.innerHTML = STUDY_TRAIL_GUIDE_ICON;
+    guide.addEventListener("click", () => openStudyTrailGuide(unit, unitIndex, tone, guide));
+    banner.append(bannerText, guide);
+    const steps = document.createElement("ol");
+    steps.className = "trail-steps";
+    section.append(banner, steps);
+
+    unit.modules.forEach((module, localIndex) => {
+      const index = unit.start + localIndex;
+      const isComplete = studyProgress.completed.includes(module.id);
+      const isCurrent = !isComplete && index === firstOpenIndex;
+      const isUnlocked = isComplete || isCurrent;
+      const activityType = STUDY_TRAIL_ACTIVITIES[module.activityType] ? module.activityType : "lesson";
+      const activity = STUDY_TRAIL_ACTIVITIES[activityType];
+      const history = studyProgress.attempts[module.id];
+      const accuracy = history?.attempts ? Math.round((history.correct / history.attempts) * 100) : null;
+      const needsReview = isComplete && history?.wrong >= 2 && accuracy < 70;
+      const step = studyTrailStep(STUDY_TRAIL_OFFSETS[localIndex % STUDY_TRAIL_OFFSETS.length] * direction);
+      const node = document.createElement("button");
+      node.type = "button";
+      node.className = `trail-node activity-${activityType} ${isComplete ? "is-done" : isCurrent ? "is-current" : "is-locked"}`;
+      node.dataset.moduleId = module.id;
+      node.setAttribute("aria-disabled", String(!isUnlocked));
+      node.setAttribute("aria-label", `${activity.name}, activity ${index + 1} of ${activeModules.length}: ${studyTrailTitle(module.title)}. ${isComplete
+        ? `Completed${accuracy === null ? "" : ` with ${accuracy}%`}${needsReview ? ", worth a review" : ""}.`
+        : isCurrent ? "Up next." : "Locked."}`);
+      node.innerHTML = activity.icon;
+      if (needsReview) {
+        const badge = document.createElement("span");
+        badge.className = "trail-node-badge";
+        badge.setAttribute("aria-hidden", "true");
+        badge.innerHTML = STUDY_TRAIL_REVIEW_ICON;
+        node.append(badge);
       }
-      showStudyLesson(index);
+      if (isCurrent) {
+        const record = history || {};
+        const total = Math.max(1, module.questions?.length || 1);
+        const answered = Array.isArray(record.questionResults) ? record.questionResults.filter(Boolean).length : 0;
+        step.wrap.classList.add("has-ring");
+        step.wrap.style.setProperty("--trail-progress", String(Math.min(1, answered / total)));
+        step.wrap.append(studyTrailBubble("Start"));
+        step.item.classList.add("has-bubble");
+      }
+      step.wrap.append(node);
+      node.addEventListener("click", () => {
+        if (!isUnlocked) {
+          node.classList.toggle("shake", false);
+          void node.offsetWidth;
+          node.classList.add("shake");
+        }
+        toggleStudyTrailPopover(step.item, node, {
+          kind: activity.name,
+          title: studyTrailTitle(module.title),
+          detail: isComplete
+            ? needsReview
+              ? `You’re at ${accuracy}% here. A quick review will lift it.`
+              : accuracy === null ? "Completed. Come back any time to review." : `Completed with ${accuracy}%. Come back any time to review.`
+            : isCurrent ? activity.detail : "Finish the activities above to unlock this one.",
+          action: isUnlocked ? (isComplete ? "Review" : "Start") : "",
+          locked: !isUnlocked,
+          onAction: () => showStudyLesson(index),
+        });
+      });
+      if (localIndex === 2 || (unit.modules.length < 3 && localIndex === unit.modules.length - 1)) {
+        step.item.append(studyTrailCharacter(character, direction > 0 ? "left" : "right", unitIndex === currentUnit));
+      }
+      steps.append(step.item);
     });
-    if (index % 5 === 3) {
-      const mascot = document.createElement("img");
-      mascot.className = "path-side-mascot";
-      mascot.alt = "";
-      mascot.setAttribute("aria-hidden", "true");
-      mascot.src = String(currentCourse || "").toUpperCase().startsWith("ECO")
-        ? "/assets/brand/eco-avatar.svg" : "/assets/brand/foldo-icon.svg";
-      row.append(mascot);
+
+    const isLastUnit = unitIndex === units.length - 1;
+    const unitDone = unit.modules.every((module) => studyProgress.completed.includes(module.id));
+    const goal = studyTrailStep(STUDY_TRAIL_OFFSETS[unit.modules.length % STUDY_TRAIL_OFFSETS.length] * direction);
+    goal.item.classList.add("is-goal");
+    const goalButton = document.createElement("button");
+    goalButton.type = "button";
+    if (!isLastUnit) {
+      const anchor = unit.modules[unit.modules.length - 1];
+      const claimed = studyProgress.attempts[anchor.id]?.rewardClaimed === true;
+      goalButton.className = `trail-goal trail-chest ${claimed ? "is-claimed" : unitDone ? "is-ready" : "is-locked"}`;
+      goalButton.innerHTML = claimed ? STUDY_TRAIL_CHEST_OPEN : STUDY_TRAIL_CHEST;
+      goalButton.setAttribute("aria-label", `Unit ${unitIndex + 1} reward chest. ${claimed ? "Opened." : unitDone ? "Ready to open." : "Locked."}`);
+      if (unitDone && !claimed) {
+        goal.wrap.append(studyTrailBubble("Open"));
+        goal.item.classList.add("has-bubble");
+      }
+      goalButton.addEventListener("click", () => toggleStudyTrailPopover(goal.item, goalButton, {
+        kind: "Unit reward",
+        title: claimed ? "Chest opened" : unitDone ? `Unit ${unitIndex + 1} complete` : `Finish unit ${unitIndex + 1}`,
+        detail: claimed ? `You collected ${STUDY_TRAIL_CHEST_GEMS} gems from this chest.`
+          : unitDone ? `Open it for ${STUDY_TRAIL_CHEST_GEMS} gems.` : `Complete every activity in unit ${unitIndex + 1} to open this chest.`,
+        action: unitDone && !claimed ? "Open chest" : "",
+        locked: !unitDone,
+        onAction: () => claimStudyTrailChest(anchor),
+      }));
+    } else {
+      const mockComplete = studyProgress.mockExamCompleted?.[currentCourse] === true;
+      goalButton.className = `trail-goal trail-trophy ${mockComplete ? "is-claimed" : unitDone ? "is-ready" : "is-locked"}`;
+      goalButton.innerHTML = STUDY_TRAIL_TROPHY;
+      goalButton.setAttribute("aria-label", `Final mock test with Dr. Eco. ${mockComplete ? "Completed." : unitDone ? "Ready." : "Locked."}`);
+      if (unitDone && !mockComplete) {
+        goal.wrap.append(studyTrailBubble("Final test"));
+        goal.item.classList.add("has-bubble");
+      }
+      goalButton.addEventListener("click", () => toggleStudyTrailPopover(goal.item, goalButton, {
+        kind: "Final test",
+        title: mockComplete ? "Path complete" : "Mock test with Dr. Eco",
+        detail: mockComplete ? "You finished this path. Resolve it or start another run below."
+          : unitDone ? "A short mock test across the whole path." : "Finish every activity on this path to unlock the mock test.",
+        action: unitDone && !mockComplete ? "Take the mock test" : "",
+        locked: !unitDone,
+        onAction: () => {
+          document.querySelector("#pathTakeMockButton")?.click();
+          const panel = document.querySelector("#examPredictorPanel");
+          if (panel && !panel.hidden) panel.scrollIntoView({ block: "start", behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+        },
+      }));
     }
-    row.append(node, label);
-    pathTree.append(row);
+    goal.wrap.append(goalButton);
+    steps.append(goal.item);
+    pathTree.append(section);
   });
-  requestAnimationFrame(drawStudyPathTrail);
+  syncStudyTrailStickyOffset();
   const review = activeModules.map((module) => ({ module, stats: studyProgress.attempts[module.id] }))
     .filter(({ stats }) => stats?.wrong >= 2 && stats.correct / stats.attempts < 0.7)
     .sort((a, b) => (b.stats.wrong - a.stats.wrong));
@@ -2542,7 +2809,7 @@ closeLessonButton.addEventListener("click", () => {
   document.querySelector("#lessonPage").hidden = true;
   lessonPanel.hidden = true;
   document.querySelector("#home").hidden = false;
-  pathTree.querySelector(".node.active, .node.done")?.focus({ preventScroll: true });
+  pathTree.querySelector(".trail-node.is-current, .trail-node.is-done")?.focus({ preventScroll: true });
 });
 
 function setCourse(course) {
