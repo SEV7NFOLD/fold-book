@@ -2389,7 +2389,220 @@ function showStage(stage, updateHash = true) {
   if (typeof window.scrollTo === "function") window.scrollTo(0, 0);
 }
 
-// Live quizzes (student join flow, admin Quiz Studio and host screen) live in assets/js/live-quiz.js.
+// Live quizzes: student play, preview, Quiz Studio list and host screen live in assets/js/live-quiz.js.
+// The question editor and Dr. Eco drafting below feed it through quizQuestionsFromEditor().
+document.querySelector("#quizTarget")?.addEventListener("change",(event)=>{if(quizEditingId)return;document.querySelector("#quizRegistrations").disabled=event.currentTarget.value!=="students";document.querySelector("#quizLevel").disabled=event.currentTarget.value!=="level";});
+async function loadQuizCourseOptions(){
+ const select=document.querySelector("#quizCourse");if(!select)return;
+ try{
+  const response=await fetch("/api/course-catalog",{cache:"no-store"});const data=await response.json();
+  const courses=Array.isArray(data.courses)?data.courses:[];
+  select.replaceChildren(...courses.map(course=>{const option=document.createElement("option");option.value=course.course_code;option.dataset.level=course.level||"";option.dataset.title=course.title||"";option.textContent=course.course_code+" · "+course.title+(course.level?" ("+course.level+")":"");return option;}));
+  syncQuizLevelToCourse();
+ }catch(error){document.querySelector("#quizAdminStatus").textContent="Course catalog unavailable. "+error.message;}
+}
+// The selected course's catalogue level is the level its materials are indexed under.
+function selectedQuizCourseLevel(){
+ const option=document.querySelector("#quizCourse")?.selectedOptions?.[0];
+ const level=option?.dataset.level||"";
+ return /^(100L|200L|300L|400L)$/.test(level)?level:"";
+}
+function syncQuizLevelToCourse(){
+ const level=selectedQuizCourseLevel(),levelSelect=document.querySelector("#quizLevel");
+ if(levelSelect)levelSelect.value=level||currentStudentLevel||"100L";
+}
+document.querySelector("#quizCourse")?.addEventListener("change",syncQuizLevelToCourse);
+// Look up indexed materials for the course: its own level first, then the other levels
+// (materials are sometimes indexed under a different level than the catalogue lists).
+async function findQuizCourseMaterial(course,preferredLevel){
+ const levels=[...new Set([preferredLevel,"100L","200L","300L","400L"].filter(Boolean))];
+ for(const level of levels){
+  try{const material=await retrieveCourseMaterialContext(course,level,5,`${course} key concepts, definitions, theories and examples for exam questions`);if(material&&material.trim())return{material,level};}
+  catch(error){console.warn(`Quiz material lookup for ${course} (${level}) found nothing:`,error.message);}
+ }
+ return{material:"",level:preferredLevel};
+}
+async function draftQuizQuestions(){
+ const status=document.querySelector("#quizAdminStatus");const button=document.querySelector("#generateQuizQuestions");button.disabled=true;status.textContent="Dr. Eco is looking for course materials…";
+ try{
+  const count=Math.max(3,Math.min(20,Number(document.querySelector("#quizQuestionCount").value)||10));
+  const courseSelect=document.querySelector("#quizCourse");const course=courseSelect.value;
+  if(!course)throw new Error("Choose a course first.");
+  const courseTitle=courseSelect.selectedOptions?.[0]?.dataset.title||"";
+  const preferredLevel=selectedQuizCourseLevel()||document.querySelector("#quizLevel").value;
+  const {material,level}=await findQuizCourseMaterial(course,preferredLevel);
+  const fromMaterial=Boolean(material);
+  status.textContent=fromMaterial?`Found ${course} materials (${level}). Drafting questions…`:`No indexed materials for ${course}; drafting from Dr. Eco's general knowledge…`;
+  const format="Return only a valid JSON array, no markdown. Each item must have prompt, options (exactly four strings), answerIndex (zero-based integer), and explanation.";
+  const systemText=fromMaterial
+   ?`You are Dr. Eco, a Nigerian university Economics professor. Base the questions on the indexed course material supplied below. If the material is too thin for the requested number of questions, complete the set with standard ${course} topics at the same level. ${format}\n\nINDEXED MATERIAL:\n${String(material).slice(0,8000)}`
+   :`You are Dr. Eco, a Nigerian university Economics professor at the University of Uyo. No course notes are available, so use your general knowledge of the standard Nigerian university syllabus for ${course}${courseTitle?` (${courseTitle})`:""} at ${preferredLevel||"undergraduate"} level. Stick to well-established, uncontroversial facts and concepts. ${format}`;
+  const response=await fetch("/api/dr-eco",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+   system_instruction:{parts:[{text:systemText}]},
+   contents:[{role:"user",parts:[{text:`Create exactly ${count} multiple-choice quiz questions for ${course}${courseTitle?` (${courseTitle})`:""}. Ensure clear wording, plausible distractors, and one correct answer each.`}]}],
+   generationConfig:{responseMimeType:"application/json",temperature:0.35}
+  })});
+  const result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error?.message||result.error||"Dr. Eco could not draft questions.");
+  const text=String(result.candidates?.[0]?.content?.parts?.map(part=>part.text||"").join("")||"");
+  let questions;try{questions=parseGeminiJson(text,"quiz draft");}catch{throw new Error("Dr. Eco returned a badly formatted draft. Please try again.");}
+  if(questions&&!Array.isArray(questions)&&Array.isArray(questions.questions))questions=questions.questions;
+  if(!Array.isArray(questions))throw new Error("Dr. Eco returned an unreadable draft. Try again.");
+  questions=questions.filter(q=>q&&typeof q.prompt==="string"&&Array.isArray(q.options)&&q.options.length===4&&Number.isInteger(q.answerIndex)&&q.answerIndex>=0&&q.answerIndex<4).slice(0,count);
+  if(questions.length<Math.min(3,count))throw new Error("The draft did not contain enough usable questions. Try again.");
+  setQuizDraft(questions);showQuizEditorTab("preview");
+  const shortBy=count-questions.length;
+  status.textContent=(fromMaterial?`Draft ready from ${course} course materials.`:`Draft ready from Dr. Eco's general ${course} knowledge (no indexed materials found) — check facts against the syllabus.`)+(shortBy?` Only ${questions.length} of ${count} questions were usable.`:"")+" Check it below, edit anything you like, then choose Preview quiz.";
+ }catch(e){status.textContent=e.message;}finally{button.disabled=false;}
+}
+// ───────────────────────── Admin quiz studio: editor, preview and host console ─────────────────────────
+let quizDraft=[];            // questions being edited: {prompt, options[], answerIndex, explanation}
+let quizEditingId=null;      // id of a saved quiz being edited, or null when creating a new one
+let quizPreviewIndex=0;
+const QUIZ_LETTERS="ABCDEF";
+function qel(tag,props={},...children){
+ const node=document.createElement(tag);
+ for(const [key,value] of Object.entries(props)){
+  if(value===undefined||value===null||value===false)continue;
+  if(key==="class")node.className=value;
+  else if(key==="text")node.textContent=value;
+  else if(key==="value")node.value=value;
+  else if(key.startsWith("on"))node.addEventListener(key.slice(2),value);
+  else if(key in node&&typeof value!=="string")node[key]=value;
+  else node.setAttribute(key,value===true?"":value);
+ }
+ for(const child of children.flat()){if(child!==null&&child!==undefined&&child!==false)node.append(child);}
+ return node;
+}
+function normalizeQuizQuestion(q){
+ const options=Array.isArray(q?.options)?q.options.map(o=>String(o??"")).slice(0,6):["","","",""];
+ while(options.length<2)options.push("");
+ const answerIndex=Number.isInteger(q?.answerIndex)&&q.answerIndex>=0&&q.answerIndex<options.length?q.answerIndex:0;
+ return{prompt:String(q?.prompt??""),options,answerIndex,explanation:String(q?.explanation??"")};
+}
+function quizQuestionIssue(q){
+ if(q.prompt.trim().length<5)return"Write a question of at least 5 characters.";
+ if(q.prompt.length>500)return"Keep the question under 500 characters.";
+ if(q.options.some(o=>!o.trim()))return"Fill in every option or remove the empty one.";
+ if(q.options.some(o=>o.length>180))return"Keep each option under 180 characters.";
+ if(new Set(q.options.map(o=>o.trim().toLowerCase())).size!==q.options.length)return"Two options are the same.";
+ return"";
+}
+function quizQuestionsFromEditor(){
+ if(quizDraft.length<3)throw new Error("Add at least 3 questions before saving.");
+ if(quizDraft.length>30)throw new Error("A quiz can have at most 30 questions.");
+ const bad=quizDraft.findIndex(q=>quizQuestionIssue(q));
+ if(bad>=0){showQuizEditorTab("edit");renderQuizEditor();throw new Error(`Question ${bad+1}: ${quizQuestionIssue(quizDraft[bad])}`);}
+ return quizDraft.map(q=>({prompt:q.prompt.trim(),options:q.options.map(o=>o.trim()),answerIndex:q.answerIndex,explanation:q.explanation.trim()}));
+}
+function setQuizDraft(questions){
+ quizDraft=(Array.isArray(questions)?questions:[]).map(normalizeQuizQuestion);
+ quizPreviewIndex=0;renderQuizEditor();
+}
+function syncQuizJson(){const box=document.querySelector("#quizQuestionsJson");if(box&&document.activeElement!==box)box.value=quizDraft.length?JSON.stringify(quizDraft,null,2):"";}
+function updateQuizEditorSummary(){
+ const count=document.querySelector("#quizEditorCount");if(!count)return;
+ const issues=quizDraft.filter(q=>quizQuestionIssue(q)).length;
+ count.textContent=quizDraft.length?`${quizDraft.length} question${quizDraft.length===1?"":"s"}${issues?` · ${issues} need${issues===1?"s":""} fixing`:""}`:"";
+ count.classList.toggle("has-issues",issues>0);
+ syncQuizJson();
+}
+function renderQuizEditor(){
+ const list=document.querySelector("#quizEditorList");if(!list)return;
+ if(!quizDraft.length){
+  list.replaceChildren(qel("p",{class:"quiz-editor-empty",text:"No questions yet. Draft them with Dr. Eco, or add your own."}));
+ }else{
+  list.replaceChildren(...quizDraft.map((q,index)=>renderQuizQuestionEditor(q,index)));
+ }
+ document.querySelector("#quizAddQuestion").disabled=quizDraft.length>=30;
+ updateQuizEditorSummary();
+ if(!document.querySelector("#quizPreview")?.hidden)renderQuizPreview();
+}
+function renderQuizQuestionEditor(q,index){
+ const issue=qel("p",{class:"quiz-q-issue",role:"alert"});
+ const card=qel("article",{class:"quiz-q","aria-label":`Question ${index+1}`});
+ const refreshIssue=()=>{const text=quizQuestionIssue(q);issue.textContent=text;card.classList.toggle("is-invalid",Boolean(text));updateQuizEditorSummary();};
+ const move=(delta)=>{const target=index+delta;if(target<0||target>=quizDraft.length)return;[quizDraft[index],quizDraft[target]]=[quizDraft[target],quizDraft[index]];renderQuizEditor();document.querySelectorAll(".quiz-q")[target]?.querySelector("textarea")?.focus();};
+ const radioName=`quizCorrect${index}-${Math.random().toString(36).slice(2,7)}`;
+ const options=qel("div",{class:"quiz-q-options"},q.options.map((option,optionIndex)=>qel("div",{class:"quiz-opt"+(optionIndex===q.answerIndex?" is-correct":"")},
+  qel("input",{type:"radio",name:radioName,checked:optionIndex===q.answerIndex,"aria-label":`Mark option ${QUIZ_LETTERS[optionIndex]} as the correct answer`,onchange:()=>{q.answerIndex=optionIndex;card.querySelectorAll(".quiz-opt").forEach((row,i)=>row.classList.toggle("is-correct",i===optionIndex));updateQuizEditorSummary();}}),
+  qel("span",{class:"quiz-opt-letter","aria-hidden":"true",text:QUIZ_LETTERS[optionIndex]}),
+  qel("input",{type:"text",value:option,maxlength:"180",placeholder:`Option ${QUIZ_LETTERS[optionIndex]}`,"aria-label":`Option ${QUIZ_LETTERS[optionIndex]}`,oninput:(e)=>{q.options[optionIndex]=e.target.value;refreshIssue();}}),
+  q.options.length>2?qel("button",{type:"button",class:"quiz-icon-button","aria-label":`Remove option ${QUIZ_LETTERS[optionIndex]}`,text:"×",onclick:()=>{q.options.splice(optionIndex,1);if(q.answerIndex>=optionIndex&&q.answerIndex>0)q.answerIndex-=1;renderQuizEditor();}}):null
+ )));
+ card.append(
+  qel("header",{class:"quiz-q-head"},
+   qel("span",{class:"quiz-q-num",text:String(index+1)}),
+   qel("div",{class:"quiz-q-tools"},
+    qel("button",{type:"button",class:"quiz-icon-button","aria-label":"Move question up",disabled:index===0,text:"↑",onclick:()=>move(-1)}),
+    qel("button",{type:"button",class:"quiz-icon-button","aria-label":"Move question down",disabled:index===quizDraft.length-1,text:"↓",onclick:()=>move(1)}),
+    qel("button",{type:"button",class:"quiz-icon-button",text:"Duplicate",disabled:quizDraft.length>=30,onclick:()=>{quizDraft.splice(index+1,0,normalizeQuizQuestion(JSON.parse(JSON.stringify(q))));renderQuizEditor();}}),
+    qel("button",{type:"button",class:"quiz-icon-button is-danger",text:"Delete",onclick:()=>{quizDraft.splice(index,1);renderQuizEditor();}}))),
+  qel("label",{class:"quiz-q-field"},"Question",qel("textarea",{rows:"2",maxlength:"500",value:q.prompt,oninput:(e)=>{q.prompt=e.target.value;refreshIssue();}})),
+  qel("div",{class:"quiz-q-field"},qel("span",{text:"Options · select the correct one"}),options,
+   q.options.length<6?qel("button",{type:"button",class:"quiz-add-option",text:"+ Add option",onclick:()=>{q.options.push("");renderQuizEditor();}}):null),
+  qel("label",{class:"quiz-q-field"},"Explanation (optional)",qel("textarea",{rows:"2",maxlength:"400",value:q.explanation,oninput:(e)=>{q.explanation=e.target.value;}})),
+  issue);
+ refreshIssue();
+ return card;
+}
+function showQuizEditorTab(tab){
+ const preview=tab==="preview";
+ document.querySelector("#quizTabEdit").setAttribute("aria-selected",String(!preview));
+ document.querySelector("#quizTabPreview").setAttribute("aria-selected",String(preview));
+ document.querySelector("#quizEditorList").hidden=preview;
+ document.querySelector("#quizEditorActions").hidden=preview;
+ document.querySelector("#quizPreview").hidden=!preview;
+ if(preview)renderQuizPreview();
+}
+function renderQuizPreview(){
+ const box=document.querySelector("#quizPreview");if(!box)return;
+ if(!quizDraft.length){box.replaceChildren(qel("p",{class:"quiz-editor-empty",text:"Nothing to preview yet."}));return;}
+ quizPreviewIndex=Math.min(Math.max(0,quizPreviewIndex),quizDraft.length-1);
+ const q=quizDraft[quizPreviewIndex];const issue=quizQuestionIssue(q);
+ const feedback=qel("div",{class:"quiz-preview-feedback",role:"status","aria-live":"polite"});
+ const choices=qel("div",{class:"quiz-choices"},q.options.map((option,index)=>qel("button",{type:"button",class:"quiz-choice",text:option||`(empty option ${QUIZ_LETTERS[index]})`,onclick:()=>{
+  choices.querySelectorAll(".quiz-choice").forEach((button,i)=>{button.disabled=true;if(i===q.answerIndex)button.classList.add("is-right");else if(i===index)button.classList.add("is-wrong");});
+  feedback.replaceChildren(qel("strong",{text:index===q.answerIndex?"Correct!":`Not quite. The answer is ${QUIZ_LETTERS[q.answerIndex]}.`}),q.explanation.trim()?qel("p",{text:q.explanation}):null);
+ }})));
+ box.replaceChildren(
+  qel("div",{class:"quiz-preview-phone"},
+   qel("p",{class:"quiz-preview-kicker",text:`Question ${quizPreviewIndex+1} of ${quizDraft.length}`}),
+   qel("h3",{class:"quiz-preview-prompt",text:q.prompt||"(No question text yet)"}),
+   choices,feedback,
+   issue?qel("p",{class:"quiz-q-issue",text:`Needs fixing: ${issue}`}):null),
+  qel("div",{class:"quiz-preview-nav"},
+   qel("button",{type:"button",class:"card-secondary-button",text:"‹ Previous",disabled:quizPreviewIndex===0,onclick:()=>{quizPreviewIndex-=1;renderQuizPreview();}}),
+   qel("button",{type:"button",class:"card-secondary-button",text:"Edit this question",onclick:()=>{showQuizEditorTab("edit");const card=document.querySelectorAll(".quiz-q")[quizPreviewIndex];card?.scrollIntoView({block:"center"});card?.querySelector("textarea")?.focus();}}),
+   qel("button",{type:"button",class:"card-secondary-button",text:"Next ›",disabled:quizPreviewIndex>=quizDraft.length-1,onclick:()=>{quizPreviewIndex+=1;renderQuizPreview();}})));
+}
+function setQuizEditMode(quiz){
+ quizEditingId=quiz?.id||null;
+ const banner=document.querySelector("#quizEditingBanner"),save=document.querySelector("#createQuiz");
+ banner.hidden=!quizEditingId;
+ if(quizEditingId){banner.querySelector("span").textContent=`Editing “${quiz.title}” (${quiz.join_code}). Audience and mode stay as they were.`;save.textContent="Preview changes";}
+ else save.textContent="Preview quiz";
+ for(const id of ["#quizCourse","#quizTarget","#quizMode","#quizRegistrations"])document.querySelector(id).disabled=Boolean(quizEditingId)||(id==="#quizRegistrations"&&document.querySelector("#quizTarget").value!=="students");
+ if(!quizEditingId)document.querySelector("#quizLevel").disabled=document.querySelector("#quizTarget").value!=="level";
+ else document.querySelector("#quizLevel").disabled=true;
+}
+function startEditingQuiz(quiz){
+ document.querySelector("#quizTitle").value=quiz.title;
+ const course=document.querySelector("#quizCourse");if([...course.options].some(o=>o.value===quiz.course_code))course.value=quiz.course_code;
+ setQuizDraft(quiz.questions);setQuizEditMode(quiz);showQuizEditorTab("edit");
+ document.querySelector("#quizAdminStatus").textContent="Make your changes, then choose Preview changes to check and save them.";
+ document.querySelector("#quizTitle").scrollIntoView({block:"center"});
+}
+document.querySelector("#generateQuizQuestions")?.addEventListener("click",draftQuizQuestions);
+document.querySelector("#quizAddQuestion")?.addEventListener("click",()=>{if(quizDraft.length>=30)return;quizDraft.push(normalizeQuizQuestion({options:["","","",""]}));renderQuizEditor();const cards=document.querySelectorAll(".quiz-q");cards[cards.length-1]?.querySelector("textarea")?.focus();});
+document.querySelector("#quizTabEdit")?.addEventListener("click",()=>showQuizEditorTab("edit"));
+document.querySelector("#quizTabPreview")?.addEventListener("click",()=>showQuizEditorTab("preview"));
+document.querySelector("#quizCancelEdit")?.addEventListener("click",()=>{setQuizEditMode(null);setQuizDraft([]);document.querySelector("#quizTitle").value="";document.querySelector("#quizAdminStatus").textContent="Edit cancelled.";});
+document.querySelector("#quizApplyJson")?.addEventListener("click",()=>{
+ const status=document.querySelector("#quizAdminStatus");
+ try{const parsed=JSON.parse(document.querySelector("#quizQuestionsJson").value||"[]");if(!Array.isArray(parsed))throw new Error();setQuizDraft(parsed);status.textContent="JSON applied to the editor.";}
+ catch{status.textContent="That JSON isn’t a valid list of questions.";}
+});
+renderQuizEditor();
 
 function showAccessRestrictedNotice() {
   const notice = "Access Restricted: SevenFold Authorized Personnel Only";

@@ -688,10 +688,20 @@
     data.players.forEach((p) => {
       if (known.has(p.reg_number)) return;
       const isNew = !first && !host.seen.has(p.reg_number);
-      chips.append(h("span", { class: "lq-player-chip" + (isNew ? " is-new" : ""), "data-reg": p.reg_number, text: p.display_name }));
+      const chip = h("span", { class: "lq-player-chip" + (isNew ? " is-new" : ""), "data-reg": p.reg_number },
+        h("span", { class: "lq-player-name", text: p.display_name }),
+        h("button", { type: "button", class: "lq-player-remove", "aria-label": `Remove ${p.display_name}`, title: "Remove from lobby", text: "×", onclick: async (event) => {
+          if (!window.confirm(`Remove ${p.display_name} from the lobby?`)) return;
+          event.currentTarget.disabled = true;
+          try { await adminApi("remove_participant", { id: host.id, reg_number: p.reg_number }); chip.remove(); host.seen.delete(p.reg_number); }
+          catch (error) { event.currentTarget.disabled = false; const err = $(".lq-actions .lq-error", hostStage()); if (err) err.textContent = error.message; }
+        } }));
+      chips.append(chip);
       if (isNew) joinedNow += 1;
       host.seen.add(p.reg_number);
     });
+    const present = new Set(data.players.map((p) => p.reg_number));
+    [...chips.querySelectorAll(".lq-player-chip")].forEach((chip) => { if (!present.has(chip.dataset.reg)) chip.remove(); });
     if (joinedNow) sound("deadClick");
     $("#quizHostPlayerCount", hostStage()).textContent = String(data.playerCount);
     $("#quizHostPlayerLabel", hostStage()).textContent = data.playerCount === 1 ? "player" : "players";
@@ -846,6 +856,9 @@
             catch (e) { studioStatus(e.message); event.currentTarget.disabled = false; }
           } }));
         }
+        if (quiz.status === "draft" || quiz.status === "lobby") {
+          buttons.push(h("button", { type: "button", class: "card-secondary-button", text: "Edit questions", onclick: () => editQuiz(quiz) }));
+        }
         if (quiz.status === "lobby" || quiz.status === "live") {
           buttons.push(h("button", { type: "button", class: "results-submit", text: quiz.status === "lobby" ? "Open lobby screen" : "Open host screen", onclick: () => openHost(quiz.id) }));
           buttons.push(h("button", { type: "button", class: "card-secondary-button", text: "Preview questions", onclick: () => openPreview(quiz, [{ label: "Close", run: async () => closeHost() }]) }));
@@ -867,110 +880,26 @@
     } catch (error) { studioStatus(error.message); }
   }
 
-  // ----- Studio form: drafting with Dr. Eco, validation, preview → create -----
-  function selectedCourseLevel() {
-    const level = $("#quizCourse")?.selectedOptions?.[0]?.dataset.level || "";
-    return /^(100L|200L|300L|400L)$/.test(level) ? level : "";
-  }
-  function syncLevelToCourse() {
-    const levelSelect = $("#quizLevel");
-    if (levelSelect) levelSelect.value = selectedCourseLevel() || currentStudentLevel || "100L";
-  }
-
-  async function loadCourseOptions() {
-    const select = $("#quizCourse");
-    if (!select || select.options.length) return;
-    try {
-      const response = await fetch("/api/course-catalog", { cache: "no-store" });
-      const data = await response.json();
-      const courses = Array.isArray(data.courses) ? data.courses : [];
-      select.replaceChildren(...courses.map((course) => {
-        const option = h("option", { value: course.course_code, text: `${course.course_code} · ${course.title}${course.level ? ` (${course.level})` : ""}` });
-        option.dataset.level = course.level || ""; option.dataset.title = course.title || "";
-        return option;
-      }));
-      syncLevelToCourse();
-    } catch (error) { studioStatus("Course catalog unavailable. " + error.message); }
-  }
-
-  // Materials are sometimes indexed under a different level than the catalogue lists.
-  async function findCourseMaterial(course, preferredLevel) {
-    const levels = [...new Set([preferredLevel, "100L", "200L", "300L", "400L"].filter(Boolean))];
-    for (const level of levels) {
-      try {
-        const material = await retrieveCourseMaterialContext(course, level, 5, `${course} key concepts, definitions, theories and examples for exam questions`);
-        if (material && material.trim()) return { material, level };
-      } catch (error) { console.warn(`Quiz material lookup for ${course} (${level}) found nothing:`, error.message); }
-    }
-    return { material: "", level: preferredLevel };
-  }
-
-  async function draftQuestions() {
-    const button = $("#generateQuizQuestions");
-    button.disabled = true;
-    studioStatus("Dr. Eco is looking for course materials…");
-    try {
-      const count = Math.max(3, Math.min(20, Number($("#quizQuestionCount").value) || 10));
-      const select = $("#quizCourse"); const course = select.value;
-      if (!course) throw new Error("Choose a course first.");
-      const courseTitle = select.selectedOptions?.[0]?.dataset.title || "";
-      const preferredLevel = selectedCourseLevel() || $("#quizLevel").value;
-      const { material, level } = await findCourseMaterial(course, preferredLevel);
-      const fromMaterial = Boolean(material);
-      studioStatus(fromMaterial ? `Found ${course} materials (${level}). Drafting questions…` : `No indexed materials for ${course}; drafting from Dr. Eco’s general knowledge…`);
-      const format = "Return only a valid JSON array, no markdown. Each item must have prompt, options (exactly four strings), answerIndex (zero-based integer), and explanation.";
-      const systemText = fromMaterial
-        ? `You are Dr. Eco, a Nigerian university Economics professor. Base the questions on the indexed course material supplied below. If the material is too thin for the requested number of questions, complete the set with standard ${course} topics at the same level. ${format}\n\nINDEXED MATERIAL:\n${String(material).slice(0, 8000)}`
-        : `You are Dr. Eco, a Nigerian university Economics professor at the University of Uyo. No course notes are available, so use your general knowledge of the standard Nigerian university syllabus for ${course}${courseTitle ? ` (${courseTitle})` : ""} at ${preferredLevel || "undergraduate"} level. Stick to well-established, uncontroversial facts and concepts. ${format}`;
-      const response = await fetch("/api/dr-eco", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemText }] },
-        contents: [{ role: "user", parts: [{ text: `Create exactly ${count} multiple-choice quiz questions for ${course}${courseTitle ? ` (${courseTitle})` : ""}. Ensure clear wording, plausible distractors, and one correct answer each.` }] }],
-        generationConfig: { responseMimeType: "application/json", temperature: 0.35 },
-      }) });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error?.message || result.error || "Dr. Eco could not draft questions.");
-      const text = String(result.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "");
-      let questions;
-      try { questions = parseGeminiJson(text, "quiz draft"); } catch { throw new Error("Dr. Eco returned a badly formatted draft. Please try again."); }
-      if (questions && !Array.isArray(questions) && Array.isArray(questions.questions)) questions = questions.questions;
-      if (!Array.isArray(questions)) throw new Error("Dr. Eco returned an unreadable draft. Try again.");
-      questions = questions.filter((q) => q && typeof q.prompt === "string" && Array.isArray(q.options) && q.options.length === 4 && Number.isInteger(q.answerIndex) && q.answerIndex >= 0 && q.answerIndex < 4).slice(0, count);
-      if (questions.length < Math.min(3, count)) throw new Error("The draft did not contain enough usable questions. Try again.");
-      $("#quizQuestionsJson").value = JSON.stringify(questions, null, 2);
-      const shortBy = count - questions.length;
-      studioStatus((fromMaterial ? `Draft ready from ${course} course materials.` : `Draft ready from Dr. Eco’s general ${course} knowledge (no indexed materials found) — check facts against the syllabus.`)
-        + (shortBy ? ` Only ${questions.length} of ${count} questions were usable.` : "") + " Press Preview quiz to check them.");
-    } catch (error) { studioStatus(error.message); } finally { button.disabled = false; }
-  }
-
-  // Mirrors the server's checks so problems show up before the preview, with the question number.
+  // ----- Studio form: the question editor in app.js owns drafting and editing; this adds preview → create -----
+  // Reads the form and the visual question editor, with the same checks the server applies.
   function readStudioForm() {
     const title = $("#quizTitle").value.trim();
     const course = $("#quizCourse").value;
     const target = $("#quizTarget").value;
     const registrations = $("#quizRegistrations").value.split(/[\s,;]+/).map((x) => x.trim().toUpperCase()).filter(Boolean);
-    let questions;
-    try { questions = JSON.parse($("#quizQuestionsJson").value); }
-    catch { throw new Error("The questions box needs valid JSON. Draft with Dr. Eco, or fix the brackets and quotes."); }
-    if (title.length < 3) throw new Error("Give the quiz a title of at least 3 characters.");
-    if (!COURSE.test(course || "")) throw new Error("Choose a course.");
-    if (target === "students") {
-      if (!registrations.length) throw new Error("Add at least one registration number, or change who can join.");
-      const bad = registrations.find((reg) => !REG.test(reg));
-      if (bad) throw new Error(`“${bad}” isn’t a valid registration number.`);
+    if (title.length < 3) { $("#quizTitle").focus(); throw new Error("Give the quiz a title of at least 3 characters."); }
+    const questions = quizQuestionsFromEditor();
+    if (!quizEditingId) {
+      if (!COURSE.test(course || "")) throw new Error("Choose a course.");
+      if (target === "students") {
+        if (!registrations.length) throw new Error("Add at least one registration number, or change who can join.");
+        const bad = registrations.find((reg) => !REG.test(reg));
+        if (bad) throw new Error(`“${bad}” isn’t a valid registration number.`);
+      }
     }
-    if (!Array.isArray(questions) || questions.length < 3 || questions.length > 30) throw new Error("A quiz needs between 3 and 30 questions.");
-    questions.forEach((q, i) => {
-      const n = i + 1;
-      if (!q || typeof q.prompt !== "string" || q.prompt.trim().length < 5 || q.prompt.length > 500) throw new Error(`Question ${n}: the prompt needs 5–500 characters.`);
-      if (!Array.isArray(q.options) || q.options.length < 2 || q.options.length > 6) throw new Error(`Question ${n}: give 2 to 6 options.`);
-      if (q.options.some((o) => typeof o !== "string" || !o.trim() || o.length > 180)) throw new Error(`Question ${n}: every option needs text (up to 180 characters).`);
-      if (!Number.isInteger(q.answerIndex) || q.answerIndex < 0 || q.answerIndex >= q.options.length) throw new Error(`Question ${n}: answerIndex must point at one of its options (0 to ${q.options.length - 1}).`);
-    });
     return {
       title, course_code: course, target_type: target, target_level: $("#quizLevel").value, target_registrations: target === "students" ? registrations : [],
-      quiz_type: $("#quizMode").value, question_seconds: Number($("#quizQuestionSeconds")?.value) || 20,
-      questions: questions.map((q) => ({ prompt: q.prompt.trim(), options: q.options.map((o) => o.trim()), answerIndex: q.answerIndex, explanation: typeof q.explanation === "string" ? q.explanation.trim() : "" })),
+      quiz_type: $("#quizMode").value, question_seconds: Number($("#quizQuestionSeconds")?.value) || 20, questions,
     };
   }
 
@@ -978,11 +907,28 @@
     let form;
     try { form = readStudioForm(); } catch (error) { studioStatus(error.message); return; }
     studioStatus("");
+    if (quizEditingId) {
+      const editing = editingQuiz || {};
+      const merged = { ...editing, ...form, course_code: editing.course_code || form.course_code, quiz_type: editing.quiz_type || form.quiz_type,
+        target_type: editing.target_type || form.target_type, target_level: editing.target_level, target_registrations: editing.target_registrations || [],
+        question_seconds: editing.question_seconds || form.question_seconds };
+      openPreview(merged, [
+        { label: "Back to editing", run: async () => closeHost() },
+        { label: "Save changes", primary: true, run: async () => {
+          const data = await adminApi("update", { id: quizEditingId, title: form.title, questions: form.questions, question_seconds: form.question_seconds });
+          setQuizEditMode(null); setQuizDraft([]); $("#quizTitle").value = ""; editingQuiz = null;
+          studioStatus(`Saved changes to “${data.quiz?.title || form.title}”.`);
+          closeHost();
+        } },
+      ]);
+      return;
+    }
     openPreview(form, [
       { label: "Back to editing", run: async () => closeHost() },
       { label: "Create quiz", primary: true, run: async () => {
         const data = await adminApi("create", form);
         const quiz = data.quiz;
+        setQuizDraft([]); $("#quizTitle").value = "";
         studioStatus(`Created “${quiz.title}” as a draft. Code ${quiz.join_code}.`);
         void renderAdminList();
         setHostHeader(`Created · ${quiz.title}`, `Draft · Code ${quiz.join_code} · students can’t see it yet`);
@@ -994,8 +940,16 @@
     ]);
   }
 
+  let editingQuiz = null;
+  function editQuiz(quiz) {
+    editingQuiz = quiz;
+    startEditingQuiz(quiz);
+    const seconds = $("#quizQuestionSeconds");
+    if (seconds) seconds.value = String(quiz.question_seconds || 20);
+  }
+
   function openStudio() {
-    void loadCourseOptions();
+    if (!$("#quizCourse")?.options.length) void loadQuizCourseOptions();
     void renderAdminList();
   }
 
@@ -1023,22 +977,17 @@
       closePlayer();
     });
     $("#quizHostClose")?.addEventListener("click", closeHost);
+    $("#quizCancelEdit")?.addEventListener("click", () => { editingQuiz = null; });
     $("#quizHostSound")?.addEventListener("click", () => { soundOn = !soundOn; syncHostSoundButton(); });
-    $("#generateQuizQuestions")?.addEventListener("click", draftQuestions);
     $("#createQuiz")?.addEventListener("click", previewFromStudio);
-    $("#quizCourse")?.addEventListener("change", syncLevelToCourse);
-    $("#quizTarget")?.addEventListener("change", (event) => {
-      $("#quizRegistrations").disabled = event.currentTarget.value !== "students";
-      $("#quizLevel").disabled = event.currentTarget.value !== "level";
-    });
     $("#quizMode")?.addEventListener("change", (event) => {
       $("#quizQuestionSeconds").disabled = event.currentTarget.value !== "contest";
+      if (quizEditingId) return;
       studioStatus(event.currentTarget.value === "contest"
         ? "Live contest: you open a lobby, students join with the code, and you move through each question with a timer, answer reveal and leaderboard."
         : "Open quiz: students answer at their own pace and see the right answer straight away.");
     });
     if ($("#quizMode") && $("#quizQuestionSeconds")) $("#quizQuestionSeconds").disabled = $("#quizMode").value !== "contest";
-    $("#quizRegistrations") && ($("#quizRegistrations").disabled = $("#quizTarget")?.value !== "students");
 
     document.addEventListener("keydown", (event) => {
       if (event.key !== "Escape") return;

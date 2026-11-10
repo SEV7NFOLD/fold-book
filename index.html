@@ -558,7 +558,7 @@
           </section>
           <section class="admin-view-panel" id="adminView-quizzes" hidden>
             <h2>🎓 Dr. Eco Quiz Studio</h2>
-            <p>Draft questions, preview them exactly as students will see them, then create the quiz. Live contests open a lobby you control question by question; open quizzes let students work at their own pace.</p>
+            <p>Draft questions with Dr. Eco or write your own, then preview the quiz exactly as students will see it before creating it. Live contests open a lobby you run question by question, with a timer, answer reveal and leaderboard. Open quizzes let students work at their own pace.</p>
             <div class="admin-material-fields">
               <label>Quiz title<input id="quizTitle" maxlength="120" placeholder="e.g. Inflation challenge"></label>
               <label>Course<select id="quizCourse"></select></label>
@@ -573,7 +573,25 @@
               <button id="generateQuizQuestions" class="card-secondary-button" type="button">✨ Draft with Dr. Eco</button>
               <button id="createQuiz" class="results-submit" type="button">Preview quiz</button>
             </div>
-            <textarea id="quizQuestionsJson" class="admin-material-control" rows="10" placeholder="Dr. Eco’s questions appear here for review. You can edit before saving."></textarea>
+            <p id="quizEditingBanner" class="quiz-editing-banner" hidden><span></span> <button id="quizCancelEdit" class="card-secondary-button" type="button">Cancel edit</button></p>
+            <section class="quiz-editor" aria-labelledby="quizEditorHeading">
+              <div class="quiz-editor-bar">
+                <h3 id="quizEditorHeading">Questions</h3>
+                <div class="quiz-editor-tabs" role="tablist" aria-label="Question view">
+                  <button id="quizTabEdit" type="button" role="tab" aria-selected="true" aria-controls="quizEditorList">Edit</button>
+                  <button id="quizTabPreview" type="button" role="tab" aria-selected="false" aria-controls="quizPreview">Preview as student</button>
+                </div>
+                <span id="quizEditorCount" class="quiz-editor-count"></span>
+              </div>
+              <div id="quizEditorList" role="tabpanel" aria-labelledby="quizTabEdit"></div>
+              <div id="quizPreview" class="quiz-preview" role="tabpanel" aria-labelledby="quizTabPreview" hidden></div>
+              <div id="quizEditorActions" class="quiz-editor-actions"><button id="quizAddQuestion" class="card-secondary-button" type="button">+ Add question</button></div>
+              <details class="quiz-json-details">
+                <summary>Advanced: edit as JSON</summary>
+                <textarea id="quizQuestionsJson" class="admin-material-control" rows="10" spellcheck="false" aria-label="Questions as JSON"></textarea>
+                <button id="quizApplyJson" class="card-secondary-button" type="button">Apply JSON</button>
+              </details>
+            </section>
             <p id="quizAdminStatus" class="admin-material-status" role="status" aria-live="polite"></p>
             <h3>Your quizzes</h3><div id="quizAdminList"></div>
           </section>
