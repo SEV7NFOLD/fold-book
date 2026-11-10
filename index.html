@@ -27,6 +27,7 @@
     <script src="/assets/js/foldbook-ui.js" defer></script>
     <script src="/assets/js/ui-animations.js" defer></script>
     <script src="/assets/js/app.js" defer></script>
+    <script src="/assets/js/live-quiz.js" defer></script>
     <script src="/assets/js/pwa.js" defer></script>
   </head>
   <body>
@@ -53,6 +54,9 @@
           <button class="pill header-refresh" id="refreshFoldBook" type="button" title="Refresh FoldBook" aria-label="Refresh FoldBook">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6.2 9a7 7 0 0 1 11.5-2L20 9M4 15l2.3 2a7 7 0 0 0 11.5-2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
+          <button class="pill quiz-join-pill" id="quizJoinButton" type="button" aria-haspopup="dialog" aria-controls="quizPlayOverlay" title="Join a live quiz">
+            <span aria-hidden="true">🎮</span><span class="quiz-join-pill-label">Join quiz</span><i class="quiz-join-pill-dot" id="quizJoinDot" hidden></i>
+          </button>
           <button class="header-profile" id="profileButton" type="button" aria-haspopup="dialog" aria-controls="profileModal">
             <span class="profile-avatar" id="headerProfileAvatar" aria-hidden="true">S</span>
             <span id="headerProfileName">Profile</span>
@@ -73,12 +77,11 @@
       </nav>
     <main id="top">
       <section id="home" class="learn-section hide" hidden>
-          <section class="quiz-join-card" id="quizJoinCard" hidden>
-            <div class="quiz-join-mascot" id="quizJoinMascot" aria-hidden="true"></div>
-            <div><p class="section-kicker">DR. ECO’S CHALLENGE</p><h2>Join a quiz</h2><p>Enter the code your host shared with you.</p></div>
-            <form id="quizJoinForm"><label for="quizJoinCode">Quiz code</label><div class="quiz-join-form-row"><input id="quizJoinCode" maxlength="6" autocomplete="one-time-code" placeholder="ABC123"><button class="results-submit" type="submit">Join</button></div></form>
-            <p id="quizJoinStatus" role="status" aria-live="polite"></p>
-          </section>
+          <button type="button" class="quiz-live-banner" id="quizLiveBanner" hidden>
+            <span class="quiz-live-banner-pulse" aria-hidden="true"></span>
+            <span class="quiz-live-banner-text"><strong id="quizLiveBannerTitle">A quiz is open</strong><span id="quizLiveBannerMeta">Tap to join</span></span>
+            <span class="quiz-live-banner-cta">Join</span>
+          </button>
 
         <div class="main-path-area">
           <div class="course-switcher" id="courseSwitcher" aria-label="Your active paths" hidden>
@@ -555,7 +558,7 @@
           </section>
           <section class="admin-view-panel" id="adminView-quizzes" hidden>
             <h2>🎓 Dr. Eco Quiz Studio</h2>
-            <p>Create an open practice quiz or a live contest with a join code. Dr. Eco can draft questions from indexed course materials.</p>
+            <p>Draft questions, preview them exactly as students will see them, then create the quiz. Live contests open a lobby you control question by question; open quizzes let students work at their own pace.</p>
             <div class="admin-material-fields">
               <label>Quiz title<input id="quizTitle" maxlength="120" placeholder="e.g. Inflation challenge"></label>
               <label>Course<select id="quizCourse"></select></label>
@@ -564,10 +567,11 @@
               <label>Registration numbers<textarea id="quizRegistrations" rows="2" placeholder="Only used for selected students"></textarea></label>
               <label>Quiz mode<select id="quizMode"><option value="open">Open quiz</option><option value="contest">Live contest with lobby</option></select></label>
               <label>Number of questions<input id="quizQuestionCount" type="number" min="3" max="20" value="10"></label>
+              <label>Time per question<select id="quizQuestionSeconds"><option value="10">10 seconds</option><option value="20" selected>20 seconds</option><option value="30">30 seconds</option><option value="45">45 seconds</option><option value="60">60 seconds</option><option value="90">90 seconds</option></select></label>
             </div>
             <div class="admin-material-fields">
               <button id="generateQuizQuestions" class="card-secondary-button" type="button">✨ Draft with Dr. Eco</button>
-              <button id="createQuiz" class="results-submit" type="button">Save quiz</button>
+              <button id="createQuiz" class="results-submit" type="button">Preview quiz</button>
             </div>
             <textarea id="quizQuestionsJson" class="admin-material-control" rows="10" placeholder="Dr. Eco’s questions appear here for review. You can edit before saving."></textarea>
             <p id="quizAdminStatus" class="admin-material-status" role="status" aria-live="polite"></p>
@@ -947,5 +951,27 @@
         </form>
       </section>
     </div>
+
+    <section class="lq-overlay" id="quizPlayOverlay" role="dialog" aria-modal="true" aria-labelledby="quizPlayTitle" hidden>
+      <div class="lq-frame">
+        <header class="lq-bar">
+          <div class="lq-bar-meta"><strong id="quizPlayTitle">Join a quiz</strong><span id="quizPlayMeta"></span></div>
+          <span class="lq-bar-score mono" id="quizPlayScore" hidden></span>
+          <button type="button" class="lq-icon-button" id="quizPlayClose" aria-label="Leave quiz">×</button>
+        </header>
+        <div class="lq-stage" id="quizPlayStage" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <section class="lq-overlay lq-host" id="quizHostOverlay" role="dialog" aria-modal="true" aria-labelledby="quizHostTitle" hidden>
+      <div class="lq-frame">
+        <header class="lq-bar">
+          <div class="lq-bar-meta"><strong id="quizHostTitle">Quiz</strong><span id="quizHostMeta"></span></div>
+          <button type="button" class="lq-icon-button" id="quizHostSound" aria-pressed="true" aria-label="Mute quiz sounds">🔊</button>
+          <button type="button" class="lq-icon-button" id="quizHostClose" aria-label="Close host screen">×</button>
+        </header>
+        <div class="lq-stage" id="quizHostStage"></div>
+      </div>
+    </section>
   </body>
 </html>

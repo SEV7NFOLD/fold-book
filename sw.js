@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "foldbook-shell-v7";
+const CACHE_NAME = "foldbook-shell-v8";
 const SHELL_FILES = [
   "/",
   "/index.html",
@@ -12,6 +12,7 @@ const SHELL_FILES = [
   "/assets/css/design-tokens.css",
   "/assets/css/styles.css",
   "/assets/js/app.js",
+  "/assets/js/live-quiz.js",
   "/assets/js/pwa.js",
   "/assets/js/mascots.js",
   "/assets/js/foldbook-characters.js",

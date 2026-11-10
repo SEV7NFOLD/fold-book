@@ -812,6 +812,7 @@ const sfxEngine = {
   failTest: new Audio("/assets/sfx/oh-my-god-bro-oh-hell-nah-man.mp3"),
   deadClick: new Audio("/assets/sfx/vine-boom.mp3"),
   complete: new Audio("/assets/sfx/Complete%20test.mp3"),
+  momentsLater: new Audio("/assets/sfx/a-few-moments-later-sponge-bob-sfx-fun.mp3"),
 };
 Object.values(sfxEngine).forEach((audio) => {
   audio.preload = "auto";
@@ -2383,248 +2384,12 @@ function showStage(stage, updateHash = true) {
     element.classList.toggle("hide", !isVisible);
   }
   setNavigationAvailable(stage === "studentApp");
+  document.dispatchEvent(new CustomEvent("foldbook:stage", { detail: { stage } }));
   if (updateHash) window.location.hash = `#${stage}`;
   if (typeof window.scrollTo === "function") window.scrollTo(0, 0);
 }
 
-let activeQuiz = null;
-let quizPollTimer = null;
-let lastQuizQuestionState = "";
-
-function safeQuizPayload(quiz, includeQuestions = false, questionIndex = -1) {
-  const output = { id: quiz.id, join_code: quiz.join_code, title: quiz.title, course_code: quiz.course_code,
-    quiz_type: quiz.quiz_type, status: quiz.status, current_question: quiz.current_question,
-    started_at: quiz.started_at, finished_at: quiz.finished_at };
-  if (includeQuestions) output.questions = quiz.questions;
-  else if (Number.isInteger(questionIndex) && questionIndex >= 0 && quiz.questions?.[questionIndex]) {
-    const q = quiz.questions[questionIndex];
-    output.question = { prompt: q.prompt, options: q.options, explanation: q.explanation };
-  }
-  return output;
-}
-async function quizApi(action, data = {}) {
-  const response = await fetch("/api/student/learning-profile", {
-    method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, ...data }),
-  });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(result.error || "Quiz service is unavailable.");
-  return result;
-}
-async function refreshPublicQuizList() {
-  const card = document.querySelector("#quizJoinCard");
-  if (!card || !currentStudent || isMasterAdmin) return;
-  try {
-    const data = await quizApi("list", { courseCode: currentCourse, level: currentStudentLevel });
-    const open = Array.isArray(data.quizzes) ? data.quizzes : [];
-    let list = document.querySelector("#quizAvailableList");
-    if (!list) {
-      list = document.createElement("div");
-      list.id = "quizAvailableList";
-      list.className = "quiz-available-list";
-      card.querySelector("#quizJoinForm")?.before(list);
-    }
-    list.replaceChildren();
-    card.hidden = !open.length && !new URLSearchParams(window.location.search).has("quiz");
-    card.querySelector("h2").textContent = open.length ? "Choose a challenge" : "Join a quiz";
-    card.querySelector(".section-kicker").textContent = "DR. ECO’S QUIZZES";
-    open.forEach((quiz) => {
-      const pick = document.createElement("button");
-      pick.type = "button";
-      pick.className = "quiz-available-item";
-      pick.textContent = quiz.title + " · " + quiz.course_code + (quiz.quiz_type === "contest" ? " · Contest lobby" : " · Open quiz");
-      pick.addEventListener("click", () => {
-        card.querySelector("#quizJoinCode").value = quiz.join_code;
-        card.querySelector("#quizJoinForm")?.requestSubmit();
-      });
-      list.append(pick);
-    });
-  } catch (error) { console.warn("Public quiz list could not be loaded:", error.message); }
-}
-async function renderQuizQuestion() {
-  if (!activeQuiz) return;
-  const data = await quizApi("state", { joinCode: activeQuiz.join_code });
-  const questionState = `${data.quiz.status}:${data.questionIndex}:${data.answered ? "answered" : "open"}:${data.studentFinished ? "finished-for-student" : "active"}`;
-  if (questionState === lastQuizQuestionState) return;
-  lastQuizQuestionState = questionState;
-  activeQuiz = data.quiz;
-  const card = document.querySelector("#quizJoinCard");
-  card.hidden = false;
-  if (activeQuiz.status === "lobby") {
-    card.querySelector("h2").textContent = "You’re in the lobby";
-    card.querySelector("#quizJoinStatus").textContent = "Dr. Eco will begin when the host starts the quiz.";
-    return;
-  }
-  if (activeQuiz.status === "finished" || data.studentFinished) {
-    card.querySelector("h2").textContent = "Quiz complete";
-    card.querySelector("#quizJoinStatus").textContent = "You scored " + (data.score || 0) + " points. Nice work!";
-    window.clearInterval(quizPollTimer); return;
-  }
-  const q = data.question;
-  if (!q) return;
-  card.querySelector("h2").textContent = q.prompt;
-  card.querySelector(".section-kicker").textContent = "QUESTION " + (data.questionIndex + 1);
-  const form = card.querySelector("#quizJoinForm");
-  form.replaceChildren();
-  const choices = document.createElement("div");
-  choices.className = "quiz-choices";
-  q.options.forEach((label,index) => {
-    const button = document.createElement("button");
-    button.type = "button"; button.className = "quiz-choice"; button.textContent = label;
-    button.disabled = data.answered === true;
-    button.addEventListener("click", async () => {
-      for (const item of choices.children) item.disabled = true;
-      try { await quizApi("answer", { joinCode: activeQuiz.join_code, questionIndex: data.questionIndex, answerIndex: index });
-        document.querySelector("#quizJoinStatus").textContent = "Answer saved. Waiting for the next question…";
-      } catch(error) { lastQuizQuestionState = ""; document.querySelector("#quizJoinStatus").textContent = error.message; }
-    });
-    choices.append(button);
-  });
-  form.replaceChildren(choices);
-  document.querySelector("#quizJoinStatus").textContent = data.answered ? "Answer saved. Waiting for the next question…" : "Choose your answer.";
-}
-const fromQuizLink = new URLSearchParams(window.location.search).get("quiz");
-if (fromQuizLink) {
-  document.querySelector("#quizJoinCard").hidden = false;
-  document.querySelector("#quizJoinCode").value = fromQuizLink.toUpperCase().slice(0,6);
-  document.querySelector("#quizJoinCard").scrollIntoView?.({ block: "center" });
-}
-document.querySelector("#quizJoinForm")?.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const code = document.querySelector("#quizJoinCode").value.trim().toUpperCase();
-  if (!/^[A-Z0-9]{6}$/.test(code)) { document.querySelector("#quizJoinStatus").textContent = "Enter the six-character quiz code."; return; }
-  try {
-    const data = await quizApi("join", { joinCode: code });
-    activeQuiz = data.quiz;
-    lastQuizQuestionState = "";
-    document.querySelector("#quizJoinCard").hidden = false;
-    await renderQuizQuestion();
-    window.clearInterval(quizPollTimer);
-    quizPollTimer = window.setInterval(() => { void renderQuizQuestion().catch(() => {}); }, 2200);
-  } catch(error) { document.querySelector("#quizJoinStatus").textContent = error.message; }
-});
-
-document.querySelector("#quizJoinCode")?.addEventListener("input",(event)=>{event.currentTarget.value=event.currentTarget.value.toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,6);});
-document.querySelector("#quizTarget")?.addEventListener("change",(event)=>{document.querySelector("#quizRegistrations").disabled=event.currentTarget.value!=="students";document.querySelector("#quizLevel").disabled=event.currentTarget.value!=="level";});
-document.querySelector("#quizMode")?.addEventListener("change",(event)=>{if(event.currentTarget.value==="contest")document.querySelector("#quizAdminStatus").textContent="Contest mode creates a lobby. Share the code, then use Start quiz when everyone is ready.";});
-async function adminQuizApi(action,payload={}) {
-  const r=await fetch("/api/admin?route=quizzes",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,...payload})});
-  const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||"Admin quiz request failed.");return data;
-}
-function quizQuestionsFromEditor(){try{return JSON.parse(document.querySelector("#quizQuestionsJson").value);}catch{throw new Error("Questions need to be valid JSON. Draft them with Dr. Eco, then review the answer indexes.");}}
-async function loadQuizCourseOptions(){
- const select=document.querySelector("#quizCourse");if(!select)return;
- try{
-  const response=await fetch("/api/course-catalog",{cache:"no-store"});const data=await response.json();
-  const courses=Array.isArray(data.courses)?data.courses:[];
-  select.replaceChildren(...courses.map(course=>{const option=document.createElement("option");option.value=course.course_code;option.dataset.level=course.level||"";option.dataset.title=course.title||"";option.textContent=course.course_code+" · "+course.title+(course.level?" ("+course.level+")":"");return option;}));
-  syncQuizLevelToCourse();
- }catch(error){document.querySelector("#quizAdminStatus").textContent="Course catalog unavailable. "+error.message;}
-}
-// The selected course's catalogue level is the level its materials are indexed under.
-function selectedQuizCourseLevel(){
- const option=document.querySelector("#quizCourse")?.selectedOptions?.[0];
- const level=option?.dataset.level||"";
- return /^(100L|200L|300L|400L)$/.test(level)?level:"";
-}
-function syncQuizLevelToCourse(){
- const level=selectedQuizCourseLevel(),levelSelect=document.querySelector("#quizLevel");
- if(levelSelect)levelSelect.value=level||currentStudentLevel||"100L";
-}
-document.querySelector("#quizCourse")?.addEventListener("change",syncQuizLevelToCourse);
-// Look up indexed materials for the course: its own level first, then the other levels
-// (materials are sometimes indexed under a different level than the catalogue lists).
-async function findQuizCourseMaterial(course,preferredLevel){
- const levels=[...new Set([preferredLevel,"100L","200L","300L","400L"].filter(Boolean))];
- for(const level of levels){
-  try{const material=await retrieveCourseMaterialContext(course,level,5,`${course} key concepts, definitions, theories and examples for exam questions`);if(material&&material.trim())return{material,level};}
-  catch(error){console.warn(`Quiz material lookup for ${course} (${level}) found nothing:`,error.message);}
- }
- return{material:"",level:preferredLevel};
-}
-async function draftQuizQuestions(){
- const status=document.querySelector("#quizAdminStatus");const button=document.querySelector("#generateQuizQuestions");button.disabled=true;status.textContent="Dr. Eco is looking for course materials…";
- try{
-  const count=Math.max(3,Math.min(20,Number(document.querySelector("#quizQuestionCount").value)||10));
-  const courseSelect=document.querySelector("#quizCourse");const course=courseSelect.value;
-  if(!course)throw new Error("Choose a course first.");
-  const courseTitle=courseSelect.selectedOptions?.[0]?.dataset.title||"";
-  const preferredLevel=selectedQuizCourseLevel()||document.querySelector("#quizLevel").value;
-  const {material,level}=await findQuizCourseMaterial(course,preferredLevel);
-  const fromMaterial=Boolean(material);
-  status.textContent=fromMaterial?`Found ${course} materials (${level}). Drafting questions…`:`No indexed materials for ${course}; drafting from Dr. Eco's general knowledge…`;
-  const format="Return only a valid JSON array, no markdown. Each item must have prompt, options (exactly four strings), answerIndex (zero-based integer), and explanation.";
-  const systemText=fromMaterial
-   ?`You are Dr. Eco, a Nigerian university Economics professor. Base the questions on the indexed course material supplied below. If the material is too thin for the requested number of questions, complete the set with standard ${course} topics at the same level. ${format}\n\nINDEXED MATERIAL:\n${String(material).slice(0,8000)}`
-   :`You are Dr. Eco, a Nigerian university Economics professor at the University of Uyo. No course notes are available, so use your general knowledge of the standard Nigerian university syllabus for ${course}${courseTitle?` (${courseTitle})`:""} at ${preferredLevel||"undergraduate"} level. Stick to well-established, uncontroversial facts and concepts. ${format}`;
-  const response=await fetch("/api/dr-eco",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-   system_instruction:{parts:[{text:systemText}]},
-   contents:[{role:"user",parts:[{text:`Create exactly ${count} multiple-choice quiz questions for ${course}${courseTitle?` (${courseTitle})`:""}. Ensure clear wording, plausible distractors, and one correct answer each.`}]}],
-   generationConfig:{responseMimeType:"application/json",temperature:0.35}
-  })});
-  const result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error?.message||result.error||"Dr. Eco could not draft questions.");
-  const text=String(result.candidates?.[0]?.content?.parts?.map(part=>part.text||"").join("")||"");
-  let questions;try{questions=parseGeminiJson(text,"quiz draft");}catch{throw new Error("Dr. Eco returned a badly formatted draft. Please try again.");}
-  if(questions&&!Array.isArray(questions)&&Array.isArray(questions.questions))questions=questions.questions;
-  if(!Array.isArray(questions))throw new Error("Dr. Eco returned an unreadable draft. Try again.");
-  questions=questions.filter(q=>q&&typeof q.prompt==="string"&&Array.isArray(q.options)&&q.options.length===4&&Number.isInteger(q.answerIndex)&&q.answerIndex>=0&&q.answerIndex<4).slice(0,count);
-  if(questions.length<Math.min(3,count))throw new Error("The draft did not contain enough usable questions. Try again.");
-  document.querySelector("#quizQuestionsJson").value=JSON.stringify(questions,null,2);
-  const shortBy=count-questions.length;
-  status.textContent=(fromMaterial?`Draft ready from ${course} course materials.`:`Draft ready from Dr. Eco's general ${course} knowledge (no indexed materials found) — check facts against the syllabus.`)+(shortBy?` Only ${questions.length} of ${count} questions were usable.`:"")+" Review the wording and answer indexes before saving.";
- }catch(e){status.textContent=e.message;}finally{button.disabled=false;}
-}
-async function createAdminQuiz(){
- const status=document.querySelector("#quizAdminStatus"),button=document.querySelector("#createQuiz");button.disabled=true;status.textContent="Saving quiz…";
- try{
-  const data=await adminQuizApi("create",{title:document.querySelector("#quizTitle").value,course_code:document.querySelector("#quizCourse").value,
-   target_type:document.querySelector("#quizTarget").value,target_level:document.querySelector("#quizLevel").value,
-   target_registrations:document.querySelector("#quizRegistrations").value.split(/[\s,;]+/).filter(Boolean),
-   quiz_type:document.querySelector("#quizMode").value,questions:quizQuestionsFromEditor()});
-  status.textContent="Quiz saved. Join code: "+data.quiz.join_code;
-  await renderAdminQuizzes();
- }catch(e){status.textContent=e.message;}finally{button.disabled=false;}
-}
-async function renderAdminQuizzes(){
- const box=document.querySelector("#quizAdminList");if(!box)return;
- try{const data=await adminQuizApi("list");box.replaceChildren(...(data.quizzes||[]).map(q=>{
-  const card=document.createElement("article");card.className="quiz-admin-card";
-  const title=document.createElement("strong");title.textContent=q.title+" · "+q.join_code;
-  const players=Array.isArray(q.foldbook_quiz_participants)?q.foldbook_quiz_participants:[];
-  const meta=document.createElement("p");meta.textContent=q.course_code+" · "+q.status.toUpperCase()+" · "+q.quiz_type+(q.status==="live"?" · Question "+(q.current_question+1)+" of "+q.questions.length:"")+" · "+players.length+" joined";
-  card.append(title,meta);
-  if(players.length){
-   const board=document.createElement("ol");board.className="quiz-host-leaderboard";
-   players.sort((x,y)=>(Number(y.score)||0)-(Number(x.score)||0)).slice(0,10).forEach(player=>{const row=document.createElement("li");row.textContent=(player.display_name||"Student")+" · "+(Number(player.score)||0)+" pts";board.append(row);});
-   card.append(board);
-  }
-  if(q.status==="lobby"){
-   const startButton=document.createElement("button");startButton.type="button";startButton.className="results-submit";startButton.textContent="Start contest";
-   startButton.addEventListener("click",async()=>{try{await adminQuizApi("control",{id:q.id,status:"live",current_question:0});await renderAdminQuizzes();}catch(e){document.querySelector("#quizAdminStatus").textContent=e.message;}});
-   card.append(startButton);
-  }
-  if(q.status==="live"&&q.quiz_type==="contest"){
-   if(q.current_question<q.questions.length-1){
-    const next=document.createElement("button");next.type="button";next.className="results-submit";next.textContent="Next question →";
-    next.addEventListener("click",async()=>{try{await adminQuizApi("control",{id:q.id,status:"live",current_question:q.current_question+1});await renderAdminQuizzes();}catch(e){document.querySelector("#quizAdminStatus").textContent=e.message;}});
-    card.append(next);
-   } else {
-    const finish=document.createElement("button");finish.type="button";finish.className="card-secondary-button";finish.textContent="Finish contest";
-    finish.addEventListener("click",async()=>{try{await adminQuizApi("control",{id:q.id,status:"finished"});await renderAdminQuizzes();}catch(e){document.querySelector("#quizAdminStatus").textContent=e.message;}});
-    card.append(finish);
-   }
-  }
-  if(q.status==="live"&&q.quiz_type==="open"){
-   const close=document.createElement("button");close.type="button";close.className="card-secondary-button";close.textContent="Close open quiz";
-   close.addEventListener("click",async()=>{try{await adminQuizApi("control",{id:q.id,status:"finished"});await renderAdminQuizzes();}catch(e){document.querySelector("#quizAdminStatus").textContent=e.message;}});
-   card.append(close);
-  }
-  const share=document.createElement("a");share.href=location.origin+"/?quiz="+q.join_code;share.textContent="Share join link";share.target="_blank";share.rel="noopener noreferrer";card.append(share);
-  return card;
- }));}catch(e){document.querySelector("#quizAdminStatus").textContent=e.message;}
-}
-document.querySelector("#generateQuizQuestions")?.addEventListener("click",draftQuizQuestions);
-document.querySelector("#createQuiz")?.addEventListener("click",createAdminQuiz);
+// Live quizzes (student join flow, admin Quiz Studio and host screen) live in assets/js/live-quiz.js.
 
 function showAccessRestrictedNotice() {
   const notice = "Access Restricted: SevenFold Authorized Personnel Only";
@@ -6723,7 +6488,7 @@ async function handleAuthSubmit(fullName, regNumber, phone, passcode, password) 
     const showResults = pendingResultsAfterAuth;
     pendingResultsAfterAuth = false;
     activateTab(showResults ? "results" : "home");
-    void refreshPublicQuizList();
+    window.FoldBookLiveQuiz?.refreshAvailable();
     if (!showResults) {
       if (studyProgress.onboardingComplete) startStudentTour();
       else if (!learningProfileLoadFailed) openLearningPathSetup();
@@ -6852,7 +6617,7 @@ document.querySelectorAll("[data-admin-view]").forEach((button) => {
     if (button.dataset.adminView === "students") loadStudentRecords();
     if (button.dataset.adminView === "whatsapp") void loadWhatsAppBotSettings();
     if (button.dataset.adminView === "mobile-reminders") void loadMobileReminderSettings();
-    if (button.dataset.adminView === "quizzes") { void loadQuizCourseOptions(); void renderAdminQuizzes(); }
+    if (button.dataset.adminView === "quizzes") window.FoldBookLiveQuiz?.openStudio();
   });
 });
 
