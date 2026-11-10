@@ -2007,7 +2007,8 @@ function studyTrailCharacter(character, side, animated) {
   slot.append(art);
   if (animated && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
     requestAnimationFrame(() => {
-      if (slot.isConnected) window.playFoldBookMascot?.(character, "idle", slot, character === "eco" ? { cap: "round" } : { flameDays: studyProgress.streak });
+      // The players need at least 120px; below that the static art above is the whole character.
+      if (slot.isConnected && slot.getBoundingClientRect().width >= 120) window.playFoldBookMascot?.(character, "idle", slot, character === "eco" ? { cap: "round" } : { flameDays: studyProgress.streak });
     });
   }
   return slot;

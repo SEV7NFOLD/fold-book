@@ -1412,7 +1412,6 @@ textarea.admin-material-control { min-height: 140px; resize: vertical; }
 }
 
 @media (max-width: 768px) {
-  body { overflow-x: hidden; }
   #studentApp.shell { width: 100%; padding: 12px; }
   button, .btn, select, input:not([type="checkbox"]) { min-height: 44px; }
   select, input:not([type="checkbox"]), textarea { font-size: 16px; }
@@ -1797,15 +1796,15 @@ body.answer-feedback-open { overflow: hidden; }
 .tone-gold { --tone:#F5C451; --tone-edge:#b88a1c; --tone-ink:#2a1d00; --tone-bright:#F5C451; }
 .tone-green { --tone:#22c55e; --tone-edge:#15803d; --tone-ink:#04210f; --tone-bright:#4ade80; }
 
-.trail-unit { position:relative; padding-bottom:22px; }
+.trail-unit { position:relative; align-self:stretch; width:100%; min-width:0; padding-bottom:22px; }
 .trail-banner {
   position:sticky; z-index:6; top:calc(var(--trail-sticky-top, 0px) + 8px);
   display:flex; align-items:stretch; margin:0 8px 30px; border-radius:16px;
   background:var(--tone); color:var(--tone-ink); box-shadow:0 5px 0 var(--tone-edge), 0 10px 24px rgb(0 0 0 / 35%);
 }
-.trail-banner-text { flex:1 1 auto; min-width:0; padding:12px 16px 13px; }
-.trail-banner-text p { margin:0; font-size:13px; font-weight:700; opacity:.72; }
-.trail-banner-text h2 { margin:2px 0 0; font-size:19px; font-weight:800; line-height:1.15; letter-spacing:-.01em; }
+.trail-banner-text { flex:1 1 auto; min-width:0; padding:10px 14px 11px; }
+.trail-banner-text p { margin:0; font-size:12px; font-weight:700; opacity:.72; }
+.trail-banner-text h2 { overflow:hidden; margin:1px 0 0; font-size:18px; font-weight:800; line-height:1.2; letter-spacing:-.01em; text-overflow:ellipsis; white-space:nowrap; }
 .trail-banner-guide {
   display:grid; flex:0 0 58px; place-items:center; margin:0; padding:0; border:0;
   border-left:2px solid color-mix(in srgb, var(--tone-ink) 16%, transparent); border-radius:0 16px 16px 0;
@@ -1818,7 +1817,7 @@ body.answer-feedback-open { overflow: hidden; }
 .trail-step { position:relative; display:flex; min-height:94px; align-items:center; justify-content:center; }
 .trail-step.is-goal { min-height:104px; }
 .trail-step.has-bubble { margin-top:30px; }
-.trail-node-wrap { position:relative; z-index:2; display:grid; width:88px; height:88px; place-items:center; translate:var(--trail-x, 0px) 0; }
+.trail-node-wrap { position:relative; z-index:2; display:grid; width:88px; height:88px; place-items:center; transform:translateX(var(--trail-x, 0px)); }
 .trail-node-wrap.has-ring::before {
   position:absolute; inset:0; border-radius:50%; content:"";
   background:conic-gradient(var(--tone) calc(var(--trail-progress, 0) * 360deg), #2A2A2F 0);
@@ -1845,7 +1844,7 @@ body.answer-feedback-open { overflow: hidden; }
 .trail-node-badge svg { width:13px; height:13px; stroke-width:2.4; }
 
 .trail-bubble {
-  position:absolute; z-index:3; bottom:calc(100% - 2px); left:50%; translate:-50% 0;
+  position:absolute; z-index:3; bottom:calc(100% - 2px); left:50%; transform:translateX(-50%);
   padding:7px 13px; border:2px solid #2A2A2F; border-radius:12px; background:var(--fb-color-surface);
   color:var(--tone-bright); font-size:14px; font-weight:800; line-height:1; white-space:nowrap;
   animation:trail-bob 1.8s ease-in-out infinite;
@@ -1855,7 +1854,7 @@ body.answer-feedback-open { overflow: hidden; }
   border-right:2px solid #2A2A2F; border-bottom:2px solid #2A2A2F; background:var(--fb-color-surface);
   transform:translate(-50%, -4px) rotate(45deg);
 }
-@keyframes trail-bob { 50% { transform:translateY(-5px); } }
+@keyframes trail-bob { 0%, 100% { transform:translateX(-50%); } 50% { transform:translateX(-50%) translateY(-5px); } }
 .trail-step.is-open .trail-bubble { visibility:hidden; }
 
 .trail-character { position:absolute; z-index:1; top:50%; display:grid; width:132px; height:132px; place-items:center; transform:translateY(-50%); pointer-events:none; }
@@ -1884,18 +1883,20 @@ body.answer-feedback-open { overflow: hidden; }
 @keyframes trail-wiggle { 0%, 70%, 100% { transform:rotate(0); } 76% { transform:rotate(-6deg); } 84% { transform:rotate(5deg); } 92% { transform:rotate(-3deg); } }
 
 .trail-popover {
-  position:absolute; z-index:7; top:calc(50% + 46px); left:50%; width:min(calc(100% - 24px), 360px); translate:-50% 0;
+  position:absolute; z-index:7; top:calc(50% + 46px); right:0; left:0; width:min(calc(100% - 24px), 360px); margin:0 auto;
   padding:16px 16px 14px; border-radius:18px; background:var(--tone); color:var(--tone-ink);
   box-shadow:0 6px 0 var(--tone-edge), 0 20px 44px rgb(0 0 0 / 50%);
   animation:trail-pop .16s ease-out;
+  scroll-margin-top:calc(var(--trail-sticky-top, 0px) + 90px);
+  scroll-margin-bottom:calc(112px + env(safe-area-inset-bottom));
 }
 .trail-popover::before {
   position:absolute; top:-8px; left:calc(50% + var(--trail-x, 0px)); width:18px; height:18px; content:"";
   border-radius:3px; background:inherit; transform:translateX(-50%) rotate(45deg);
 }
 .trail-popover-kind { position:relative; margin:0; font-size:13px; font-weight:700; opacity:.75; }
-.trail-popover h3 { position:relative; margin:3px 0 5px; font-size:18px; font-weight:800; line-height:1.2; }
-.trail-popover-detail { position:relative; margin:0; font-size:14px; line-height:1.4; }
+.trail-popover h3 { position:relative; margin:3px 0 5px; font-size:18px; font-weight:800; line-height:1.2; overflow-wrap:anywhere; }
+.trail-popover-detail { position:relative; margin:0; font-size:14px; line-height:1.4; overflow-wrap:anywhere; }
 .trail-popover-action {
   position:relative; width:100%; min-height:48px; margin-top:14px; border:0; border-radius:14px;
   background:var(--fb-color-bg); color:var(--tone-bright); font:inherit; font-size:16px; font-weight:800;
@@ -1923,7 +1924,7 @@ body.answer-feedback-open { overflow: hidden; }
   border-radius:14px; background:var(--fb-color-surface-2); color:var(--fb-color-text); font:inherit; text-align:left;
 }
 button.trail-guide-item { cursor:pointer; }
-.trail-guide-item b { display:block; font-size:15px; line-height:1.25; }
+.trail-guide-item b { display:block; font-size:15px; line-height:1.25; overflow-wrap:anywhere; }
 .trail-guide-item small { display:block; margin-top:2px; color:var(--fb-color-muted); font-size:13px; }
 .trail-guide-icon { display:grid; flex:0 0 44px; width:44px; height:44px; place-items:center; border-radius:50%; background:var(--tone); color:var(--tone-ink); }
 .trail-guide-icon svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:2.6; stroke-linecap:round; stroke-linejoin:round; }
@@ -1950,8 +1951,25 @@ button.trail-guide-item { cursor:pointer; }
 }
 @media(max-width:350px) {
   .trail-character { width:120px; height:120px; }
-  .trail-character-art { width:80px; height:80px; }
+  .trail-character.is-left { right:calc(50% + 6px); }
+  .trail-character.is-right { left:calc(50% + 6px); }
+  .trail-character-art { width:72px; height:72px; }
+  .trail-popover { width:calc(100% - 16px); }
 }
 @media(prefers-reduced-motion:reduce) {
   .trail-bubble, .trail-goal.is-ready, .trail-popover { animation:none; }
+}
+
+/* Phones: nothing may widen the page, so it never pans sideways.
+   overflow-x on body alone is ignored for touch panning on mobile, and clip
+   (unlike hidden) keeps the sticky header and unit banners working. */
+html { overflow-x:hidden; }
+body { overflow-x:clip; }
+@media(max-width:340px) {
+  .student-header-widgets { gap:4px; }
+  .student-header-widgets > .pill { gap:3px; padding:0 5px; }
+  #sndToggle, #refreshFoldBook { width:30px; min-width:30px; padding:0; }
+  #profileButton { padding:2px; }
+  #studentSignOut { padding:4px 6px; }
+  .bnav button { min-width:0; padding-right:2px; padding-left:2px; font-size:10px; }
 }
