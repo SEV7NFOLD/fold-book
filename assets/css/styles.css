@@ -526,11 +526,6 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid 
 .test-drawer-card > .results-submit { width: 100%; min-height: 40px; }
 .fuel-modal-card { width: min(100%, 500px); }
 .fuel-close { position: absolute; top: 16px; right: 16px; width: 35px; font-size: 20px; }
-.fuel-plans { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 19px; }
-.fuel-plan { display: grid; gap: 11px; padding: 15px; border: 1px solid var(--border-light); }
-.fuel-plan > strong { font-size: 12px; }
-.fuel-plan > span { color: var(--muted); font-size: 9px; }
-.fuel-plan .results-submit { min-height: 36px; cursor: pointer; }
 .fuel-status { min-height: 18px; }
 
 @media (max-width: 760px) {
@@ -1111,11 +1106,11 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .fuel-modal-card h2 { margin: 8px 0 4px; font-size: 24px; font-weight: 800; letter-spacing: -.02em; }
 .fuel-modal-card > p { color: var(--fb-color-muted); }
 .fuel-modal-card .section-kicker { color: var(--fb-color-gold); font: 500 11px var(--fb-font-mono); }
-.fuel-plans { display: grid; gap: 12px; }
+.fuel-plans { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 19px; }
 .fuel-plan { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; padding: 14px; border: 2px solid var(--fb-color-border); border-radius: 14px; background: var(--fb-color-surface-2); box-shadow: 0 4px 0 var(--fb-color-black-deep); }
 .fuel-plan strong { font-size: 15px; }
 .fuel-plan > span { grid-column: 1; color: var(--fb-color-muted); font-size: 13px; }
-.fuel-plan .results-submit { grid-column: 2; grid-row: 1 / span 2; min-width: 82px; padding: 8px 14px; font-size: 12px; white-space: nowrap; }
+.fuel-plan .results-submit { grid-column: 2; grid-row: 1 / span 2; min-width: 96px; min-height: 44px; padding: 8px 14px; font-size: 13px; white-space: nowrap; cursor: pointer; }
 .fuel-status { min-height: 24px; color: var(--fb-color-lime); }
 
 .results-section { border-color: var(--fb-color-border); background: var(--fb-color-bg); }
@@ -1464,8 +1459,8 @@ textarea.admin-material-control { min-height: 140px; resize: vertical; }
 }
 
 /* FoldBook mobile app actions, streaks and course path controls */
-body.foldbook-app-open { overscroll-behavior-y: contain; }
 html:has(body.foldbook-app-open) { overscroll-behavior-y: contain; }
+.header-refresh {
   width: 36px;
   min-width: 36px;
   padding: 0;
@@ -2289,3 +2284,31 @@ button.lq-tile:active:not(:disabled) { transform:translateY(4px); box-shadow:non
 /* Dr. Eco talking head (voice call) */
 .voice-call-mascot.eco-talker { display: grid; place-items: center; }
 .voice-call-mascot.eco-talker > .eco-talker-svg { display: block; width: 100%; height: 100%; overflow: hidden; transform-origin: 50% 85%; will-change: transform; }
+
+/* QA fixes (Nov 2026) */
+/* Lesson stays reachable while answering a lesson node's questions. */
+.lesson-review { margin: 18px 0; border: 1px solid var(--fb-color-border); border-radius: 14px; background: var(--fb-color-surface); }
+.lesson-review > summary { min-height: 44px; display: flex; align-items: center; padding: 10px 14px; color: var(--fb-color-lime); font-size: 14px; font-weight: 700; cursor: pointer; list-style: none; }
+.lesson-review > summary::-webkit-details-marker { display: none; }
+.lesson-review > summary::after { content: "▾"; margin-left: auto; transition: transform .15s; }
+.lesson-review:not([open]) > summary::after { transform: rotate(-90deg); }
+.lesson-review[open] > summary { border-bottom: 1px solid var(--fb-color-border); }
+.lesson-page .lesson-review .lesson-body { margin: 0; padding: 12px 14px 16px; }
+
+/* Minimized call sits above the mobile bottom nav instead of covering it. */
+@media (max-width: 860px) {
+  .voice-mini-player { bottom: calc(82px + env(safe-area-inset-bottom, 0px)); }
+}
+
+/* Results on phones: each course becomes a card, so Remark and the card button stay on screen. */
+@media (max-width: 600px) {
+  .student-results-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .student-results-table, .student-results-table tbody { display: block; width: 100%; }
+  .student-results-table tr { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px 6px; margin: 0 0 12px; padding: 14px; border: 1px solid var(--fb-color-border); border-radius: 14px; background: var(--fb-color-surface); }
+  .student-results-table td { display: block; min-width: 0; padding: 0; border: 0; font-size: 15px; font-weight: 700; white-space: normal; }
+  .student-results-table td:first-child { grid-column: 1 / -1; min-width: 0; padding-bottom: 6px; border-bottom: 1px solid var(--fb-color-border); }
+  .student-results-table td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 2px; color: var(--fb-color-muted); font: 500 11px var(--fb-font-mono); letter-spacing: .04em; text-transform: uppercase; }
+  .student-results-table td.result-card-cell { grid-column: 1 / -1; padding-top: 4px; }
+  .student-results-table .result-card-button { width: 100%; min-height: 44px; }
+  .results-table-wrap:has(.student-results-table) { overflow: visible; }
+}

@@ -125,7 +125,9 @@ test("production output keeps the dark branding and compiles student results int
   assert.match(html, /id="authFullName"[^>]+required/);
   assert.match(html, /id="authRegNo"[^>]+required/);
   assert.match(html, /id="authWhatsapp"[^>]+required/);
-  assert.match(html, /xlsx@0\.18\.5/);
+  // The spreadsheet reader loads on demand from app.js, not on every page view.
+  assert.doesNotMatch(html, /xlsx\.full\.min\.js/);
+  assert.match(fs.readFileSync(path.join(root, "assets/js/app.js"), "utf8"), /xlsx@0\.18\.5\/dist\/xlsx\.full\.min\.js/);
   assert.match(html, /<div class="shell" id="studentApp" hidden>/);
   assert.match(html, /<section id="adminDashboard" class="admin-portal hide sec" hidden>/);
   assert.match(html, /SevenFold Admin Portal/);

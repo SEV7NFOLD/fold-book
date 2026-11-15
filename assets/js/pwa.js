@@ -156,8 +156,31 @@
     modal.hidden = true;
   }
 
+  // Another dialog (first-run path setup, tour, a lesson, a call…) is on screen.
+  function otherDialogOpen() {
+    return [...document.querySelectorAll("[aria-modal=true], .test-drawer, .lesson-page")]
+      .some((el) => !el.closest(".foldbook-install-overlay") && !el.hidden
+        && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden");
+  }
+
+  // One pending prompt at a time; waits until no other dialog is open.
+  let modalTimer = 0;
+  let modalAttempts = 0;
+  function scheduleModal(delay = 1600) {
+    if (modalTimer) return;
+    modalTimer = window.setTimeout(() => {
+      modalTimer = 0;
+      if (!shouldShowPrompt()) return;
+      if (otherDialogOpen()) {
+        if (++modalAttempts < 40) scheduleModal(15000);
+        return;
+      }
+      showModal();
+    }, delay);
+  }
+
   function showModal() {
-    if (!shouldShowPrompt()) return;
+    if (!shouldShowPrompt() || otherDialogOpen()) return;
     const panel = createModal();
     const button = panel.querySelector(".foldbook-install-cta");
     const reminderButton = panel.querySelector(".foldbook-reminder-cta");
@@ -475,7 +498,7 @@
         showReminderArrival();
         addInstalledReminderBanner();
         startBroadcastChecks();
-        window.setTimeout(showModal, 1600);
+        scheduleModal();
       } else {
         document.body.classList.remove("foldbook-app-open");
       }
@@ -486,7 +509,7 @@
       showReminderArrival();
       addInstalledReminderBanner();
       startBroadcastChecks();
-      window.setTimeout(showModal, 1600);
+      scheduleModal();
     }
   }
 
