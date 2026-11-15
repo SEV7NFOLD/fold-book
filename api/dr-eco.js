@@ -41,6 +41,9 @@ async function readBody(request) {
 const TTS_MODEL = process.env.GEMINI_TTS_MODEL || "gemini-3.8-flash-lite-tts";
 const TTS_VOICES = new Set(["Orus", "Kore", "Aoede", "Leda", "Puck", "Charon", "Fenrir", "Zephyr"]);
 const TTS_MAX_CHARS = 2400;
+// Relaxed and conversational, in a neutral accent: a tutor talking to one student,
+// not an announcer or an advert.
+const TTS_STYLE = "relaxed, natural and conversational, in a neutral international English accent, at an easy talking pace, like a tutor chatting one-on-one with a student; not like an advert, announcer or narrator";
 const TTS_TIMEOUT_MS = 45000;
 
 function isTtsPayload(payload) {
@@ -89,8 +92,8 @@ async function handleTts(payload, apiKey, response) {
     contents: [{
       role: "user",
       parts: legacyVoiceConfig
-        ? [{ text: `Read this aloud warmly and clearly, like a friendly Nigerian economics tutor explaining to a student: ${text}` }]
-        : [{ text, speech_metadata: { style: "warm, clear and encouraging, like a friendly economics tutor explaining to a student" } }],
+        ? [{ text: `${TTS_STYLE}. Read this aloud: ${text}` }]
+        : [{ text, speech_metadata: { style: TTS_STYLE } }],
     }],
     generationConfig: {
       responseModalities: ["AUDIO"],
