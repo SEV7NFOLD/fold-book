@@ -46,22 +46,38 @@
             <span class="mono" id="vStreak">6</span>
           </button>
           <button class="pill fuel-pill" id="pFuel" type="button" aria-label="Open fuel and passes" title="Dr. Eco fuel">
-            <span aria-hidden="true">⚡</span>
+            <svg class="hdr-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M13.2 2.8 5.6 13.1h5.3l-1.1 8.1 7.6-10.3h-5.3z" fill="currentColor"/></svg>
             <span class="mono" id="vFuel">100/100</span>
             <span class="fuel-meter" aria-hidden="true"><i id="fbar"></i></span>
           </button>
-          <button class="pill sound-toggle" id="sndToggle" type="button" aria-label="Turn sound off" aria-pressed="true" title="Toggle sound">🔊</button>
-          <button class="pill header-refresh" id="refreshFoldBook" type="button" title="Refresh FoldBook" aria-label="Refresh FoldBook">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6.2 9a7 7 0 0 1 11.5-2L20 9M4 15l2.3 2a7 7 0 0 0 11.5-2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </button>
-          <button class="pill quiz-join-pill" id="quizJoinButton" type="button" aria-haspopup="dialog" aria-controls="quizPlayOverlay" title="Join a live quiz">
-            <span aria-hidden="true">🎮</span><span class="quiz-join-pill-label">Join quiz</span><i class="quiz-join-pill-dot" id="quizJoinDot" hidden></i>
-          </button>
+          <div class="header-tools" id="headerTools">
+            <button class="header-more" id="headerMoreButton" type="button" aria-expanded="false" aria-controls="headerToolsMenu" aria-label="More options" title="More">
+              <svg class="hdr-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="12" r="1.9" fill="currentColor"/><circle cx="12" cy="12" r="1.9" fill="currentColor"/><circle cx="18.5" cy="12" r="1.9" fill="currentColor"/></svg>
+              <i class="header-more-dot" aria-hidden="true"></i>
+            </button>
+            <div class="header-tools-menu" id="headerToolsMenu">
+              <button class="pill quiz-join-pill" id="quizJoinButton" type="button" aria-haspopup="dialog" aria-controls="quizPlayOverlay" title="Join a live quiz">
+                <svg class="hdr-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6.5" width="18" height="11" rx="5.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 10v4M6 12h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="15.5" cy="11" r="1.1" fill="currentColor"/><circle cx="17.6" cy="13.2" r="1.1" fill="currentColor"/></svg>
+                <span class="quiz-join-pill-label">Join quiz</span><i class="quiz-join-pill-dot" id="quizJoinDot" hidden></i>
+              </button>
+              <button class="pill sound-toggle" id="sndToggle" type="button" aria-label="Turn sound off" aria-pressed="true" title="Toggle sound">
+                <svg class="hdr-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z" fill="currentColor"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                <span class="header-tool-label">Sound on</span>
+              </button>
+              <button class="pill header-refresh" id="refreshFoldBook" type="button" title="Refresh FoldBook" aria-label="Refresh FoldBook">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6.2 9a7 7 0 0 1 11.5-2L20 9M4 15l2.3 2a7 7 0 0 0 11.5-2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span class="header-tool-label">Refresh</span>
+              </button>
+              <button class="pill header-signout" id="studentSignOut" type="button" title="Sign out">
+                <svg class="hdr-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span class="header-tool-label">Sign out</span>
+              </button>
+            </div>
+          </div>
           <button class="header-profile" id="profileButton" type="button" aria-haspopup="dialog" aria-controls="profileModal">
             <span class="profile-avatar" id="headerProfileAvatar" aria-hidden="true">S</span>
             <span id="headerProfileName">Profile</span>
           </button>
-          <button class="header-signout card-secondary-button" id="studentSignOut" type="button">Sign Out 🚪</button>
         </div>
       </div>
     </header>
@@ -206,8 +222,8 @@
             </div>
           </div>
           <div class="chat-header-actions">
-            <button type="button" class="voice-toggle" id="voiceToggle" aria-pressed="false">📞 Call</button>
-            <button type="button" class="chat-settings-toggle" id="chatSettingsToggle" aria-label="Open chat settings" aria-expanded="false" aria-controls="chatSettingsDrawer" title="Chat settings">⚙</button>
+            <button type="button" class="voice-toggle" id="voiceToggle" aria-pressed="false"><svg class="hdr-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 3.5h2.6l1.4 4-2 1.4a11 11 0 0 0 6.5 6.5l1.4-2 4 1.4v2.6a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4.6 5.7a2 2 0 0 1 2-2.2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span>Call</span></button>
+            <button type="button" class="chat-settings-toggle" id="chatSettingsToggle" aria-label="Open chat settings" aria-expanded="false" aria-controls="chatSettingsDrawer" title="Chat settings"><svg class="hdr-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.8v2.4M12 18.8v2.4M21.2 12h-2.4M5.2 12H2.8M18.5 5.5l-1.7 1.7M7.2 16.8l-1.7 1.7M18.5 18.5l-1.7-1.7M7.2 7.2 5.5 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
           </div>
         </div>
         <div class="chat-settings-drawer" id="chatSettingsDrawer" hidden>
@@ -269,7 +285,7 @@
           <button type="submit" class="results-submit">Send</button>
           <button type="button" class="results-submit quiz-launch" id="openTest">Test Me 📝</button>
         </form>
-        <p class="chat-disclaimer">AI study guidance based on available course materials; verify important details with your lecturer and official course resources.</p>
+        <p class="chat-disclaimer">Dr. Eco can make mistakes. Check important details with your lecturer and course materials.</p>
       </section>
 
       <section id="board" class="leaderboard-section hide" hidden>
