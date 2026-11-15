@@ -1294,7 +1294,9 @@ function updateStudySummary() {
   S.referralCount = studyProgress.referralCount;
   streakValue.textContent = String(S.streak);
   if (gemsValue) gemsValue.textContent = String(studyProgress.gems);
-  soundToggle.textContent = studyProgress.soundEnabled ? "🔊" : "🔇";
+  soundToggle.innerHTML = studyProgress.soundEnabled
+    ? '<svg class="hdr-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z" fill="currentColor"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span class="header-tool-label">Sound on</span>'
+    : '<svg class="hdr-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z" fill="currentColor"/><path d="M16 9.5l5 5M21 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span class="header-tool-label">Sound off</span>';
   soundToggle.setAttribute("aria-pressed", String(studyProgress.soundEnabled));
   soundToggle.setAttribute("aria-label", `Turn sound ${studyProgress.soundEnabled ? "off" : "on"}`);
   examPredictorButton.disabled = false;
@@ -2655,6 +2657,9 @@ function activateTab(tab) {
     panel.hidden = isHidden;
     panel.classList.toggle("hide", isHidden);
   }
+  // The chat tab is a full-height screen with its message box pinned at the bottom.
+  document.body.classList.toggle("foldbook-chat-open", selectedTab === "chat");
+  if (selectedTab === "chat") window.requestAnimationFrame(() => { chatMessages.scrollTop = chatMessages.scrollHeight; });
   // A new tab starts at its top instead of keeping the last tab's scroll position.
   if (previousTab && previousTab !== selectedTab) window.scrollTo({ top: 0, behavior: "auto" });
   // Focus the chat box only with a mouse or trackpad: on phones it would pop up the
@@ -3238,7 +3243,7 @@ function appendChatMessage(text, kind) {
     const listen = document.createElement("button");
     listen.type = "button";
     listen.className = "listen-button";
-    listen.textContent = "🔊 Listen";
+    setListenButtonState(listen, "idle");
     article.append(listen);
   }
   const avatar = document.createElement("span");
@@ -4486,7 +4491,7 @@ function toggleVoiceCallRoom(open, openingPrompt = "") {
   voiceCallActive = open;
   const toggle = document.querySelector("#voiceToggle");
   toggle.setAttribute("aria-pressed", String(open));
-  toggle.textContent = open ? "📞 End call" : "📞 Call";
+  toggle.innerHTML = `<svg class="hdr-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 3.5h2.6l1.4 4-2 1.4a11 11 0 0 0 6.5 6.5l1.4-2 4 1.4v2.6a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4.6 5.7a2 2 0 0 1 2-2.2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span>${open ? "End call" : "Call"}</span>`;
   if (open) {
     voiceMuted = false;
     document.querySelector("#voiceMuteButton").setAttribute("aria-pressed", "false");
@@ -4543,9 +4548,77 @@ document.querySelector("#voiceMinimizeButton").addEventListener("click", minimiz
 document.querySelector("#voiceMiniOpen").addEventListener("click", restoreVoiceCallRoom);
 document.querySelector("#voiceMiniEnd").addEventListener("click", () => toggleVoiceCallRoom(false));
 
-function speakText(text) {
-  if (!soundOn || !voiceSpeakerOn || !("speechSynthesis" in window)
-    || typeof window.SpeechSynthesisUtterance !== "function") return;
+/* "Listen" on Dr. Eco's messages: a natural Gemini voice (the same voice the student
+   picked for live calls), cached per message. Falls back to the device's built-in
+   voice if the natural voice can't load. Tapping again stops playback. */
+function listenIconSvg() { return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z" fill="currentColor"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>'; }
+function stopIconSvg() { return '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></svg>'; }
+var naturalVoiceCache = new Map();
+var listenAudio = null;
+var listenButton = null;
+
+function setListenButtonState(button, state) {
+  if (!button) return;
+  button.dataset.state = state;
+  const label = state === "loading" ? "Loading…" : state === "playing" ? "Stop" : "Listen";
+  button.innerHTML = `${state === "playing" ? stopIconSvg() : listenIconSvg()}<span>${label}</span>`;
+  button.setAttribute("aria-label", state === "playing" ? "Stop reading aloud" : "Listen to this answer");
+  button.disabled = state === "loading";
+}
+
+function stopListening() {
+  if (listenAudio) { listenAudio.pause(); listenAudio = null; }
+  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  setListenButtonState(listenButton, "idle");
+  listenButton = null;
+}
+
+async function fetchNaturalVoice(text) {
+  const voice = studyProgress.studyVoice || "Orus";
+  const key = `${voice}:${text}`;
+  if (naturalVoiceCache.has(key)) return naturalVoiceCache.get(key);
+  const response = await fetch("/api/dr-eco", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode: "tts", text: text.slice(0, 2400), voice }),
+  });
+  if (!response.ok || !String(response.headers.get("Content-Type") || "").startsWith("audio/")) {
+    throw new Error(`Natural voice unavailable (${response.status}).`);
+  }
+  const url = URL.createObjectURL(await response.blob());
+  naturalVoiceCache.set(key, url);
+  if (naturalVoiceCache.size > 12) {
+    const [oldestKey, oldestUrl] = naturalVoiceCache.entries().next().value;
+    URL.revokeObjectURL(oldestUrl);
+    naturalVoiceCache.delete(oldestKey);
+  }
+  return url;
+}
+
+async function listenToMessage(button, text) {
+  if (listenButton === button) { stopListening(); return; }
+  stopListening();
+  listenButton = button;
+  setListenButtonState(button, "loading");
+  try {
+    const url = await fetchNaturalVoice(text);
+    if (listenButton !== button) return;
+    const audio = new Audio(url);
+    listenAudio = audio;
+    audio.addEventListener("ended", () => { if (listenAudio === audio) stopListening(); });
+    await audio.play();
+    setListenButtonState(button, "playing");
+  } catch (error) {
+    console.warn("Using the device voice instead:", error);
+    if (listenButton !== button) return;
+    setListenButtonState(button, "playing");
+    speakText(text, { force: true, onEnd: () => { if (listenButton === button) stopListening(); } });
+  }
+}
+
+function speakText(text, { force = false, onEnd = null } = {}) {
+  if ((!force && (!soundOn || !voiceSpeakerOn)) || !("speechSynthesis" in window)
+    || typeof window.SpeechSynthesisUtterance !== "function") { onEnd?.(); return; }
   window.speechSynthesis.cancel();
   const utterance = new window.SpeechSynthesisUtterance(String(text).replace(/\*{1,2}/g, ""));
   utterance.rate = 1;
@@ -4556,6 +4629,7 @@ function speakText(text) {
       && (name.includes("google") || name.includes("natural") || name.includes("samantha"));
   });
   if (voice) utterance.voice = voice;
+  if (onEnd) { utterance.onend = onEnd; utterance.onerror = onEnd; }
   window.speechSynthesis.speak(utterance);
 }
 
@@ -4643,8 +4717,9 @@ document.querySelector("#chatPrompts").addEventListener("click", (event) => {
 });
 chatMessages.addEventListener("click", (event) => {
   if (!event.target.closest(".listen-button")) return;
-  const text = event.target.closest(".chat-message").querySelector("p").textContent;
-  speakText(text);
+  const button = event.target.closest(".listen-button");
+  const text = button.closest(".chat-message").querySelector("p").textContent;
+  void listenToMessage(button, text);
 });
 document.querySelector("#voiceToggle").addEventListener("click", () => {
   toggleVoiceCallRoom(!voiceCallActive);
@@ -6524,6 +6599,53 @@ async function signOut() {
 
 document.querySelector("#adminLogout").addEventListener("click", signOut);
 document.querySelector("#studentSignOut").addEventListener("click", signOut);
+
+/* Keep --fb-top-h and --fb-bnav-h in sync with the real header and bottom-nav heights,
+   so full-height screens (the chat) fit exactly between them on every phone. */
+(() => {
+  const root = document.documentElement;
+  const top = document.querySelector(".top");
+  const nav = document.querySelector("#studentMobileNav");
+  const update = () => {
+    if (top) root.style.setProperty("--fb-top-h", `${Math.round(top.getBoundingClientRect().height)}px`);
+    const navVisible = nav && getComputedStyle(nav).display !== "none" && !nav.hidden;
+    root.style.setProperty("--fb-bnav-h", `${navVisible ? Math.round(nav.getBoundingClientRect().height) : 0}px`);
+  };
+  update();
+  if ("ResizeObserver" in window) {
+    const observer = new ResizeObserver(update);
+    if (top) observer.observe(top);
+    if (nav) observer.observe(nav);
+  }
+  window.addEventListener("resize", update);
+})();
+
+/* Header "more" menu (phones): Join quiz, sound, refresh and sign out live here so the
+   header stays one clean row. On wider screens the same buttons show inline. */
+(() => {
+  const tools = document.querySelector("#headerTools");
+  const moreButton = document.querySelector("#headerMoreButton");
+  if (!tools || !moreButton) return;
+  const setOpen = (open) => {
+    tools.classList.toggle("is-open", open);
+    moreButton.setAttribute("aria-expanded", String(open));
+  };
+  moreButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const open = !tools.classList.contains("is-open");
+    setOpen(open);
+    if (open) tools.querySelector(".header-tools-menu button")?.focus({ preventScroll: true });
+  });
+  // Close after choosing an item (sound toggles stay open so you can see the change).
+  tools.querySelector(".header-tools-menu").addEventListener("click", (event) => {
+    if (event.target.closest("#sndToggle")) return;
+    if (event.target.closest("button")) setOpen(false);
+  });
+  document.addEventListener("click", (event) => { if (!tools.contains(event.target)) setOpen(false); });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && tools.classList.contains("is-open")) { setOpen(false); moreButton.focus(); }
+  });
+})();
 document.querySelector("#profileSignOut").addEventListener("click", signOut);
 adminSearch.addEventListener("input", () => renderAdminDirectory(adminSearch.value));
 

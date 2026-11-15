@@ -35,6 +35,111 @@ async function readBody(request) {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
+// Natural-sounding "Listen" playback: Gemini text-to-speech with the same voices as
+// Dr. Eco's live calls. Lives in this function because the Vercel Hobby plan allows
+// only 12 serverless functions and FoldBook already uses all of them.
+const TTS_MODEL = process.env.GEMINI_TTS_MODEL || "gemini-3.8-flash-lite-tts";
+const TTS_VOICES = new Set(["Orus", "Kore", "Aoede", "Leda", "Puck", "Charon", "Fenrir", "Zephyr"]);
+const TTS_MAX_CHARS = 2400;
+const TTS_TIMEOUT_MS = 45000;
+
+function isTtsPayload(payload) {
+  return Boolean(payload && typeof payload === "object" && payload.mode === "tts");
+}
+
+function cleanSpeechText(text) {
+  return String(text || "")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/[*_#>`]+/g, "")
+    .replace(/\[(.*?)\]\((.*?)\)/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, TTS_MAX_CHARS);
+}
+
+// Older TTS models return raw 16-bit PCM; wrap it in a WAV header so browsers can play it.
+function pcmToWav(pcm, sampleRate = 24000) {
+  const header = Buffer.alloc(44);
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + pcm.length, 4);
+  header.write("WAVE", 8);
+  header.write("fmt ", 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(sampleRate * 2, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write("data", 36);
+  header.writeUInt32LE(pcm.length, 40);
+  return Buffer.concat([header, pcm]);
+}
+
+async function handleTts(payload, apiKey, response) {
+  const text = cleanSpeechText(payload.text);
+  if (!text) {
+    sendJson(response, 400, { error: "Nothing to read aloud." });
+    return;
+  }
+  const voice = TTS_VOICES.has(payload.voice) ? payload.voice : "Orus";
+  // Newer TTS models take voiceConfig.voice; preview/2.5 models take prebuiltVoiceConfig.
+  const legacyVoiceConfig = /preview|2\.5/.test(TTS_MODEL);
+  const body = {
+    contents: [{
+      role: "user",
+      parts: legacyVoiceConfig
+        ? [{ text: `Read this aloud warmly and clearly, like a friendly Nigerian economics tutor explaining to a student: ${text}` }]
+        : [{ text, speech_metadata: { style: "warm, clear and encouraging, like a friendly economics tutor explaining to a student" } }],
+    }],
+    generationConfig: {
+      responseModalities: ["AUDIO"],
+      speechConfig: { voiceConfig: legacyVoiceConfig ? { prebuiltVoiceConfig: { voiceName: voice } } : { voice } },
+    },
+  };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TTS_TIMEOUT_MS);
+  try {
+    const upstream = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${TTS_MODEL}:generateContent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    const responseText = await upstream.text();
+    if (!upstream.ok) {
+      let detail = "";
+      try { detail = String(JSON.parse(responseText).error?.message || ""); } catch { /* ignore */ }
+      console.error("Gemini TTS rejected the request:", upstream.status, detail.replace(/[\r\n\t]+/g, " ").slice(0, 320) || "no provider detail");
+      sendJson(response, 502, { error: `Speech generation failed (${upstream.status}).` });
+      return;
+    }
+    const part = JSON.parse(responseText)?.candidates?.[0]?.content?.parts?.find((item) => item?.inlineData?.data);
+    if (!part) {
+      sendJson(response, 502, { error: "Speech generation returned no audio." });
+      return;
+    }
+    const mimeType = String(part.inlineData.mimeType || "").toLowerCase();
+    let audio = Buffer.from(part.inlineData.data, "base64");
+    if (!(audio.length > 12 && audio.toString("ascii", 0, 4) === "RIFF")) {
+      const rate = Number(mimeType.match(/rate=(\d+)/)?.[1] || 24000);
+      audio = pcmToWav(audio, rate);
+    }
+    response.writeHead(200, {
+      "Cache-Control": "no-store",
+      "Content-Length": audio.length,
+      "Content-Type": "audio/wav",
+      "X-Content-Type-Options": "nosniff",
+    });
+    response.end(audio);
+  } catch (error) {
+    console.error("Gemini TTS request failed:", error.name === "AbortError" ? "request timed out" : error.name);
+    sendJson(response, 502, { error: error.name === "AbortError" ? "Speech generation timed out." : "Speech generation is temporarily unavailable." });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function validatePayload(payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
   const instruction = payload.system_instruction?.parts;
@@ -84,6 +189,10 @@ module.exports = async function drEcoHandler(request, response) {
   }
   if (Buffer.byteLength(JSON.stringify(payload)) > MAX_REQUEST_BYTES) {
     sendJson(response, 413, { error: "Request body is too large." });
+    return;
+  }
+  if (isTtsPayload(payload)) {
+    await handleTts(payload, apiKey, response);
     return;
   }
   if (!validatePayload(payload)) {
