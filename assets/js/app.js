@@ -814,8 +814,9 @@ const sfxEngine = {
   complete: new Audio("/assets/sfx/Complete%20test.mp3"),
   momentsLater: new Audio("/assets/sfx/a-few-moments-later-sponge-bob-sfx-fun.mp3"),
 };
+// Sounds download the first time they play, not on page load (about 460 KB saved on mobile data).
 Object.values(sfxEngine).forEach((audio) => {
-  audio.preload = "auto";
+  audio.preload = "none";
 });
 
 function playCustomSfx(key, { loop = false } = {}) {
@@ -1175,6 +1176,14 @@ function consumeStudyFuel(amount) {
   return true;
 }
 
+// Gives back fuel for a request that failed, so a bad connection never costs fuel.
+function refundStudyFuel(amount) {
+  if (!(amount > 0)) return;
+  studyProgress.fuel += amount;
+  saveStudyProgress();
+  updateFuelDisplay();
+}
+
 async function refreshStudentExperience() {
   const button = document.querySelector("#refreshFoldBook");
   if (!currentStudent || button?.disabled) return;
@@ -1306,7 +1315,7 @@ function renderLessonActivity(module) {
   const actions = document.querySelector("#lessonActivityActions");
   actions.replaceChildren();
   panel.hidden = false;
-  document.querySelector("#lessonBody").hidden = true;
+  document.querySelector("#lessonReview").hidden = true;
   const labels = { chat: "Learn with Dr. Eco", live: "Talk it through with Dr. Eco", article: "Read this first", video: "Watch a short lesson", test: "Warm-up practice" };
   document.querySelector("#lessonActivityKicker").textContent = `${module.activityType.toUpperCase()} · REQUIRED STEP`;
   document.querySelector("#lessonActivityTitle").textContent = labels[module.activityType] || "Your next study step";
@@ -1419,7 +1428,11 @@ function renderModuleQuestion(module, record, index) {
   const question = questions[index];
   if (!question) return;
   lessonQuestion.textContent = question.question;
-  document.querySelector("#lessonBody").hidden = true;
+  // Keep the lesson reachable while answering: open above the first question of a
+  // lesson node, then collapsed to "Review the lesson" for later questions.
+  const lessonReview = document.querySelector("#lessonReview");
+  lessonReview.hidden = !module.lesson;
+  lessonReview.open = index === 0 && !record.correctionMode && (!module.activityType || module.activityType === "lesson");
   const correctInSet = (record.questionResults || []).filter(Boolean).length;
   lessonAssessmentProgress.textContent = record.correctionMode
     ? `CORRECTIONS · ${correctInSet} OF ${questions.length} LOCKED IN`
@@ -1805,7 +1818,7 @@ async function showStudyLesson(index, { activityDone = false } = {}) {
   lessonAssessmentProgress.hidden = requiresActivity;
   answerOptions.hidden = requiresActivity;
   document.querySelector(".lesson-feedback-row").hidden = requiresActivity;
-  document.querySelector("#lessonBody").hidden = requiresActivity;
+  document.querySelector("#lessonReview").hidden = requiresActivity || !module.lesson;
   document.querySelector("#lessonBody").textContent = module.lesson;
   if (requiresActivity) renderLessonActivity(module);
   lessonFeedback.textContent = "";
@@ -2618,7 +2631,9 @@ function showNotice(message) {
   window.setTimeout(() => { toast.hidden = true; }, 4000);
 }
 
-function drEcoUnavailableMessage() {
+function drEcoUnavailableMessage(context = "module") {
+  if (context === "chat") return "Dr. Eco couldn’t answer just now. Check your connection and send your question again. No fuel was used.";
+  if (context === "call") return "Couldn’t connect to Dr. Eco. Check your connection, end the call and try again.";
   return "Dr. Eco isn’t available at the moment. Close and reopen this module, or try again shortly.";
 }
 
@@ -2634,12 +2649,19 @@ function activateTab(tab) {
     if (isSelected) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
   }
+  const previousTab = [...studyPanels].find(([, panel]) => !panel.hidden)?.[0];
   for (const [panelId, panel] of studyPanels) {
     const isHidden = panelId !== selectedTab;
     panel.hidden = isHidden;
     panel.classList.toggle("hide", isHidden);
   }
-  if (selectedTab === "chat") document.querySelector("#chatInput").focus();
+  // A new tab starts at its top instead of keeping the last tab's scroll position.
+  if (previousTab && previousTab !== selectedTab) window.scrollTo({ top: 0, behavior: "auto" });
+  // Focus the chat box only with a mouse or trackpad: on phones it would pop up the
+  // keyboard on every visit and push the chat header off screen.
+  if (selectedTab === "chat" && window.matchMedia?.("(hover: hover) and (pointer: fine)").matches) {
+    document.querySelector("#chatInput").focus({ preventScroll: true });
+  }
   if (selectedTab === "home") renderStudyPath();
   if (selectedTab === "results") void loadMyResults();
   return true;
@@ -3061,10 +3083,16 @@ function renderProfile() {
   }
   renderUserAvatar(document.querySelector("#headerProfileAvatar"), user, "profile-avatar");
   renderUserAvatar(document.querySelector("#profilePreviewAvatar"), user, "profile-avatar profile-avatar-large");
+  // The six avatar previews (about 400 KB of animation data) render only while the
+  // profile is open; renderProfile runs again when it opens.
+  const profileOpen = !document.querySelector("#profileModal")?.hidden;
   document.querySelectorAll("[data-avatar-lottie]").forEach((button) => {
     const fileName = button.dataset.avatarLottie;
     button.classList.toggle("is-selected", user?.avatarLottie === fileName);
-    renderLottieInto(button.querySelector(".profile-avatar-option-preview"), fileName, "✦", "Avatar animation preview", { loop: false });
+    const preview = button.querySelector(".profile-avatar-option-preview");
+    if (!profileOpen || preview.dataset.renderedLottie === fileName) return;
+    preview.dataset.renderedLottie = fileName;
+    renderLottieInto(preview, fileName, "✦", "Avatar animation preview", { loop: false });
   });
 }
 
@@ -3245,6 +3273,10 @@ function resetChatConversation() {
   }
 }
 
+// The spreadsheet reader (about 860 KB) is only needed for uploads and broadsheet
+// imports, so it loads on demand instead of for every visitor.
+const XLSX_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
+
 function ensureExternalScript(url, globalName, timeoutMs = 20000) {
   if (window[globalName]) return Promise.resolve(window[globalName]);
   const existing = document.querySelector(`script[data-foldbook-parser="${globalName}"]`);
@@ -3319,6 +3351,7 @@ async function extractAdminUploadText(file) {
   if (extension === "txt") return file.text();
 
   if (["csv", "xlsx", "xls"].includes(extension)) {
+    await ensureExternalScript(XLSX_SCRIPT_URL, "XLSX").catch(() => null);
     if (!window.XLSX) throw new Error("The spreadsheet reader could not be loaded. Refresh the page and try again.");
     const workbook = window.XLSX.read(await file.arrayBuffer(), { type: "array" });
     const text = workbook.SheetNames.map((name) => `## ${name}\n${window.XLSX.utils.sheet_to_csv(workbook.Sheets[name])}`).join("\n\n");
@@ -4190,7 +4223,7 @@ class DrEcoVoiceLive {
       };
       this.socket.onmessage = (event) => this.handleSocketMessage(event);
       this.socket.onerror = () => {
-        if (!this.stopped) this.setStatus("ERROR", drEcoUnavailableMessage());
+        if (!this.stopped) this.setStatus("ERROR", drEcoUnavailableMessage("call"));
       };
       this.socket.onclose = () => {
         if (!this.stopped) {
@@ -4200,7 +4233,7 @@ class DrEcoVoiceLive {
       };
     } catch (error) {
       console.error("Could not start Dr. Eco Live:", error);
-      this.setStatus("ERROR", drEcoUnavailableMessage());
+      this.setStatus("ERROR", drEcoUnavailableMessage("call"));
       this.stopSession();
     }
   }
@@ -4268,7 +4301,7 @@ class DrEcoVoiceLive {
       }
     } catch (error) {
       console.error("Could not process Gemini Live response:", error);
-      this.setStatus("ERROR", drEcoUnavailableMessage());
+      this.setStatus("ERROR", drEcoUnavailableMessage("call"));
     }
   }
   startMicStream() {
@@ -4453,7 +4486,7 @@ function toggleVoiceCallRoom(open, openingPrompt = "") {
   voiceCallActive = open;
   const toggle = document.querySelector("#voiceToggle");
   toggle.setAttribute("aria-pressed", String(open));
-  toggle.textContent = open ? "End call" : "Call";
+  toggle.textContent = open ? "📞 End call" : "📞 Call";
   if (open) {
     voiceMuted = false;
     document.querySelector("#voiceMuteButton").setAttribute("aria-pressed", "false");
@@ -4489,19 +4522,25 @@ function publishVoiceTranscript(userText, assistantText) {
   if (cleanAssistant) turns.push({ role: "assistant", text: cleanAssistant });
   if (turns.length) chatConversationHistory = [...chatConversationHistory, ...turns].slice(-12);
 }
-document.querySelector("#voiceMinimizeButton").addEventListener("click", () => {
+function minimizeVoiceCallRoom() {
   const room = document.querySelector("#voiceCallRoom");
+  if (room.hidden) return;
   room.hidden = true;
   room.classList.add("hide");
   room.setAttribute("aria-modal", "false");
   document.querySelector("#voiceMiniPlayer").hidden = false;
-});
-document.querySelector("#voiceMiniOpen").addEventListener("click", () => {
+  document.querySelector("#voiceMiniOpen").focus();
+}
+function restoreVoiceCallRoom() {
   const room = document.querySelector("#voiceCallRoom");
   room.hidden = false;
   room.classList.remove("hide");
   room.setAttribute("aria-modal", "true");
-});
+  document.querySelector("#voiceMiniPlayer").hidden = true;
+  document.querySelector("#voiceEndButton").focus();
+}
+document.querySelector("#voiceMinimizeButton").addEventListener("click", minimizeVoiceCallRoom);
+document.querySelector("#voiceMiniOpen").addEventListener("click", restoreVoiceCallRoom);
 document.querySelector("#voiceMiniEnd").addEventListener("click", () => toggleVoiceCallRoom(false));
 
 function speakText(text) {
@@ -4537,7 +4576,10 @@ document.querySelector("#voiceEndButton").addEventListener("click", () => toggle
 async function submitChatQuestion(question) {
   const cleaned = question.trim();
   if (!cleaned || chatRequestInProgress) return;
+  const fuelBefore = studyProgress.fuel;
   if (!consumeStudyFuel(2)) return;
+  // Only refund what was actually taken (nothing is taken during a demo pass).
+  const fuelCharged = Math.max(0, fuelBefore - studyProgress.fuel);
   const moduleContext = pendingStudyChat;
   pendingStudyChat = null;
   const priorConversation = chatConversationHistory.slice();
@@ -4575,7 +4617,8 @@ async function submitChatQuestion(question) {
     sfx.msg();
   } catch (error) {
     console.error("Dr. Eco could not answer the question:", error);
-    renderDrEcoFormatting(responseMessage.querySelector("p"), drEcoUnavailableMessage());
+    refundStudyFuel(fuelCharged);
+    renderDrEcoFormatting(responseMessage.querySelector("p"), drEcoUnavailableMessage("chat"));
   } finally {
     chatRequestInProgress = false;
   }
@@ -5192,45 +5235,53 @@ async function syncLeaderboardEntry() {
     leaderboardStatus.textContent = "Leaderboard unavailable until Supabase is configured and you sign in.";
     return;
   }
+  const id = getLeaderboardClientId();
+  const alias = (entryId) => `Learner-${String(entryId || "").slice(-4).toUpperCase()}`;
+  // Saving your own XP and reading the board are separate steps: a failed save
+  // (for example a database column mismatch) must not hide the rankings.
+  let saveFailed = false;
   try {
-    const id = getLeaderboardClientId();
     const { error: upsertError } = await supabaseClient.from("student_xp").upsert({
       id,
-      display_name: `Learner-${id.slice(-4).toUpperCase()}`,
+      display_name: alias(id),
       xp: studyProgress.xp,
       updated_at: new Date().toISOString(),
     }, { onConflict: "id" });
     if (upsertError) throw upsertError;
-
+  } catch (error) {
+    saveFailed = true;
+    console.error("Leaderboard XP save failed:", error);
+  }
+  try {
+    // select("*") keeps working even if an older table is missing display_name.
     const { data, error } = await supabaseClient
       .from("student_xp")
-      .select("id, display_name, xp")
-      .order("xp", { ascending: false });
+      .select("*")
+      .order("xp", { ascending: false })
+      .limit(500);
     if (error) throw error;
     const sorted = (Array.isArray(data) ? data : [])
-      .filter((entry) => typeof entry.display_name === "string" && Number.isFinite(entry.xp))
+      .filter((entry) => entry && entry.id && Number.isFinite(Number(entry.xp)))
+      .map((entry) => ({ id: entry.id, xp: Number(entry.xp), name: typeof entry.display_name === "string" && entry.display_name ? entry.display_name : alias(entry.id) }))
       .sort((left, right) => right.xp - left.xp);
     const ownRank = sorted.findIndex((entry) => entry.id === id) + 1;
     leaderboardEntries = sorted.slice(0, 10).map((entry, index) => ({
-      name: entry.display_name,
+      name: entry.name,
       xp: entry.xp,
       rank: index + 1,
       isCurrentUser: entry.id === id,
     }));
     if (ownRank > 10) {
       const ownEntry = sorted[ownRank - 1];
-      leaderboardEntries.push({
-        name: ownEntry.display_name,
-        xp: ownEntry.xp,
-        rank: ownRank,
-        isCurrentUser: true,
-      });
+      leaderboardEntries.push({ name: ownEntry.name, xp: ownEntry.xp, rank: ownRank, isCurrentUser: true });
     }
-    leaderboardStatus.textContent = "Live browser-submitted XP rankings. Names are shown as anonymous aliases.";
+    leaderboardStatus.textContent = saveFailed
+      ? "Your latest XP couldn’t be added to the rankings just now. It’s saved on your device and will sync next time."
+      : "Live XP rankings. Names are shown as anonymous aliases.";
     renderLeaderboard();
   } catch (error) {
-    console.error("Leaderboard sync failed:", error);
-    leaderboardStatus.textContent = `Leaderboard could not be loaded: ${error.message || "Supabase request failed."}`;
+    console.error("Leaderboard load failed:", error);
+    leaderboardStatus.textContent = "Rankings are taking a short break. Your XP is safe—check back soon.";
   }
 }
 
@@ -5398,7 +5449,9 @@ function generateSevenFoldExportCard(courseData) {
 }
 
 function triggerCardExport(courseData, trigger) {
-  if (!authModal) {
+  // A student's own result card is never gated behind the WhatsApp reminder opt-in:
+  // they already chose reminders (or not) at sign-up, and can change it in Profile.
+  if (!authModal || currentStudent) {
     generateSevenFoldExportCard(courseData);
     return;
   }
@@ -5454,7 +5507,7 @@ function renderResults(registration, student) {
     cardButton.type = "button";
     cardButton.className = "result-card-button";
     cardButton.disabled = grade !== "A" && grade !== "B";
-    cardButton.textContent = cardButton.disabled ? "Unavailable" : "Create card";
+    cardButton.textContent = cardButton.disabled ? "A/B grades only" : "Create card";
     cardButton.setAttribute("aria-label", cardButton.disabled
       ? `Result card unavailable for ${result.course}; only A and B grades can be exported`
       : `Create result card for ${result.course}`);
@@ -5464,7 +5517,14 @@ function renderResults(registration, student) {
       });
     }
     cardCell.append(cardButton);
+    cardCell.className = "result-card-cell";
     courseCell.append(courseCode, courseTitle);
+    // Labels let the mobile layout show each row as a card.
+    caScoreCell.dataset.label = "CA";
+    examScoreCell.dataset.label = "Exam";
+    scoreCell.dataset.label = "Total";
+    gradeCell.dataset.label = "Grade";
+    remarkCell.dataset.label = "Remark";
     tableRow.append(courseCell, caScoreCell, examScoreCell, scoreCell, gradeCell, remarkCell, cardCell);
     resultsTable.append(tableRow);
   }
@@ -5681,6 +5741,7 @@ broadsheetImportButton.addEventListener("click", async () => {
     broadsheetStatus.textContent = "Choose a broadsheet file before importing.";
     return;
   }
+  await ensureExternalScript(XLSX_SCRIPT_URL, "XLSX").catch(() => null);
   if (!window.XLSX) {
     broadsheetStatus.textContent = "The spreadsheet parser did not load. Refresh the page and try again.";
     return;
@@ -6368,12 +6429,69 @@ document.querySelector("#close-verification").addEventListener("click", closeVer
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
   if (!document.querySelector("#chatSettingsDrawer").hidden) closeChatSettingsDrawer();
-  else if (!document.querySelector("#profileModal").hidden) document.querySelector("#profileModal").hidden = true;
-  else if (!document.querySelector("#voiceCallRoom").hidden) toggleVoiceCallRoom(false);
+  else if (!document.querySelector("#profileModal").hidden) document.querySelector("#closeProfile").click();
+  // Escape minimizes a live call; ending it stays an explicit "End call" tap.
+  else if (!document.querySelector("#voiceCallRoom").hidden) minimizeVoiceCallRoom();
   else if (!authModal.hidden) closeVerification();
-  else if (!testDrawer.hidden) testDrawer.hidden = true;
-  else if (!fuelDialog.hidden) fuelDialog.hidden = true;
+  else if (!testDrawer.hidden) document.querySelector("#closeTest").click();
+  else if (!fuelDialog.hidden) document.querySelector("#closeFuel").click();
 });
+
+/* Dialog focus: when a modal dialog opens, move focus into it, keep Tab inside it,
+   and return focus to whatever opened it when it closes. Works for every
+   [aria-modal=true] dialog, including ones added to the page later. */
+(() => {
+  const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
+  const isShown = (el) => !el.hidden && !el.closest("[hidden]") && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden";
+  const openDialogs = () => [...document.querySelectorAll('[role="dialog"][aria-modal="true"]')].filter(isShown);
+  const focusables = (dialog) => [...dialog.querySelectorAll(FOCUSABLE)].filter(isShown);
+  const stack = []; // [{ dialog, opener }]
+
+  const sync = () => {
+    const open = openDialogs();
+    // Closed dialogs: restore focus to their opener.
+    for (let i = stack.length - 1; i >= 0; i -= 1) {
+      const entry = stack[i];
+      if (open.includes(entry.dialog)) continue;
+      stack.splice(i, 1);
+      const active = document.activeElement;
+      const focusLost = !active || active === document.body || entry.dialog.contains(active) || !isShown(active);
+      if (focusLost && entry.opener && entry.opener.isConnected && isShown(entry.opener)) entry.opener.focus({ preventScroll: true });
+    }
+    // Newly opened dialogs: remember the opener and move focus in.
+    for (const dialog of open) {
+      if (stack.some((entry) => entry.dialog === dialog)) continue;
+      const active = document.activeElement;
+      stack.push({ dialog, opener: active && active !== document.body && !dialog.contains(active) ? active : null });
+      window.setTimeout(() => {
+        if (!isShown(dialog) || dialog.contains(document.activeElement)) return;
+        const target = dialog.querySelector("[autofocus]") || focusables(dialog)[0];
+        if (target) target.focus({ preventScroll: true });
+        else { dialog.setAttribute("tabindex", "-1"); dialog.focus({ preventScroll: true }); }
+      }, 60);
+    }
+  };
+  let queued = false;
+  new MutationObserver(() => {
+    if (queued) return;
+    queued = true;
+    window.requestAnimationFrame(() => { queued = false; sync(); });
+  }).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["hidden", "aria-modal", "class"] });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Tab" || !stack.length) return;
+    const top = stack[stack.length - 1].dialog;
+    if (!isShown(top)) return;
+    const items = focusables(top);
+    if (!items.length) { event.preventDefault(); return; }
+    const first = items[0];
+    const last = items[items.length - 1];
+    const active = document.activeElement;
+    if (!top.contains(active)) { event.preventDefault(); first.focus(); }
+    else if (event.shiftKey && active === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && active === last) { event.preventDefault(); first.focus(); }
+  });
+})();
 document.querySelector("#print-card").addEventListener("click", () => window.print());
 document.querySelector("#dismiss-card").addEventListener("click", () => {
   posterWrapper.hidden = true;
@@ -6461,10 +6579,10 @@ document.querySelector("#profileLeaderboardLink")?.addEventListener("click", () 
 });
 
 document.querySelector("#profileButton").addEventListener("click", () => {
+  document.querySelector("#profileModal").hidden = false;
   renderProfile();
   document.querySelector("#profileStatus").textContent = "";
   document.querySelector("#profileLevelStatus").textContent = "";
-  document.querySelector("#profileModal").hidden = false;
   document.querySelector("#closeProfile").focus();
 });
 document.querySelector("#closeProfile").addEventListener("click", () => {

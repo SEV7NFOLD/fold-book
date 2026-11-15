@@ -19,7 +19,6 @@
     <link rel="stylesheet" href="/assets/css/styles.css">
     <link rel="stylesheet" href="/assets/css/pwa.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
     <script src="https://unpkg.com/@dotlottie/player-component@latest/dist/dotlottie-player.mjs" type="module"></script>
     <script src="/assets/vendor/lottie-5.12.2.min.js" defer></script>
     <script src="/assets/js/foldbook-characters.js" defer></script>
@@ -32,7 +31,7 @@
     <script src="/assets/js/pwa.js" defer></script>
   </head>
   <body>
-    <a class="skip-link" href="#landingView">Skip to FoldBook</a>
+    <a class="skip-link" href="#top">Skip to main content</a>
 
     <header class="top">
       <div class="top-inner">
@@ -76,7 +75,7 @@
         <button class="nav-item" id="navInvite" type="button" data-tab="invite"><i>👥</i>Invite Friends</button>
         <button class="nav-item" id="navResults" type="button" data-tab="results"><i>📄</i>My Results</button>
       </nav>
-    <main id="top">
+    <main id="top" tabindex="-1">
       <section id="home" class="learn-section hide" hidden>
           <button type="button" class="quiz-live-banner" id="quizLiveBanner" hidden>
             <span class="quiz-live-banner-pulse" aria-hidden="true"></span>
@@ -163,7 +162,7 @@
               <div class="path-activity-actions" id="lessonActivityActions"></div>
               <button class="results-submit" id="lessonActivityDone" type="button">I’m done · Start checkpoint →</button>
             </section>
-            <p class="lesson-body" id="lessonBody"></p>
+            <details class="lesson-review" id="lessonReview" open><summary>Review the lesson</summary><p class="lesson-body" id="lessonBody"></p></details>
             <p class="lesson-question" id="lessonQuestion"></p>
             <p class="lesson-assessment-progress" id="lessonAssessmentProgress" aria-live="polite"></p>
             <div class="lesson-combo-meter" id="lessonComboMeter" aria-hidden="true" hidden></div>
@@ -337,7 +336,7 @@
               <span class="result-summary" id="result-summary"></span>
             </div>
             <div class="results-table-wrap">
-              <table class="results-table">
+              <table class="results-table student-results-table">
                 <thead><tr><th scope="col">Course</th><th scope="col">CA</th><th scope="col">Exam</th><th scope="col">Total</th><th scope="col">Grade</th><th scope="col">Remark</th><th scope="col">Result card</th></tr></thead>
                 <tbody id="results-table"></tbody>
               </table>
@@ -358,7 +357,7 @@
               <section class="poster-body" aria-label="Student result">
                 <p class="poster-kicker">ACADEMIC EXCELLENCE</p><p class="poster-congratulations">CONGRATULATIONS!</p>
                 <h2 class="poster-student-name" id="cardStudentName"></h2><p class="poster-reg-no" id="cardRegNo"></p><div class="poster-rule"></div>
-                <div class="poster-result"><img id="gradeAsset" class="asset-3d" src="/assets/brand/trophy.png" alt="A grade trophy" hidden><div class="poster-result-details"><span class="poster-grade" id="cardGrade"></span><div class="poster-course"><p class="poster-course-code" id="cardCourse"></p><p class="poster-course-title" id="cardCourseTitle"></p></div></div><div class="poster-score-row"><span>Total Score <strong id="cardScore"></strong> / 100</span><span>Remark <strong id="cardRemark"></strong></span></div></div>
+                <div class="poster-result"><img id="gradeAsset" class="asset-3d" alt="A grade trophy" hidden><div class="poster-result-details"><span class="poster-grade" id="cardGrade"></span><div class="poster-course"><p class="poster-course-code" id="cardCourse"></p><p class="poster-course-title" id="cardCourseTitle"></p></div></div><div class="poster-score-row"><span>Total Score <strong id="cardScore"></strong> / 100</span><span>Remark <strong id="cardRemark"></strong></span></div></div>
               </section>
               <div class="poster-footer"><p class="poster-slogan">BUILD STRONGER BRANDS. CREATE REAL VALUE.</p><p class="poster-services">STRATEGY <span>•</span> DESIGN <span>•</span> TECHNOLOGY</p><p class="poster-powered">POWERED BY SEV7NFOLD CREATIVE TECH AGENCY</p><a class="poster-url" href="https://bignssien.wixstudio.com/sev7nfold">bignssien.wixstudio.com/sev7nfold</a></div>
             </article>
