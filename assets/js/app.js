@@ -4573,26 +4573,55 @@ function stopListening() {
   listenButton = null;
 }
 
-async function fetchNaturalVoice(text) {
+// Splits an answer for speech: a short first piece so audio starts quickly, then
+// larger pieces that are generated while the earlier ones play.
+function splitForSpeech(text) {
+  const clean = String(text || "").replace(/\s+/g, " ").trim().slice(0, 6000);
+  const sentences = clean.match(/[^.!?…]+[.!?…]+["”’)]*\s*|[^.!?…]+$/g) || [clean];
+  const chunks = [];
+  let current = "";
+  for (const sentence of sentences) {
+    const limit = chunks.length === 0 ? 140 : 650;
+    if (current && (current + sentence).length > limit) {
+      chunks.push(current.trim());
+      current = "";
+    }
+    current += sentence;
+  }
+  if (current.trim()) chunks.push(current.trim());
+  return chunks.filter(Boolean);
+}
+
+function fetchNaturalVoice(text) {
   const voice = studyProgress.studyVoice || "Orus";
   const key = `${voice}:${text}`;
   if (naturalVoiceCache.has(key)) return naturalVoiceCache.get(key);
-  const response = await fetch("/api/dr-eco", {
+  const request = fetch("/api/dr-eco", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ mode: "tts", text: text.slice(0, 2400), voice }),
+  }).then(async (response) => {
+    if (!response.ok || !String(response.headers.get("Content-Type") || "").startsWith("audio/")) {
+      throw new Error(`Natural voice unavailable (${response.status}).`);
+    }
+    return URL.createObjectURL(await response.blob());
   });
-  if (!response.ok || !String(response.headers.get("Content-Type") || "").startsWith("audio/")) {
-    throw new Error(`Natural voice unavailable (${response.status}).`);
-  }
-  const url = URL.createObjectURL(await response.blob());
-  naturalVoiceCache.set(key, url);
-  if (naturalVoiceCache.size > 12) {
-    const [oldestKey, oldestUrl] = naturalVoiceCache.entries().next().value;
-    URL.revokeObjectURL(oldestUrl);
+  // Cache the promise so a prefetch and a play share one request; drop failures.
+  naturalVoiceCache.set(key, request);
+  request.catch(() => naturalVoiceCache.delete(key));
+  if (naturalVoiceCache.size > 40) {
+    const [oldestKey, oldest] = naturalVoiceCache.entries().next().value;
     naturalVoiceCache.delete(oldestKey);
+    oldest.then((url) => URL.revokeObjectURL(url)).catch(() => {});
   }
-  return url;
+  return request;
+}
+
+// Starts generating the first piece as soon as a finger touches Listen.
+function prefetchListen(button) {
+  const text = button?.closest(".chat-message")?.querySelector("p")?.textContent;
+  const first = splitForSpeech(text)[0];
+  if (first) fetchNaturalVoice(first).catch(() => {});
 }
 
 async function listenToMessage(button, text) {
@@ -4600,14 +4629,27 @@ async function listenToMessage(button, text) {
   stopListening();
   listenButton = button;
   setListenButtonState(button, "loading");
+  const chunks = splitForSpeech(text);
   try {
-    const url = await fetchNaturalVoice(text);
-    if (listenButton !== button) return;
-    const audio = new Audio(url);
-    listenAudio = audio;
-    audio.addEventListener("ended", () => { if (listenAudio === audio) stopListening(); });
-    await audio.play();
-    setListenButtonState(button, "playing");
+    // Ask for the first two pieces at once; each later piece is requested while the one before plays.
+    chunks.slice(0, 2).forEach((chunk) => fetchNaturalVoice(chunk).catch(() => {}));
+    for (let index = 0; index < chunks.length; index += 1) {
+      const url = await fetchNaturalVoice(chunks[index]);
+      if (listenButton !== button) return;
+      if (chunks[index + 1]) fetchNaturalVoice(chunks[index + 1]).catch(() => {});
+      const audio = new Audio(url);
+      listenAudio = audio;
+      const finished = new Promise((resolve) => {
+        audio.addEventListener("ended", resolve, { once: true });
+        audio.addEventListener("error", resolve, { once: true });
+        audio.addEventListener("pause", resolve, { once: true });
+      });
+      await audio.play();
+      setListenButtonState(button, "playing");
+      await finished;
+      if (listenButton !== button || listenAudio !== audio) return;
+    }
+    stopListening();
   } catch (error) {
     console.warn("Using the device voice instead:", error);
     if (listenButton !== button) return;
@@ -4714,6 +4756,10 @@ document.querySelector("#chatPrompts").addEventListener("click", (event) => {
   }
   const prompt = event.target.closest("[data-prompt]");
   if (prompt) submitChatQuestion(prompt.dataset.prompt);
+});
+chatMessages.addEventListener("pointerdown", (event) => {
+  const button = event.target.closest(".listen-button");
+  if (button && listenButton !== button) prefetchListen(button);
 });
 chatMessages.addEventListener("click", (event) => {
   if (!event.target.closest(".listen-button")) return;
