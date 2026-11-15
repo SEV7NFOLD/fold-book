@@ -29,6 +29,7 @@ const files = new Map([
   ["/assets/css/pwa.css", "assets/css/pwa.css"],
   ["/assets/js/app.js", "assets/js/app.js"],
   ["/assets/js/mascots.js", "assets/js/mascots.js"],
+  ["/assets/js/eco-talker.js", "assets/js/eco-talker.js"],
   ["/assets/js/foldbook-characters.js", "assets/js/foldbook-characters.js"],
   ["/assets/js/foldbook-ui.js", "assets/js/foldbook-ui.js"],
   ["/assets/js/ui-animations.js", "assets/js/ui-animations.js"],
