@@ -396,34 +396,66 @@
     document.body.append(indicator);
 
     let startY = 0;
+    let startX = 0;
     let pullDistance = 0;
     let tracking = false;
+    let engaged = false;
+    const PULL_THRESHOLD = 96;
     const topOfPage = () => Math.max(window.scrollY || 0, document.scrollingElement?.scrollTop || 0) <= 2;
-    dashboard.addEventListener("touchstart", (event) => {
-      if (!isStudentDashboardVisible() || !topOfPage() || event.touches.length !== 1
-        || event.target.closest("input,textarea,select,[contenteditable=true]")) return;
-      startY = event.touches[0].clientY;
+    // Overlays (practice drawer, lessons, chat, modals) scroll on their own, so the page is
+    // always "at the top" there. Never treat a swipe inside them as a refresh pull.
+    const OVERLAY_SELECTOR = "[role=dialog],[aria-modal=true],.test-drawer,.lesson-page,.fuel-modal,.answer-feedback-overlay,.question-milestone,input,textarea,select,[contenteditable=true]";
+    const insideScrolledArea = (node) => {
+      for (let el = node; el && el !== document.body && el !== document.documentElement; el = el.parentElement) {
+        if (el.scrollTop > 0) return true;
+      }
+      return false;
+    };
+    const anyOverlayOpen = () => [...document.querySelectorAll(".test-drawer,.lesson-page,[aria-modal=true]")]
+      .some((el) => !el.hidden && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden");
+    const reset = () => {
+      tracking = false;
+      engaged = false;
       pullDistance = 0;
+      indicator.classList.remove("is-pulling", "is-ready");
+    };
+    dashboard.addEventListener("touchstart", (event) => {
+      if (!isStudentDashboardVisible() || !topOfPage() || event.touches.length !== 1 || anyOverlayOpen()
+        || event.target.closest(OVERLAY_SELECTOR) || insideScrolledArea(event.target)) return;
+      startY = event.touches[0].clientY;
+      startX = event.touches[0].clientX;
+      pullDistance = 0;
+      engaged = false;
       tracking = true;
     }, { passive: true });
     dashboard.addEventListener("touchmove", (event) => {
-      if (!tracking || event.touches.length !== 1 || !topOfPage()) {
-        tracking = false;
-        indicator.classList.remove("is-pulling", "is-ready");
+      if (!tracking) return;
+      if (event.touches.length !== 1 || !topOfPage()) { reset(); return; }
+      const dy = event.touches[0].clientY - startY;
+      const dx = event.touches[0].clientX - startX;
+      if (!engaged) {
+        // Wait for a clear, mostly-vertical downward pull before taking over the gesture.
+        if (Math.abs(dy) < 14 && Math.abs(dx) < 14) return;
+        if (dy <= 0 || Math.abs(dx) > dy * 0.6) { reset(); return; }
+        engaged = true;
+        startY = event.touches[0].clientY;
+        event.preventDefault();
         return;
       }
-      pullDistance = Math.max(0, Math.min(110, event.touches[0].clientY - startY));
-      if (pullDistance < 8) return;
+      pullDistance = Math.max(0, Math.min(130, (event.touches[0].clientY - startY) * 0.6));
+      if (pullDistance <= 0) { reset(); return; }
       indicator.style.setProperty("--foldbook-pull-distance", pullDistance + "px");
       indicator.classList.add("is-pulling");
-      indicator.classList.toggle("is-ready", pullDistance >= 72);
+      indicator.classList.toggle("is-ready", pullDistance >= PULL_THRESHOLD * 0.6);
       event.preventDefault();
     }, { passive: false });
     const finish = () => {
       if (!tracking) return;
+      const ready = engaged && pullDistance >= PULL_THRESHOLD * 0.6;
       tracking = false;
+      engaged = false;
       indicator.classList.remove("is-pulling", "is-ready");
-      if (pullDistance >= 72) {
+      if (ready) {
         indicator.classList.add("is-refreshing");
         window.dispatchEvent(new Event("foldbook:refresh"));
         window.setTimeout(() => indicator.classList.remove("is-refreshing"), 950);

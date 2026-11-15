@@ -51,6 +51,7 @@ const allowedFiles = [
   "assets/js/app.js",
   "assets/js/live-quiz.js",
   "assets/js/mascots.js",
+  "assets/js/eco-talker.js",
   "assets/js/foldbook-characters.js",
   "assets/vendor/lottie-5.12.2.min.js",
   "assets/js/foldbook-ui.js",

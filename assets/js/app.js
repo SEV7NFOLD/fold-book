@@ -4172,6 +4172,15 @@ class DrEcoVoiceLive {
       this.outputGain = this.audioContext.createGain();
     this.outputGain.gain.value = voiceSpeakerOn ? 1 : 0;
       this.outputGain.connect(this.audioContext.destination);
+      // Voice loudness for Dr. Eco's lip sync (taps the audio before the speaker mute).
+      this.outputAnalyser = this.audioContext.createAnalyser();
+      this.outputAnalyser.fftSize = 512;
+      this.outputAnalyser.smoothingTimeConstant = 0.2;
+      this.analyserData = new Float32Array(this.outputAnalyser.fftSize);
+      this.analyserSink = this.audioContext.createGain();
+      this.analyserSink.gain.value = 0;
+      this.outputAnalyser.connect(this.analyserSink);
+      this.analyserSink.connect(this.audioContext.destination);
       const endpoint = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained";
       this.socket = new window.WebSocket(`${endpoint}?access_token=${encodeURIComponent(tokenData.token)}`);
       this.socket.onopen = () => {
@@ -4321,6 +4330,7 @@ class DrEcoVoiceLive {
     const source = this.audioContext.createBufferSource();
     source.buffer = buffer;
     source.connect(this.outputGain);
+    if (this.outputAnalyser) source.connect(this.outputAnalyser);
     const startAt = Math.max(this.audioContext.currentTime, this.playhead);
     source.start(startAt);
     this.playhead = startAt + buffer.duration;
@@ -4333,6 +4343,14 @@ class DrEcoVoiceLive {
     if (this.mediaStream) {
       for (const track of this.mediaStream.getAudioTracks()) track.enabled = !muted;
     }
+  }
+
+  getOutputLevel() {
+    if (!this.outputAnalyser || !this.analyserData) return NaN;
+    this.outputAnalyser.getFloatTimeDomainData(this.analyserData);
+    let sum = 0;
+    for (const sample of this.analyserData) sum += sample * sample;
+    return Math.sqrt(sum / this.analyserData.length);
   }
 
   setSpeakerEnabled(enabled) {
@@ -4378,6 +4396,9 @@ class DrEcoVoiceLive {
     this.silentGain = null;
     this.mediaStream = null;
     this.outputGain = null;
+    this.outputAnalyser = null;
+    this.analyserSink = null;
+    this.analyserData = null;
     this.audioContext = null;
     this.socket = null;
     this.playhead = 0;
@@ -4385,6 +4406,7 @@ class DrEcoVoiceLive {
 }
 
 let drEcoVoice = null;
+let voiceCallLastStatus = "IDLE";
 function setVoiceCallStatus(status, detail = "") {
   const statusLabel = document.querySelector("#voiceCallStatus");
   const caption = document.querySelector("#voiceCaption");
@@ -4397,11 +4419,27 @@ function setVoiceCallStatus(status, detail = "") {
     IDLE: "Disconnected",
   };
   statusLabel.textContent = detail || statusLabels[status] || status;
-  if (status === "SPEAKING") window.playFoldBookMascot?.("eco", "explain", mascot);
-  else if (status === "LISTENING") window.playFoldBookMascot?.("eco", "listen", mascot);
-  else if (status === "CONNECTING") window.playFoldBookMascot?.("eco", "loading", mascot);
-  else if (status === "ERROR") window.playFoldBookMascot?.("eco", "error", mascot);
-  else if (status === "IDLE") window.playFoldBookMascot?.("eco", "idle", mascot);
+  // Voice call uses the head-only talking Dr. Eco with lip sync; falls back to the Lottie mascot.
+  const playLottieFallback = () => {
+    if (status === "SPEAKING") window.playFoldBookMascot?.("eco", "explain", mascot);
+    else if (status === "LISTENING") window.playFoldBookMascot?.("eco", "listen", mascot);
+    else if (status === "CONNECTING") window.playFoldBookMascot?.("eco", "loading", mascot);
+    else if (status === "ERROR") window.playFoldBookMascot?.("eco", "error", mascot);
+    else if (status === "IDLE") window.playFoldBookMascot?.("eco", "idle", mascot);
+  };
+  const talker = window.FoldBookEcoTalker;
+  if (talker) {
+    talker.setLevelSource(() => (drEcoVoice ? drEcoVoice.getOutputLevel() : NaN));
+    if (!talker.setState(mascot, status)) {
+      void talker.mount(mascot).then((player) => {
+        if (player) talker.setState(mascot, voiceCallLastStatus);
+        else playLottieFallback();
+      });
+    }
+    voiceCallLastStatus = status;
+  } else {
+    playLottieFallback();
+  }
   if (status === "LISTENING" && !caption.textContent) caption.textContent = "Dr. Eco is listening…";
 }
 
