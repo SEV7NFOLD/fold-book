@@ -2486,4 +2486,7 @@ body.foldbook-notes-open { overflow: hidden; }
 .notes-section-actions button:hover, .notes-section-actions button:focus-visible { border-color: var(--fb-color-lime); color: var(--fb-color-lime); }
 .notes-section-actions .listen-button svg { width: 16px; height: 16px; }
 .notes-section-actions .listen-button[data-state="playing"] { border-color: var(--fb-color-lime); color: var(--fb-color-lime); }
+.notes-messy-notice { width: min(100%, 720px); margin: 0 auto 4px; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--fb-color-lime) 40%, var(--fb-color-border)); border-radius: 14px; background: var(--fb-color-surface); }
+.notes-messy-notice p { margin: 0 0 12px; color: var(--fb-color-text); font-size: 15px; line-height: 1.5; }
+.notes-messy-notice button { width: 100%; min-height: 44px; }
 .notes-reader-end, .notes-reader-status { padding: 20px 0; color: var(--fb-color-muted); font-size: 14px; text-align: center; }

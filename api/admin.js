@@ -12,6 +12,7 @@ const routes = {
   session: require("../lib/api-handlers/admin/session.js"),
   "student-materials": require("../lib/api-handlers/admin/student-materials.js"),
   "student-records": require("../lib/api-handlers/admin/student-records.js"),
+  transcribe: require("../lib/api-handlers/admin/transcribe.js"),
   "whatsapp-settings": require("../lib/api-handlers/admin/whatsapp-settings.js"),
 };
 

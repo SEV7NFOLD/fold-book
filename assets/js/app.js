@@ -3340,6 +3340,95 @@ function withProcessingTimeout(promise, timeoutMs, message) {
 
 const MAX_INDEX_UPLOAD_BYTES = 20 * 1024 * 1024;
 const MAX_INDEXED_TEXT_LENGTH = 12000;
+const MAX_TRANSCRIBED_PAGES = 30;
+
+// Keep in step with lib/notes-quality.js: spots scan or handwriting OCR that came out as gibberish.
+const NOTES_COMMON_WORDS = new Set(("the of and to a in is that for on with as by this be are it an or which what from at its if their when how not "
+  + "was were will can has have more less than price demand supply cost market goods good quantity income given find calculate explain "
+  + "show where so we x y q p").split(" "));
+function notesTextLooksMessy(text) {
+  const value = String(text || "");
+  const tokens = value.split(/\s+/).filter(Boolean);
+  if (tokens.length < 40) return false;
+  const words = tokens.map((token) => token.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, "")).filter(Boolean);
+  if (!words.length) return true;
+  let junk = 0;
+  let common = 0;
+  for (const word of words) {
+    if (NOTES_COMMON_WORDS.has(word.toLowerCase())) common += 1;
+    const plainWord = /^[A-Za-z][a-z]+$/.test(word) || /^[A-Z]{2,6}$/.test(word);
+    const number = /^[\d.,%]+$/.test(word);
+    const symbol = /^[A-Za-z]{1,3}\d{0,2}$/.test(word);
+    if (!plainWord && !number && !symbol) junk += 1;
+    else if (plainWord && word.length >= 4 && !/[aeiouy]/i.test(word)) junk += 1;
+  }
+  const booklet = (value.match(/do not write on this margin|candidate'?s no|question no\.|supplementary sheet/gi) || []).length;
+  const junkShare = junk / words.length;
+  return booklet >= 3 || junkShare > 0.14 || (common / words.length < 0.25 && junkShare > 0.08);
+}
+
+// PDF text arrives one printed line at a time. Join lines that wrap mid-sentence, and keep a
+// break where a sentence ends or a new question, item or heading starts.
+function joinPdfLines(text) {
+  const lines = String(text).split("\n").map((line) => line.replace(/[ \t]+/g, " ").trim());
+  let out = "";
+  for (const line of lines) {
+    if (!line) { if (out && !out.endsWith("\n\n")) out += "\n\n"; continue; }
+    const startsItem = /^(\d{1,2}[.)]|\(?[a-z0-9]{1,4}\)|[-•*▪●]|Q\d|Question\b|Solution\b|Answer\b)/i.test(line) || (/^[A-Z0-9][A-Z0-9 ,:&'-]{3,}$/.test(line) && line.length < 70);
+    if (!out || out.endsWith("\n")) out += line;
+    else if (startsItem || /[.:;?!]$/.test(out)) out += `\n${line}`;
+    else out += ` ${line}`;
+  }
+  return out.trim();
+}
+
+async function transcribePageImage(mimeType, data) {
+  const response = await fetch("/api/admin/transcribe", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mimeType, data }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || `Request failed (${response.status})`);
+  return String(result.text || "").trim();
+}
+
+async function transcribePdfWithDrEco(pdf) {
+  const total = Math.min(pdf.numPages, MAX_TRANSCRIBED_PAGES);
+  const pages = [];
+  for (let pageNumber = 1; pageNumber <= total; pageNumber += 1) {
+    adminMaterialStatus.textContent = `This looks like a scan, so Dr. Eco is reading it: page ${pageNumber} of ${total}…`;
+    const page = await pdf.getPage(pageNumber);
+    const viewport = page.getViewport({ scale: 1 });
+    const scale = Math.min(2, 1400 / viewport.width);
+    const scaled = page.getViewport({ scale });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(scaled.width);
+    canvas.height = Math.round(scaled.height);
+    await page.render({ canvasContext: canvas.getContext("2d"), viewport: scaled }).promise;
+    const data = canvas.toDataURL("image/jpeg", 0.8).split(",")[1];
+    canvas.width = 0;
+    const text = await transcribePageImage("image/jpeg", data);
+    if (text) pages.push(text);
+    if (pages.join("\n\n").length >= MAX_INDEXED_TEXT_LENGTH) break;
+  }
+  if (pdf.numPages > total) pages.push(`[Only the first ${total} pages were read.]`);
+  return pages.join("\n\n").trim();
+}
+
+async function transcribeImageWithDrEco(file) {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+  const data = canvas.toDataURL("image/jpeg", 0.82).split(",")[1];
+  canvas.width = 0;
+  return transcribePageImage("image/jpeg", data);
+}
 const adminFileUploader = document.querySelector("#adminFileUploader");
 const adminPdfUploader = document.querySelector("#adminPdfUploader");
 const adminFolderUploader = document.querySelector("#adminFolderUploader");
@@ -3380,10 +3469,23 @@ async function extractAdminUploadText(file) {
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
       const page = await pdf.getPage(pageNumber);
       const content = await page.getTextContent();
-      pages.push(content.items.map((item) => item.str).join(" "));
-      if (pages.join("\n").length >= MAX_INDEXED_TEXT_LENGTH) break;
+      // Keep the PDF's own line breaks so questions and headings stay on their own lines.
+      pages.push(joinPdfLines(content.items.map((item) => item.str + (item.hasEOL ? "\n" : " ")).join("")));
+      if (pages.join("\n\n").length >= MAX_INDEXED_TEXT_LENGTH) break;
     }
-    const extracted = pages.join("\n").trim();
+    const extracted = pages.join("\n\n").trim();
+    // Phone scans (Adobe Scan, CamScanner) carry a guessed text layer that turns handwriting
+    // into gibberish. Have Dr. Eco read the page images instead.
+    if (!extracted || notesTextLooksMessy(extracted)) {
+      try {
+        const read = await transcribePdfWithDrEco(pdf);
+        if (read) return read;
+      } catch (error) {
+        console.warn("Dr. Eco could not read this scan:", error);
+        if (!extracted) throw new Error(`This PDF is a scan and Dr. Eco couldn’t read it: ${error.message || "try again"}.`);
+        adminMaterialStatus.textContent = `${error.message || "Dr. Eco couldn’t read this scan."} The scanner’s own text was used instead, so check it before saving.`;
+      }
+    }
     if (!extracted) throw new Error("No selectable text was found in this PDF.");
     return extracted;
   }
@@ -3403,6 +3505,13 @@ async function extractAdminUploadText(file) {
       "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js",
       "Tesseract",
     );
+    try {
+      adminMaterialStatus.textContent = "Dr. Eco is reading this image…";
+      const read = await transcribeImageWithDrEco(file);
+      if (read) return read;
+    } catch (error) {
+      console.warn("Dr. Eco could not read this image; using local OCR:", error);
+    }
     adminMaterialStatus.textContent = "Loading local OCR and extracting image text…";
     const worker = await tesseract.createWorker("eng");
     try {
@@ -4888,7 +4997,23 @@ let notesRewardTimer = 0;
 const NOTES_MIN_READ_MS = 20000;
 
 function notesParagraphs(text) {
-  return String(text).split(/\n\s*\n/).map((part) => part.replace(/\s*\n\s*/g, " ").trim()).filter(Boolean);
+  const value = String(text).replace(/\r\n?/g, "\n").trim();
+  // Each saved line is its own paragraph. Older uploads arrived as one long block,
+  // so break those at sentences into short paragraphs that are easy to read on a phone.
+  const blocks = value.split(/\n+/);
+  const paragraphs = [];
+  for (const block of blocks) {
+    const line = block.replace(/[ \t]+/g, " ").trim();
+    if (!line) continue;
+    if (line.length <= 700) { paragraphs.push(line); continue; }
+    let current = "";
+    for (const sentence of line.match(/[^.!?]+(?:[.!?]+|$)\s*/g) || [line]) {
+      if (current && current.length + sentence.length > 500) { paragraphs.push(current.trim()); current = ""; }
+      current += sentence;
+    }
+    if (current.trim()) paragraphs.push(current.trim());
+  }
+  return paragraphs;
 }
 
 function closeNotesReader() {
@@ -4916,10 +5041,15 @@ function rewardNotesRead(key) {
 }
 
 function askAboutNotes(kind, material, text) {
-  const excerpt = text.length > 1400 ? `${text.slice(0, 1400)}…` : text;
+  const limit = kind === "tidy" ? 7000 : 1400;
+  const excerpt = text.length > limit ? `${text.slice(0, limit)}…` : text;
   closeNotesReader();
   activateTab("chat");
-  if (kind === "quiz") {
+  if (kind === "tidy") {
+    void submitChatQuestion(`Tidy up “${material.title}”`, {
+      prompt: `This text came from a phone scan of my ${material.courseCode} material (“${material.title}”), and the scanner garbled it, especially any handwriting. Rebuild it into clean study notes. First, write out every question or heading you can make out, cleaned up, with the maths in plain text. Then give your own step-by-step worked solutions, clearly headed "Dr. Eco’s working" so I know they are yours and not the original handwritten answers. If a part can’t be made out, say so instead of guessing.\n\n"${excerpt}"`,
+    });
+  } else if (kind === "quiz") {
     void submitChatQuestion(`Quiz me on this part of “${material.title}”`, {
       prompt: `Quiz me on this passage from my ${material.courseCode} notes (“${material.title}”). Give 3 multiple-choice questions with options A to D, then the answers with a one-line explanation each at the end.\n\n"${excerpt}"`,
     });
@@ -4935,6 +5065,20 @@ function renderNotesReader(notes, material) {
   document.querySelector("#notesReaderCourse").textContent = `${material.courseCode} · ${material.level}${notes.offline ? " · saved for offline" : ""}`;
   document.querySelector("#notesReaderTitle").textContent = material.title;
   body.replaceChildren();
+  const fullText = notes.sections.map((section) => section.text).join("\n\n");
+  if (notesTextLooksMessy(fullText)) {
+    const notice = document.createElement("div");
+    notice.className = "notes-messy-notice";
+    const copy = document.createElement("p");
+    copy.textContent = "This looks like a phone scan, and parts of it came out jumbled. Dr. Eco can rebuild the questions and work through them for you.";
+    const tidy = document.createElement("button");
+    tidy.type = "button";
+    tidy.className = "results-submit";
+    tidy.textContent = "Tidy this up with Dr. Eco";
+    tidy.addEventListener("click", () => askAboutNotes("tidy", material, fullText));
+    notice.append(copy, tidy);
+    body.append(notice);
+  }
   notes.sections.forEach((section, index) => {
     const article = document.createElement("article");
     article.className = "notes-section";
