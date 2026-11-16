@@ -225,7 +225,7 @@ const S = {
 let leaderboardEntries = [];
 let practiceQuestions = [];
 let mockExamQuestions = [];
-const CHAT_GREETING = "Hey! I’m Dr. Eco 👋 What are we tackling today? Ask me about your Economics course, or say ‘quiz me’ and I’ll make practice questions from your indexed notes. We’ve got this!";
+const CHAT_GREETING = "Hey! I’m Dr. Eco 👋 What are we tackling today? Ask me about your Economics course, or say ‘quiz me’ and I’ll make practice questions from your indexed notes. Need your notes? Just ask, like “ECO 121 notes” or “notes on elasticity”. We’ve got this!";
 let chatConversationHistory = [{ role: "assistant", text: CHAT_GREETING }];
 let pendingStudyChat = null;
 let liveModuleReturn = null;
@@ -4689,7 +4689,9 @@ document.querySelector("#voiceSpeakerButton").addEventListener("click", (event) 
 });
 document.querySelector("#voiceEndButton").addEventListener("click", () => toggleVoiceCallRoom(false));
 
-async function submitChatQuestion(question) {
+// options.prompt: what Dr. Eco is asked (defaults to the question shown);
+// options.echo: false when the student's message is already in the chat.
+async function submitChatQuestion(question, options = {}) {
   const cleaned = question.trim();
   if (!cleaned || chatRequestInProgress) return;
   const fuelBefore = studyProgress.fuel;
@@ -4699,7 +4701,7 @@ async function submitChatQuestion(question) {
   const moduleContext = pendingStudyChat;
   pendingStudyChat = null;
   const priorConversation = chatConversationHistory.slice();
-  appendChatMessage(cleaned, "user");
+  if (options.echo !== false) appendChatMessage(cleaned, "user");
   chatRequestInProgress = true;
   const responseMessage = appendChatMessage("Dr. Eco is thinking…", "assistant");
   const typingIndicator = document.createElement("span");
@@ -4708,7 +4710,7 @@ async function submitChatQuestion(question) {
   responseMessage.querySelector("p")?.prepend(typingIndicator);
   window.playFoldBookUI?.("live-session", "chat-typing", typingIndicator);
   try {
-    const answer = await callGeminiRAG(cleaned, chatCourseCode, currentStudentLevel, priorConversation, moduleContext);
+    const answer = await callGeminiRAG(options.prompt || cleaned, chatCourseCode, currentStudentLevel, priorConversation, moduleContext);
     renderDrEcoFormatting(responseMessage.querySelector("p"), answer);
     const moduleId = moduleContext?.moduleId;
     chatConversationHistory.push(
@@ -4740,12 +4742,281 @@ async function submitChatQuestion(question) {
   }
 }
 
+/* ---------- Course notes: "send me the ECO 121 notes" ----------
+   Requests for notes are answered with the full notes inside FoldBook (a reader with
+   Explain / Quiz me / Listen on every section), not a file to export. If nothing
+   matches, the request is logged and Dr. Eco teaches the topic from his own knowledge. */
+const NOTES_WORDS = /\b(pdfs?|notes?|handouts?|materials?|slides?|textbooks?|e-?books?|course outline|lecture notes?)\b/i;
+const NOTES_ASK = /\b(send|give|share|get|find|need|want|where|have|has|download|show|drop|upload|link|any|got|search|look)\b|^\s*(do|does|can|could) (you|u)\b/i;
+const NOTES_EXPLAIN = /\b(explain|summari[sz]e|summary|what is|what are|define|definition|meaning|quiz|test me|teach|break down|simplify|solve)\b/i;
+const NOTES_CACHE_KEY = "foldbook.notes.v1";
+const NOTES_READ_KEY = "foldbook.notesRead.v1";
+
+function isNotesRequest(text) {
+  const message = String(text || "").trim();
+  if (!message || message.length > 240 || !NOTES_WORDS.test(message)) return false;
+  // "Explain my notes on X" is a question for Dr. Eco, not a request for the notes.
+  if (NOTES_EXPLAIN.test(message) && !/\b(send|share|download|pdf)\b/i.test(message)) return false;
+  return NOTES_ASK.test(message) || message.split(/\s+/).length <= 6;
+}
+
+async function notesApi(body) {
+  const response = await fetch("/api/student/materials", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw Object.assign(new Error(result.error || `Notes request failed (${response.status}).`), { status: response.status });
+  return result;
+}
+
+function readCachedNotes() {
+  try { return JSON.parse(localStorage.getItem(NOTES_CACHE_KEY) || "{}") || {}; } catch { return {}; }
+}
+
+function cacheNotes(key, notes) {
+  // The last few opened notes stay on the phone for offline reading.
+  try {
+    const cache = readCachedNotes();
+    delete cache[key];
+    cache[key] = { ...notes, savedAt: Date.now() };
+    const keys = Object.keys(cache);
+    while (keys.length > 6) delete cache[keys.shift()];
+    localStorage.setItem(NOTES_CACHE_KEY, JSON.stringify(cache));
+  } catch { /* storage full or unavailable: reading still works online */ }
+}
+
+function notesKey(material) {
+  return [material.courseCode, material.level, material.title].join("|");
+}
+
+function renderNotesCard(message, result) {
+  const paragraph = message.querySelector("p");
+  const scope = result.courseCode || (result.keywords?.length ? `“${result.keywords.join(" ")}”` : chatCourseCode);
+  renderDrEcoFormatting(paragraph, `Here are the notes I have for **${scope}**. Open one to read it here. Tap “Explain this”, “Quiz me” or “Listen” on any part.`);
+  const list = document.createElement("div");
+  list.className = "notes-card";
+  for (const material of result.materials) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "notes-card-item";
+    const title = document.createElement("strong");
+    title.textContent = material.title;
+    const meta = document.createElement("span");
+    meta.textContent = `${material.courseCode} · ${material.level} · ${material.sections} part${material.sections === 1 ? "" : "s"}`;
+    button.append(title, meta);
+    button.addEventListener("click", () => { void openNotesReader(material, button); });
+    list.append(button);
+  }
+  message.querySelector(".listen-button")?.before(list);
+  if (!message.contains(list)) message.append(list);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+async function handleNotesRequest(text) {
+  const cleaned = text.trim();
+  appendChatMessage(cleaned, "user");
+  const reply = appendChatMessage("Looking through the course notes…", "assistant");
+  const paragraph = reply.querySelector("p");
+  chatRequestInProgress = true;
+  let result;
+  try {
+    result = await notesApi({ action: "notes-find", query: cleaned, courseCode: chatCourseCode });
+  } catch (error) {
+    chatRequestInProgress = false;
+    renderDrEcoFormatting(paragraph, error.status === 401
+      ? "Sign in to open your course notes, then ask me again."
+      : "I couldn’t reach the course notes just now. Check your connection and ask again.");
+    return;
+  }
+  chatRequestInProgress = false;
+  if (result.needsTopic) {
+    renderDrEcoFormatting(paragraph, "Which course or topic? For example: “ECO 121 notes” or “notes on elasticity”.");
+    return;
+  }
+  if (result.materials?.length) {
+    renderNotesCard(reply, result);
+    chatConversationHistory.push(
+      { role: "user", text: cleaned },
+      { role: "assistant", text: `Shared course notes: ${result.materials.map((material) => material.title).join("; ")}` },
+    );
+    chatConversationHistory = chatConversationHistory.slice(-12);
+    sfx.msg();
+    return;
+  }
+  // Nothing uploaded yet: log the request, then Dr. Eco teaches it from his own knowledge.
+  void notesApi({ action: "notes-request", query: cleaned, courseCode: result.courseCode || chatCourseCode }).catch(() => {});
+  const topic = result.keywords?.join(" ") || result.courseCode || "that";
+  renderDrEcoFormatting(paragraph, `I don’t have notes on **${topic}** yet. I’ve sent a request so they can be added. Meanwhile, here’s a study note from my own knowledge, so check it against your lecturer’s notes.`);
+  await submitChatQuestion(cleaned, {
+    echo: false,
+    prompt: `The student asked for course notes: "${cleaned}". FoldBook has no uploaded notes for this${result.courseCode ? ` in ${result.courseCode}` : ""}. Teach it from your own Economics knowledge as a short study note for a ${currentStudentLevel} student at the University of Uyo: begin by saying in one short line that this is from your own knowledge, not their course notes. Then give the key definitions, a clear step-by-step explanation, one Nigerian example, and 3 quick check questions with the answers at the end.`,
+  });
+}
+
+function routeChatMessage(text) {
+  if (isNotesRequest(text)) void handleNotesRequest(text);
+  else void submitChatQuestion(text);
+}
+
+const notesReader = document.querySelector("#notesReader");
+let notesReaderOpener = null;
+let notesReaderObserver = null;
+let notesRewardTimer = 0;
+const NOTES_MIN_READ_MS = 20000;
+
+function notesParagraphs(text) {
+  return String(text).split(/\n\s*\n/).map((part) => part.replace(/\s*\n\s*/g, " ").trim()).filter(Boolean);
+}
+
+function closeNotesReader() {
+  if (!notesReader || notesReader.hidden) return;
+  stopListening();
+  notesReaderObserver?.disconnect();
+  window.clearTimeout(notesRewardTimer);
+  notesReader.hidden = true;
+  document.body.classList.remove("foldbook-notes-open");
+  if (notesReaderOpener?.isConnected) notesReaderOpener.focus({ preventScroll: true });
+}
+
+function rewardNotesRead(key) {
+  let read = [];
+  try { read = JSON.parse(localStorage.getItem(NOTES_READ_KEY) || "[]"); } catch { read = []; }
+  if (!Array.isArray(read) || read.includes(key)) return false;
+  read.push(key);
+  try { localStorage.setItem(NOTES_READ_KEY, JSON.stringify(read.slice(-300))); } catch { /* ignore */ }
+  studyProgress.xp += 5;
+  startStudyActivity();
+  saveStudyProgress();
+  updateStudySummary();
+  void syncLeaderboardEntry();
+  return true;
+}
+
+function askAboutNotes(kind, material, text) {
+  const excerpt = text.length > 1400 ? `${text.slice(0, 1400)}…` : text;
+  closeNotesReader();
+  activateTab("chat");
+  if (kind === "quiz") {
+    void submitChatQuestion(`Quiz me on this part of “${material.title}”`, {
+      prompt: `Quiz me on this passage from my ${material.courseCode} notes (“${material.title}”). Give 3 multiple-choice questions with options A to D, then the answers with a one-line explanation each at the end.\n\n"${excerpt}"`,
+    });
+  } else {
+    void submitChatQuestion(`Explain this part of “${material.title}”`, {
+      prompt: `Explain this passage from my ${material.courseCode} notes (“${material.title}”) step by step, at my pace, with one simple Nigerian example.\n\n"${excerpt}"`,
+    });
+  }
+}
+
+function renderNotesReader(notes, material) {
+  const body = document.querySelector("#notesReaderBody");
+  document.querySelector("#notesReaderCourse").textContent = `${material.courseCode} · ${material.level}${notes.offline ? " · saved for offline" : ""}`;
+  document.querySelector("#notesReaderTitle").textContent = material.title;
+  body.replaceChildren();
+  notes.sections.forEach((section, index) => {
+    const article = document.createElement("article");
+    article.className = "notes-section";
+    const label = document.createElement("p");
+    label.className = "notes-section-label";
+    label.textContent = `Part ${index + 1} of ${notes.sections.length}`;
+    article.append(label);
+    for (const text of notesParagraphs(section.text)) {
+      const paragraph = document.createElement("p");
+      paragraph.textContent = text;
+      article.append(paragraph);
+    }
+    const actions = document.createElement("div");
+    actions.className = "notes-section-actions";
+    const explain = document.createElement("button");
+    explain.type = "button";
+    explain.textContent = "Explain this";
+    explain.addEventListener("click", () => askAboutNotes("explain", material, section.text));
+    const quiz = document.createElement("button");
+    quiz.type = "button";
+    quiz.textContent = "Quiz me";
+    quiz.addEventListener("click", () => askAboutNotes("quiz", material, section.text));
+    const listen = document.createElement("button");
+    listen.type = "button";
+    listen.className = "listen-button";
+    setListenButtonState(listen, "idle");
+    listen.addEventListener("pointerdown", () => { const first = splitForSpeech(section.text)[0]; if (first && listenButton !== listen) fetchNaturalVoice(first).catch(() => {}); });
+    listen.addEventListener("click", () => { void listenToMessage(listen, section.text); });
+    actions.append(explain, quiz, listen);
+    article.append(actions);
+    body.append(article);
+  });
+  const end = document.createElement("p");
+  end.className = "notes-reader-end";
+  end.textContent = "That’s the end of these notes. Ask Dr. Eco about anything that wasn’t clear.";
+  body.append(end);
+  body.scrollTop = 0;
+  // Reading to the end counts as study: +5 XP and today's streak, once per set of notes,
+  // and only after at least 20 seconds with the notes open (no XP for a quick open).
+  notesReaderObserver?.disconnect();
+  window.clearTimeout(notesRewardTimer);
+  const openedAt = Date.now();
+  let endSeen = false;
+  const tryReward = () => {
+    if (notesReader.hidden || !endSeen || !end.isConnected) return;
+    const wait = NOTES_MIN_READ_MS - (Date.now() - openedAt);
+    if (wait > 0) { notesRewardTimer = window.setTimeout(tryReward, wait); return; }
+    notesReaderObserver?.disconnect();
+    if (rewardNotesRead(notesKey(material))) end.textContent = "That’s the end of these notes. +5 XP, and today counts towards your streak!";
+  };
+  if ("IntersectionObserver" in window) {
+    notesReaderObserver = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      endSeen = true;
+      tryReward();
+    }, { root: body, threshold: 0.6 });
+    notesReaderObserver.observe(end);
+  }
+}
+
+async function openNotesReader(material, opener) {
+  if (!notesReader) return;
+  notesReaderOpener = opener || document.activeElement;
+  const key = notesKey(material);
+  document.querySelector("#notesReaderCourse").textContent = `${material.courseCode} · ${material.level}`;
+  document.querySelector("#notesReaderTitle").textContent = material.title;
+  const body = document.querySelector("#notesReaderBody");
+  const loading = document.createElement("p");
+  loading.className = "notes-reader-status";
+  loading.textContent = "Opening the notes…";
+  body.replaceChildren(loading);
+  notesReader.hidden = false;
+  document.body.classList.add("foldbook-notes-open");
+  try {
+    const notes = await notesApi({ action: "notes-read", courseCode: material.courseCode, level: material.level, title: material.title });
+    if (!notes.sections?.length) throw new Error("These notes are empty.");
+    cacheNotes(key, notes);
+    if (!notesReader.hidden) renderNotesReader(notes, material);
+  } catch (error) {
+    const cached = readCachedNotes()[key];
+    if (cached?.sections?.length) {
+      renderNotesReader({ ...cached, offline: true }, material);
+      return;
+    }
+    loading.textContent = error.status === 401 ? "Sign in to read your course notes." : "These notes couldn’t open. Check your connection and try again.";
+  }
+}
+
+document.querySelector("#notesReaderClose")?.addEventListener("click", closeNotesReader);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && notesReader && !notesReader.hidden) {
+    event.stopImmediatePropagation();
+    closeNotesReader();
+  }
+}, true);
+
 const chatMessages = document.querySelector("#chatMessages");
 document.querySelector("#chatForm").addEventListener("submit", (event) => {
   event.preventDefault();
   if (chatRequestInProgress) return;
   const input = document.querySelector("#chatInput");
-  submitChatQuestion(input.value);
+  routeChatMessage(input.value);
   input.value = "";
 });
 document.querySelector("#chatPrompts").addEventListener("click", (event) => {
@@ -4755,7 +5026,7 @@ document.querySelector("#chatPrompts").addEventListener("click", (event) => {
     return;
   }
   const prompt = event.target.closest("[data-prompt]");
-  if (prompt) submitChatQuestion(prompt.dataset.prompt);
+  if (prompt && !chatRequestInProgress) routeChatMessage(prompt.dataset.prompt);
 });
 chatMessages.addEventListener("pointerdown", (event) => {
   const button = event.target.closest(".listen-button");

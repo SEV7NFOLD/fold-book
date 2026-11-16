@@ -2446,3 +2446,44 @@ body.foldbook-app-open .site-footer { display: none; }
 }
 #chat .voice-toggle, #chat .chat-settings-toggle { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
 #chat .voice-toggle[aria-pressed="true"] { border-color: #a83434; background: #a83434; color: #fff; }
+
+/* ===== Course notes: Notes card in chat + in-app reader ===== */
+#chat .notes-card { grid-column: 2; display: grid; gap: 8px; margin: 8px 0 2px; }
+.notes-card-item {
+  display: grid; gap: 3px; width: 100%; min-height: 56px; padding: 10px 14px; text-align: left;
+  border: 1px solid var(--fb-color-border); border-radius: 14px; background: var(--fb-color-surface-2);
+  color: var(--fb-color-text); font: inherit; cursor: pointer;
+}
+.notes-card-item strong { font-size: 15px; line-height: 1.3; }
+.notes-card-item span { color: var(--fb-color-muted); font: 500 12px var(--fb-font-mono); letter-spacing: .02em; }
+.notes-card-item:hover, .notes-card-item:focus-visible { border-color: var(--fb-color-lime); }
+
+.notes-reader { position: fixed; z-index: 70; inset: 0; display: flex; flex-direction: column; background: var(--fb-color-bg); }
+.notes-reader[hidden] { display: none; }
+body.foldbook-notes-open { overflow: hidden; }
+.notes-reader-head {
+  display: flex; align-items: center; gap: 12px; padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px;
+  border-bottom: 1px solid var(--fb-color-border); background: var(--fb-color-bg);
+}
+.notes-reader-close {
+  display: grid; width: 44px; height: 44px; flex: 0 0 44px; place-items: center; border: 1px solid var(--fb-color-border);
+  border-radius: 12px; background: var(--fb-color-surface); color: var(--fb-color-text); cursor: pointer;
+}
+.notes-reader-close svg { width: 20px; height: 20px; }
+.notes-reader-heading { min-width: 0; }
+.notes-reader-course { margin: 0 0 2px; color: var(--fb-color-muted); font: 500 12px var(--fb-font-mono); letter-spacing: .04em; text-transform: uppercase; }
+.notes-reader-head h2 { margin: 0; overflow: hidden; font-size: 18px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.notes-reader-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 16px 16px calc(28px + env(safe-area-inset-bottom, 0px)); outline: none; }
+.notes-section, .notes-reader-end, .notes-reader-status { width: min(100%, 720px); margin: 0 auto; }
+.notes-section { padding: 16px 0 18px; border-bottom: 1px solid var(--fb-color-border); }
+.notes-section-label { margin: 0 0 8px; color: var(--fb-color-lime); font: 600 12px var(--fb-font-mono); letter-spacing: .04em; text-transform: uppercase; }
+.notes-section p:not(.notes-section-label) { margin: 0 0 12px; color: var(--fb-color-text); font-size: 16px; line-height: 1.65; }
+.notes-section-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.notes-section-actions button {
+  display: inline-flex; min-height: 40px; align-items: center; gap: 6px; padding: 0 14px; border: 1px solid var(--fb-color-border);
+  border-radius: 999px; background: var(--fb-color-surface); color: var(--fb-color-text); font: 600 13px var(--fb-font-body); cursor: pointer;
+}
+.notes-section-actions button:hover, .notes-section-actions button:focus-visible { border-color: var(--fb-color-lime); color: var(--fb-color-lime); }
+.notes-section-actions .listen-button svg { width: 16px; height: 16px; }
+.notes-section-actions .listen-button[data-state="playing"] { border-color: var(--fb-color-lime); color: var(--fb-color-lime); }
+.notes-reader-end, .notes-reader-status { padding: 20px 0; color: var(--fb-color-muted); font-size: 14px; text-align: center; }
