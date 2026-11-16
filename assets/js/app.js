@@ -4752,9 +4752,16 @@ const NOTES_EXPLAIN = /\b(explain|summari[sz]e|summary|what is|what are|define|d
 const NOTES_CACHE_KEY = "foldbook.notes.v1";
 const NOTES_READ_KEY = "foldbook.notesRead.v1";
 
+// "Do you have anything on ECO 213?": a course code plus an availability question.
+const NOTES_HAVE = /\b(anything|something|stuff|resources?|who (get|has|have|got)|(do|does|did|can) (you|u|una) (have|get|got)|(you|u|una) (get|got|have) any|(got|have|get) any)\b/i;
+const COURSE_CODE_IN_TEXT = /\b[a-z]{2,5}\s*-?\s*\d{3,4}\b/i;
+
 function isNotesRequest(text) {
   const message = String(text || "").trim();
-  if (!message || message.length > 240 || !NOTES_WORDS.test(message)) return false;
+  if (!message || message.length > 240) return false;
+  if (!NOTES_WORDS.test(message)) {
+    return COURSE_CODE_IN_TEXT.test(message) && NOTES_HAVE.test(message) && !NOTES_EXPLAIN.test(message);
+  }
   // "Explain my notes on X" is a question for Dr. Eco, not a request for the notes.
   if (NOTES_EXPLAIN.test(message) && !/\b(send|share|download|pdf)\b/i.test(message)) return false;
   return NOTES_ASK.test(message) || message.split(/\s+/).length <= 6;
@@ -4817,13 +4824,14 @@ function renderNotesCard(message, result) {
 
 async function handleNotesRequest(text) {
   const cleaned = text.trim();
+  if (!cleaned || chatRequestInProgress) return;
   appendChatMessage(cleaned, "user");
   const reply = appendChatMessage("Looking through the course notes…", "assistant");
   const paragraph = reply.querySelector("p");
   chatRequestInProgress = true;
   let result;
   try {
-    result = await notesApi({ action: "notes-find", query: cleaned, courseCode: chatCourseCode });
+    result = await notesApi({ action: "notes-find", query: cleaned, courseCode: chatCourseCode, level: currentStudentLevel });
   } catch (error) {
     chatRequestInProgress = false;
     renderDrEcoFormatting(paragraph, error.status === 401
@@ -4838,6 +4846,17 @@ async function handleNotesRequest(text) {
   }
   if (result.materials?.length) {
     renderNotesCard(reply, result);
+    if (result.otherLevel) {
+      // Their level has nothing on this yet: say so, request it, and offer the other-level notes.
+      void notesApi({ action: "notes-request", query: cleaned, courseCode: result.courseCode }).catch(() => {});
+      const topic = result.keywords?.length ? `“${result.keywords.join(" ")}”` : "that";
+      const levels = [...new Set(result.materials.map((material) => material.level))].join(" and ");
+      renderDrEcoFormatting(reply.querySelector("p"), `I don’t have **${currentStudentLevel}** notes on ${topic} yet, so I’ve sent a request for them. These **${levels}** notes cover it and are a good foundation. Or ask me to explain ${topic} at ${currentStudentLevel} level.`);
+    } else if (result.topicMissed) {
+      // They named a course and a topic, and that course has nothing on the topic.
+      void notesApi({ action: "notes-request", query: cleaned, courseCode: result.courseCode }).catch(() => {});
+      renderDrEcoFormatting(reply.querySelector("p"), `I don’t have **${result.courseCode}** notes on “${result.keywords.join(" ")}” yet, so I’ve sent a request for them. Here’s everything I have for ${result.courseCode}. Or ask me to explain “${result.keywords.join(" ")}” and I’ll teach it.`);
+    }
     chatConversationHistory.push(
       { role: "user", text: cleaned },
       { role: "assistant", text: `Shared course notes: ${result.materials.map((material) => material.title).join("; ")}` },
@@ -4847,7 +4866,8 @@ async function handleNotesRequest(text) {
     return;
   }
   // Nothing uploaded yet: log the request, then Dr. Eco teaches it from his own knowledge.
-  void notesApi({ action: "notes-request", query: cleaned, courseCode: result.courseCode || chatCourseCode }).catch(() => {});
+  // A topic asked on its own isn't tied to the chat's course; a bare "send the pdf" is.
+  void notesApi({ action: "notes-request", query: cleaned, courseCode: result.courseCode || (result.keywords?.length ? "" : chatCourseCode) }).catch(() => {});
   const topic = result.keywords?.join(" ") || result.courseCode || "that";
   renderDrEcoFormatting(paragraph, `I don’t have notes on **${topic}** yet. I’ve sent a request so they can be added. Meanwhile, here’s a study note from my own knowledge, so check it against your lecturer’s notes.`);
   await submitChatQuestion(cleaned, {
