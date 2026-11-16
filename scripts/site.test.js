@@ -1523,12 +1523,13 @@ test("admin passcode sessions protect server-side course material indexing", asy
     assert.equal(indexed.status, 201);
     assert.equal(upstreamUrl, "https://fold-book-test.supabase.co/rest/v1/course_materials");
     assert.equal(upstreamOptions.headers.apikey, "server-only-service-role-test-key");
-    assert.deepEqual(JSON.parse(upstreamOptions.body), {
+    // Notes are saved as an array of readable parts (one part for short notes).
+    assert.deepEqual(JSON.parse(upstreamOptions.body), [{
       level: "200L",
       course_code: "ECO 221",
       title: "Consumer theory",
       content: "Utility maximization under a budget constraint.",
-    });
+    }]);
     assert.doesNotMatch(JSON.stringify(indexed.json), /server-only-service-role-test-key/);
 
     const tamperedCookie = cookie.replace(/.$/, cookie.endsWith("a") ? "b" : "a");
