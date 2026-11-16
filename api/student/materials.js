@@ -78,6 +78,136 @@ async function createSignedUpload(configValue, path) {
   return data.token;
 }
 
+/* ---------- Course notes finder (Dr. Eco "send me the notes") ----------
+   Course notes are stored as indexed text sections in public.course_materials (the
+   original PDFs are not kept). Students find them by course code or by topic words,
+   then read the full notes inside FoldBook. */
+const NOTE_STOPWORDS = new Set(("a an and any are as at be can could course courses do does for from get give got have help i in is it me "
+  + "my need notes note of on or our pdf pdfs please pls plz send share show some the this to topic up want we where which with you your "
+  + "material materials handout handouts slide slides lecture lectures document documents doc docs textbook ebook outline find download link "
+  + "drop upload anybody anyone has who what kindly sir ma dr eco foldbook").split(" "));
+
+function normalizeCourseCode(value) {
+  const match = String(value || "").match(/\b([A-Za-z]{2,5})\s*-?\s*(\d{3,4})\b/);
+  return match ? `${match[1].toUpperCase()} ${match[2]}` : "";
+}
+
+function noteKeywords(text) {
+  return [...new Set(String(text || "").toLowerCase()
+    .replace(/\b[a-z]{2,5}\s*-?\s*\d{3,4}\b/g, " ")
+    .split(/[^a-z0-9-]+/)
+    .map((word) => word.replace(/^-+|-+$/g, ""))
+    .filter((word) => word.length >= 3 && !NOTE_STOPWORDS.has(word) && !/^\d+$/.test(word)))]
+    .slice(0, 5);
+}
+
+// Groups indexed sections into one entry per document (course + level + title).
+function groupNotes(rows) {
+  const docs = new Map();
+  for (const row of rows || []) {
+    if (!row || typeof row.title !== "string") continue;
+    const key = [row.course_code, row.level, row.title].join("\u0000");
+    const doc = docs.get(key) || { courseCode: row.course_code, level: row.level, title: row.title, sections: 0, firstId: Number(row.id) || 0, score: 0, matched: new Set() };
+    doc.sections += 1;
+    doc.firstId = Math.min(doc.firstId, Number(row.id) || doc.firstId);
+    docs.set(key, doc);
+  }
+  return docs;
+}
+
+async function listCourseNotes(configValue, courseCode, keywords) {
+  const [letters, digits] = courseCode.split(" ");
+  const rows = await rest(configValue, "course_materials", `?select=id,level,course_code,title&course_code=ilike.${encodeURIComponent(`${letters}*${digits}`)}&order=id.asc&limit=3000`);
+  const docs = groupNotes(rows);
+  // Within a course, documents whose titles mention the topic come first.
+  for (const doc of docs.values()) {
+    for (const word of keywords) if (doc.title.toLowerCase().includes(word)) { doc.score += 5; doc.matched.add(word); }
+  }
+  return [...docs.values()];
+}
+
+async function searchNotesByTopic(configValue, keywords, courseCode) {
+  const select = "select=id,level,course_code,title";
+  const courseFilter = courseCode ? `&course_code=ilike.${encodeURIComponent(courseCode.replace(" ", "*"))}` : "";
+  const docs = new Map();
+  for (const word of keywords) {
+    const pattern = encodeURIComponent(`*${word}*`);
+    const rows = await rest(configValue, "course_materials", `?${select}&or=(title.ilike.${pattern},content.ilike.${pattern})${courseFilter}&limit=300`);
+    for (const [key, doc] of groupNotes(rows)) {
+      const existing = docs.get(key) || { ...doc, sections: 0, score: 0, matched: new Set() };
+      // More matching sections and a match in the title both rank a document higher.
+      existing.score += Math.min(doc.sections, 6) + (doc.title.toLowerCase().includes(word) ? 8 : 0);
+      existing.matched.add(word);
+      docs.set(key, existing);
+    }
+  }
+  // A document must cover at least half of the student's topic words.
+  const matches = [...docs.values()].filter((doc) => doc.matched.size >= Math.ceil(keywords.length / 2));
+  if (!matches.length) return [];
+  // Count every section of the matched documents (the topic queries only saw matching ones).
+  const titles = [...new Set(matches.map((doc) => doc.title))].slice(0, 20);
+  const list = titles.map((title) => `"${title.replace(/["\\]/g, "")}"`).join(",");
+  const rows = await rest(configValue, "course_materials", `?${select}&title=in.(${encodeURIComponent(list)})&limit=3000`);
+  const full = groupNotes(rows);
+  for (const doc of matches) {
+    const whole = full.get([doc.courseCode, doc.level, doc.title].join("\u0000"));
+    doc.sections = whole ? whole.sections : doc.sections;
+  }
+  return matches;
+}
+
+async function findNotes(configValue, body) {
+  const query = String(body.query || "").slice(0, 300);
+  const courseCode = normalizeCourseCode(query) || normalizeCourseCode(body.courseCode);
+  const namedCourse = Boolean(normalizeCourseCode(query));
+  const keywords = noteKeywords(query);
+  let docs = [];
+  if (keywords.length) docs = await searchNotesByTopic(configValue, keywords, namedCourse ? courseCode : "");
+  // A named course with no topic match (or no topic at all) lists that course's notes.
+  if (!docs.length && courseCode && (namedCourse || !keywords.length)) docs = await listCourseNotes(configValue, courseCode, keywords);
+  if (!docs.length && !keywords.length && !courseCode) return { needsTopic: true, materials: [] };
+  const materials = docs
+    .filter((doc) => doc.sections > 0)
+    .sort((a, b) => b.matched.size - a.matched.size || b.score - a.score || a.firstId - b.firstId)
+    .slice(0, 8)
+    .map((doc) => ({ courseCode: doc.courseCode, level: doc.level, title: doc.title, sections: doc.sections }));
+  return { courseCode: namedCourse ? courseCode : "", keywords, materials };
+}
+
+async function readNotes(configValue, body) {
+  const courseCode = String(body.courseCode || "").slice(0, 20);
+  const level = String(body.level || "");
+  const title = String(body.title || "").slice(0, 200);
+  if (!courseCode || !/^(100L|200L|300L|400L)$/.test(level) || !title) {
+    const error = new Error("Choose a course material to open.");
+    error.status = 400;
+    throw error;
+  }
+  const query = new URLSearchParams({ select: "id,content", course_code: `eq.${courseCode}`, level: `eq.${level}`, title: `eq.${title}`, order: "id.asc", limit: "800" });
+  const rows = await rest(configValue, "course_materials", `?${query}`);
+  return { courseCode, level, title, sections: (rows || []).filter((row) => typeof row.content === "string" && row.content.trim()).map((row) => ({ id: row.id, text: row.content })) };
+}
+
+async function logNotesRequest(configValue, body, session) {
+  try {
+    await rest(configValue, "material_requests", "", {
+      method: "POST",
+      prefer: "return=minimal",
+      body: {
+        registration: session.registration,
+        course_code: normalizeCourseCode(body.courseCode || body.query) || null,
+        query: String(body.query || "").slice(0, 300),
+        keywords: noteKeywords(body.query).join(" "),
+      },
+    });
+    return { logged: true };
+  } catch (error) {
+    // The requests table is optional: run supabase/2026-11-16-material-requests.sql to collect them.
+    console.warn("Notes request was not logged:", error.code || error.status || error.message);
+    return { logged: false };
+  }
+}
+
 function ownerQuery(session) {
   return `owner_registration=eq.${encodeURIComponent(session.registration)}`;
 }
@@ -105,6 +235,19 @@ module.exports = async function studentMaterialsHandler(request, response) {
     if (request.method === "POST") {
       const body = await readBody(request);
       if (!body || typeof body !== "object" || Array.isArray(body)) return sendJson(response, 400, { error: "Invalid material request." });
+
+      if (body.action === "notes-find") {
+        operation = "finding course notes";
+        return sendJson(response, 200, await findNotes(supabase, body));
+      }
+      if (body.action === "notes-read") {
+        operation = "opening the course notes";
+        return sendJson(response, 200, await readNotes(supabase, body));
+      }
+      if (body.action === "notes-request") {
+        operation = "logging the notes request";
+        return sendJson(response, 200, await logNotesRequest(supabase, body, session));
+      }
 
       if (body.action === "prepare") {
         operation = "preparing the secure upload";
@@ -188,6 +331,7 @@ module.exports = async function studentMaterialsHandler(request, response) {
     response.setHeader("Allow", "GET, POST");
     return sendJson(response, 405, { error: "Method not allowed." });
   } catch (error) {
+    if (error.status === 400 && /course material/.test(error.message || "")) return sendJson(response, 400, { error: error.message });
     const details = String(error.message || "");
     console.error("Student materials request failed:", {
       operation: error.stage || operation,

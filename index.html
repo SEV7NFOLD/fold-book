@@ -571,6 +571,13 @@
             <p id="studentMaterialsAdminStatus" class="admin-material-status" role="status" aria-live="polite"></p>
             <div id="studentMaterialsAdminList" class="student-material-admin-list"></div>
             </section>
+            <section class="admin-material-library-section">
+              <h3>Notes students asked for</h3>
+              <p>Notes students asked Dr. Eco for that aren’t in the library yet, most-wanted first. Add them in the AI Indexer.</p>
+              <button type="button" class="results-submit" id="loadMaterialRequests">Refresh requests</button>
+              <p id="materialRequestsStatus" class="admin-material-status" role="status" aria-live="polite"></p>
+              <div id="materialRequestsList" class="student-material-admin-list"></div>
+            </section>
           </section>
           <section class="admin-view-panel" id="adminView-quizzes" hidden>
             <h2>🎓 Dr. Eco Quiz Studio</h2>
@@ -690,6 +697,18 @@
       </div>
     </section>
 
+    <section class="notes-reader" id="notesReader" role="dialog" aria-modal="true" aria-labelledby="notesReaderTitle" hidden>
+      <header class="notes-reader-head">
+        <button class="notes-reader-close" id="notesReaderClose" type="button" aria-label="Close notes">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="notes-reader-heading">
+          <p class="notes-reader-course" id="notesReaderCourse"></p>
+          <h2 id="notesReaderTitle">Course notes</h2>
+        </div>
+      </header>
+      <div class="notes-reader-body" id="notesReaderBody" tabindex="-1"></div>
+    </section>
     <section class="voice-call-room hide" id="voiceCallRoom" role="dialog" aria-modal="true" aria-labelledby="voiceCallTitle" hidden>
       <div class="voice-call-content">
         <button type="button" class="voice-minimize" id="voiceMinimizeButton" aria-label="Minimize live call">⌄</button>
