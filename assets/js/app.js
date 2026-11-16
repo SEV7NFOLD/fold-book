@@ -6703,6 +6703,60 @@ async function loadStudentMaterialSubmissions() {
 }
 document.querySelector("#loadStudentMaterials")?.addEventListener("click", loadStudentMaterialSubmissions);
 
+// Admin: notes students asked for that the library doesn't have yet.
+async function loadMaterialRequests() {
+  const status = document.querySelector("#materialRequestsStatus");
+  const list = document.querySelector("#materialRequestsList");
+  if (!status || !list) return;
+  if (!S.isAdmin) return showAccessRestrictedNotice();
+  status.textContent = "Loading notes requests…";
+  try {
+    const response = await fetch("/api/admin/material-requests", { credentials: "same-origin", headers: { Accept: "application/json" } });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || `Request failed (${response.status}).`);
+    list.replaceChildren();
+    for (const item of result.requests || []) {
+      const card = document.createElement("article");
+      card.className = "student-material-admin-card material-request-card";
+      const heading = document.createElement("h3");
+      heading.textContent = `${item.topic || "Any notes"} · ${item.courseCode || "No course named"}`;
+      const counts = document.createElement("p");
+      counts.textContent = `${item.students} student${item.students === 1 ? "" : "s"} · ${item.requests} request${item.requests === 1 ? "" : "s"} · last asked ${item.lastAsked ? new Date(item.lastAsked).toLocaleString() : "recently"}`;
+      const examples = document.createElement("small");
+      examples.textContent = item.examples?.length ? `They asked: ${item.examples.map((text) => `“${text}”`).join(" · ")}` : "";
+      const actions = document.createElement("div");
+      actions.className = "student-material-admin-actions";
+      const addButton = document.createElement("button");
+      addButton.type = "button";
+      addButton.className = "results-submit";
+      addButton.textContent = "Add these notes";
+      addButton.addEventListener("click", async () => {
+        await loadCourseCatalog({ updateStatus: false });
+        const code = String(item.courseCode || "").toUpperCase();
+        const level = ["100L", "200L", "300L", "400L"].find((candidate) => coursesForLevel(candidate).some((course) => course.code === code));
+        if (level) {
+          document.querySelector("#adminLevelSelect").value = level;
+          updateAdminCourseDropdown();
+          document.querySelector("#adminCourseSelect").value = code;
+        }
+        const title = item.topic ? item.topic.replace(/\b\w/g, (letter) => letter.toUpperCase()) : "";
+        document.querySelector("#adminMaterialTitle").value = title;
+        document.querySelector('[data-admin-view="indexer"]').click();
+        document.querySelector("#adminMaterialStatus").textContent = `Students asked for “${item.topic || "notes"}”${code ? ` in ${code}` : ""}. ${level ? "" : "Pick the course, then "}paste or upload the notes to add them to Dr. Eco’s library.`;
+      });
+      actions.append(addButton);
+      card.append(heading, counts, examples, actions);
+      list.append(card);
+    }
+    status.textContent = result.requests?.length
+      ? `${result.total} request${result.total === 1 ? "" : "s"} from students, grouped into ${result.requests.length} topic${result.requests.length === 1 ? "" : "s"}.`
+      : "No notes requests yet. When students ask Dr. Eco for notes FoldBook doesn’t have, they appear here.";
+  } catch (error) {
+    status.textContent = error.message || "Notes requests could not be loaded.";
+  }
+}
+document.querySelector("#loadMaterialRequests")?.addEventListener("click", loadMaterialRequests);
+
 function normalizeWhatsAppPhone(phoneNumber) {
   const digits = phoneNumber.replace(/\D/g, "");
   const formattedPhone = digits.startsWith("0") ? `234${digits.slice(1)}` : digits;
@@ -7421,6 +7475,7 @@ document.querySelectorAll("[data-admin-view]").forEach((button) => {
     if (button.dataset.adminView === "materials") {
       void loadAdminCourseMaterials();
       void loadStudentMaterialSubmissions();
+      void loadMaterialRequests();
     }
     if (button.dataset.adminView === "students") loadStudentRecords();
     if (button.dataset.adminView === "whatsapp") void loadWhatsAppBotSettings();
