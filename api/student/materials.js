@@ -85,7 +85,8 @@ async function createSignedUpload(configValue, path) {
 const NOTE_STOPWORDS = new Set(("a an and any are as at be can could course courses do does for from get give got have help i in is it me "
   + "my need notes note of on or our pdf pdfs please pls plz send share show some the this to topic up want we where which with you your "
   + "material materials handout handouts slide slides lecture lectures document documents doc docs textbook ebook outline find download link "
-  + "drop upload anybody anyone has who what kindly sir ma dr eco foldbook").split(" "));
+  + "drop upload anybody anyone has who what kindly sir ma dr eco foldbook anything something stuff resource resources abeg biko una "
+  + "hello hey there about related regarding info information study read reading available").split(" "));
 
 function normalizeCourseCode(value) {
   const match = String(value || "").match(/\b([A-Za-z]{2,5})\s*-?\s*(\d{3,4})\b/);
@@ -141,8 +142,10 @@ async function searchNotesByTopic(configValue, keywords, courseCode) {
       docs.set(key, existing);
     }
   }
-  // A document must cover at least half of the student's topic words.
-  const matches = [...docs.values()].filter((doc) => doc.matched.size >= Math.ceil(keywords.length / 2));
+  // Short topics ("game theory") need every word, or "theory" alone pulls in Price Theory.
+  // Longer ones need at least half, so one stray word doesn't sink a good match.
+  const needed = keywords.length <= 2 ? keywords.length : Math.ceil(keywords.length / 2);
+  const matches = [...docs.values()].filter((doc) => doc.matched.size >= needed);
   if (!matches.length) return [];
   // Count every section of the matched documents (the topic queries only saw matching ones).
   const titles = [...new Set(matches.map((doc) => doc.title))].slice(0, 20);
@@ -164,14 +167,31 @@ async function findNotes(configValue, body) {
   let docs = [];
   if (keywords.length) docs = await searchNotesByTopic(configValue, keywords, namedCourse ? courseCode : "");
   // A named course with no topic match (or no topic at all) lists that course's notes.
-  if (!docs.length && courseCode && (namedCourse || !keywords.length)) docs = await listCourseNotes(configValue, courseCode, keywords);
+  let topicMissed = false;
+  if (!docs.length && courseCode && (namedCourse || !keywords.length)) {
+    docs = await listCourseNotes(configValue, courseCode, keywords);
+    topicMissed = keywords.length > 0 && docs.length > 0;
+  }
   if (!docs.length && !keywords.length && !courseCode) return { needsTopic: true, materials: [] };
-  const materials = docs
+  const level = /^(100L|200L|300L|400L)$/.test(String(body.level || "")) ? body.level : "";
+  let ranked = docs
     .filter((doc) => doc.sections > 0)
-    .sort((a, b) => b.matched.size - a.matched.size || b.score - a.score || a.firstId - b.firstId)
+    .sort((a, b) => b.matched.size - a.matched.size || b.score - a.score || a.firstId - b.firstId);
+  // A topic search stays at the student's level. Notes from other levels are offered only
+  // when their level has none, and flagged so the student knows. A course the student
+  // names explicitly is shown whatever its level.
+  let otherLevel = false;
+  if (level && !namedCourse) {
+    const own = ranked.filter((doc) => doc.level === level);
+    otherLevel = !own.length && ranked.length > 0;
+    if (own.length) ranked = own;
+  }
+  const materials = ranked
     .slice(0, 8)
     .map((doc) => ({ courseCode: doc.courseCode, level: doc.level, title: doc.title, sections: doc.sections }));
-  return { courseCode: namedCourse ? courseCode : "", keywords, materials };
+  // Report the course when the student named it, or when it was the only thing searched.
+  const usedCourse = namedCourse || !keywords.length ? courseCode : "";
+  return { courseCode: usedCourse, keywords, level, otherLevel, topicMissed, materials };
 }
 
 async function readNotes(configValue, body) {
