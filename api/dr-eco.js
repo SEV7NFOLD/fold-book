@@ -41,9 +41,9 @@ async function readBody(request) {
 const TTS_MODEL = process.env.GEMINI_TTS_MODEL || "gemini-3.8-flash-lite-tts";
 const TTS_VOICES = new Set(["Orus", "Kore", "Aoede", "Leda", "Puck", "Charon", "Fenrir", "Zephyr"]);
 const TTS_MAX_CHARS = 2400;
-// Relaxed and conversational, in a neutral accent: a tutor talking to one student,
-// not an announcer or an advert.
-const TTS_STYLE = "relaxed, natural and conversational, in a neutral international English accent, at an easy talking pace, like a tutor chatting one-on-one with a student; not like an advert, announcer or narrator";
+// An older Nigerian lecturer talking to one student: natural educated Nigerian English,
+// unhurried and warm. Not an advert, a radio presenter or a comedy accent.
+const TTS_STYLE = "the warm, unhurried voice of an older Nigerian man, a respected Economics professor at a Nigerian university, speaking educated Nigerian English with a natural Nigerian accent; calm, fatherly and slightly deep, at an easy talking pace, like explaining to one student in his office; not an advert, announcer, radio presenter or comedian, and not exaggerated";
 const TTS_TIMEOUT_MS = 45000;
 
 function isTtsPayload(payload) {
