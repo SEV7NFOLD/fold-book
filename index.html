@@ -293,14 +293,26 @@
           <div class="lb-header">
             <div>
               <h1>UNIUYO Economics League</h1>
-              <small class="text-muted">Weekly XP Ranking · resets Monday</small>
+              <small class="text-muted">All-time XP ranking</small>
             </div>
             <div class="pill gold-pill">🏆 TOP 10 PROMOTION ZONE</div>
+          </div>
+          <div class="lb-scope" role="group" aria-label="Which students to rank">
+            <button type="button" class="lb-scope-button" data-scope="all" aria-pressed="true">All levels</button>
+            <button type="button" class="lb-scope-button" data-scope="level" aria-pressed="false" id="lbScopeLevel">My level</button>
           </div>
           <p class="leaderboard-notice" id="leaderboardStatus" role="status" aria-live="polite">Sign in to load the live XP leaderboard.</p>
           <div class="podium" id="leaderboardPodium"></div>
           <div id="leaderboardList" class="leaderboard-list" aria-live="polite"></div>
           <div class="your-rank"><span>Your rank</span><strong id="yourRank">—</strong><span class="mono" id="yourXp">0 XP</span></div>
+          <form class="rank-name-form" id="rankNameForm" hidden>
+            <label for="rankNameInput">Your name on Ranks</label>
+            <div class="rank-name-row">
+              <input id="rankNameInput" maxlength="20" autocomplete="nickname" placeholder="First name and initial">
+              <button type="submit" class="results-submit">Save</button>
+            </div>
+            <small class="text-muted" id="rankNameStatus" role="status">Classmates see your first name and initial. Leave it empty to use that, or pick a nickname.</small>
+          </form>
         </div>
       </section>
 

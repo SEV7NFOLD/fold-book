@@ -2490,3 +2490,13 @@ body.foldbook-notes-open { overflow: hidden; }
 .notes-messy-notice p { margin: 0 0 12px; color: var(--fb-color-text); font-size: 15px; line-height: 1.5; }
 .notes-messy-notice button { width: 100%; min-height: 44px; }
 .notes-reader-end, .notes-reader-status { padding: 20px 0; color: var(--fb-color-muted); font-size: 14px; text-align: center; }
+
+/* Ranks: level filter and nickname */
+.lb-scope { display: flex; gap: 8px; margin-top: 14px; }
+.lb-scope-button { min-height: 40px; padding: 0 16px; border: 1px solid var(--fb-color-border); border-radius: 999px; background: transparent; color: var(--fb-color-muted); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.lb-scope-button[aria-pressed="true"] { border-color: var(--fb-color-lime); background: var(--fb-color-lime-surface); color: var(--fb-color-text); }
+.rank-name-form { display: grid; gap: 8px; margin-top: 18px; }
+.rank-name-form label { color: var(--fb-color-text); font-size: 14px; font-weight: 700; }
+.rank-name-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.rank-name-row input { width: 100%; min-width: 0; box-sizing: border-box; min-height: 44px; padding: 0 12px; border: 1px solid var(--fb-color-border); border-radius: 12px; background: var(--fb-color-surface); color: var(--fb-color-text); font: inherit; font-size: 16px; }
+.rank-name-row button { flex: none; width: auto; min-height: 44px; margin: 0; padding: 0 18px; }
