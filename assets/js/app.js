@@ -212,6 +212,8 @@ let studentCustomCourses = [];
 let currentStudent = null;
 let isMasterAdmin = false;
 const AUTH_SESSION_KEY = "foldBook.authSession";
+// Dr. Eco's voice in writing: an experienced Nigerian lecturer, warm and lightly Nigerian.
+const DR_ECO_PERSONA = "Write like a warm, experienced Nigerian Economics lecturer: Nigerian English with a light, natural touch, such as an occasional \"my dear\", \"you see\" or \"ehen\", and everyday Nigerian examples (the market, transport fares, NEPA bills). Keep it to a touch, never every sentence; no Pidgin unless the student writes in Pidgin first, and never sound like an advert.";
 const S = {
   isAdmin: false,
   student: null,
@@ -3687,7 +3689,7 @@ async function callGeminiRAG(userMessage, courseCode, level, conversation = [], 
   const learner = learnerAdaptationSummary();
   const tone = { friendly: "warm and encouraging", calm: "calm, patient, and reassuring", direct: "direct, focused, and concise" }[studyProgress.studyTone] || "warm and encouraging";
   const pace = { gentle: "Explain one small step at a time, check understanding, and avoid jumping ahead.", balanced: "Give a clear explanation with enough detail and one example.", quick: "Use concise revision notes and focus on the key exam idea." }[studyProgress.studyPace] || "Give a clear explanation with enough detail and one example.";
-  const systemInstruction = `You are Dr. Eco, a sharp, fun AI Study Companion for Economics students at UNIUYO. You tutor a ${level} student in ${courseCode}. You have already introduced yourself in the chat; never repeat your name or greeting in later replies. Be ${tone}. ${pace} Adapt explanations to demonstrated learning: revisit weak topics patiently with a different example, and acknowledge progress when accuracy improves. Do not label or shame the student. Keep replies conversational, useful, and brief unless the student asks for detail. Ground course-specific claims in supplied notes and student materials; if they do not cover something, say so and label any general guidance.${moduleContext ? moduleContext.followUp ? ` The student has already completed the study conversation for “${moduleContext.title}.” Do not restart or repeat the lesson. Give a short readiness confirmation and direct them to the module checkpoint.` : ` This is the study conversation activity for “${moduleContext.title}.” Help with the requested focus, then let the student know they can return to the module checkpoint.` : ""}`;
+  const systemInstruction = `You are Dr. Eco, a sharp, fun AI Study Companion for Economics students at UNIUYO. ${DR_ECO_PERSONA} You tutor a ${level} student in ${courseCode}. You have already introduced yourself in the chat; never repeat your name or greeting in later replies. Be ${tone}. ${pace} Adapt explanations to demonstrated learning: revisit weak topics patiently with a different example, and acknowledge progress when accuracy improves. Do not label or shame the student. Keep replies conversational, useful, and brief unless the student asks for detail. Ground course-specific claims in supplied notes and student materials; if they do not cover something, say so and label any general guidance.${moduleContext ? moduleContext.followUp ? ` The student has already completed the study conversation for “${moduleContext.title}.” Do not restart or repeat the lesson. Give a short readiness confirmation and direct them to the module checkpoint.` : ` This is the study conversation activity for “${moduleContext.title}.” Help with the requested focus, then let the student know they can return to the module checkpoint.` : ""}`;
   const recentConversation = conversation.slice(-6).map((turn) => `${turn.role === "assistant" ? "Dr. Eco" : "Student"}: ${String(turn.text || "").slice(0, 900)}`).join("\n");
   const prompt = `Level: ${level}\nCourse: ${courseCode}\nLearner progress signals: ${learner}\n${recentConversation ? `Recent conversation (continue naturally; do not repeat earlier explanations):\n${recentConversation}\n\n` : ""}Official course notes:\n${contextText || "(No matching official course notes were found.)"}\n\nStudent's private materials for this course:\n${personalContext || "(No student materials saved for this course.)"}\n\nCurrent student message: ${userMessage}`;
   const response = await fetch("/api/dr-eco", {
@@ -4317,8 +4319,21 @@ class DrEcoVoiceLive {
       }
       this.config = tokenData;
       this.outputGain = this.audioContext.createGain();
-    this.outputGain.gain.value = voiceSpeakerOn ? 1 : 0;
-      this.outputGain.connect(this.audioContext.destination);
+      this.outputGain.gain.value = voiceSpeakerOn ? 1 : 0;
+      // Even out Dr. Eco's loudness. On phones the call runs in "communication" mode and
+      // his voice can sound faint or muffled, especially as it trails off; a gentle
+      // compressor with a little makeup gain keeps him clear without clipping.
+      this.outputCompressor = this.audioContext.createDynamicsCompressor();
+      this.outputCompressor.threshold.value = -28;
+      this.outputCompressor.knee.value = 12;
+      this.outputCompressor.ratio.value = 3;
+      this.outputCompressor.attack.value = 0.005;
+      this.outputCompressor.release.value = 0.25;
+      this.outputBoost = this.audioContext.createGain();
+      this.outputBoost.gain.value = 1.6;
+      this.outputGain.connect(this.outputCompressor);
+      this.outputCompressor.connect(this.outputBoost);
+      this.outputBoost.connect(this.audioContext.destination);
       // Voice loudness for Dr. Eco's lip sync (taps the audio before the speaker mute).
       this.outputAnalyser = this.audioContext.createAnalyser();
       this.outputAnalyser.fftSize = 512;
@@ -7571,9 +7586,21 @@ async function restoreAuthSession() {
       window.localStorage.removeItem(AUTH_SESSION_KEY);
       return false;
     }
-    const response = await fetch("/api/student/auth", { credentials: "same-origin" });
-    if (!response.ok) { window.localStorage.removeItem(AUTH_SESSION_KEY); return false; }
-    const session = { ...localSession, ...(await response.json()).student };
+    // Only a real "signed out" answer (401) signs the student out. A slow or failed request
+    // (bad network, the server waking up) used to sign them out too, which is why students
+    // were asked to log in again so often. Retry, then carry on with the saved session.
+    let serverStudent = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const response = await fetch("/api/student/auth", { credentials: "same-origin" });
+        if (response.status === 401) { window.localStorage.removeItem(AUTH_SESSION_KEY); return false; }
+        if (response.ok) { serverStudent = (await response.json()).student || null; break; }
+      } catch (error) {
+        console.warn("Sign-in check failed, retrying:", error);
+      }
+      if (attempt < 2) await new Promise((resolve) => window.setTimeout(resolve, 1200 * (attempt + 1)));
+    }
+    const session = { ...localSession, ...(serverStudent || {}), role: "student" };
     const registration = normalizeStudentIdentifier(session.registration || "");
     if (session.role !== "student" || !registration || typeof session.name !== "string"
       || normalizeNameTokens(session.name).length < 2) {
@@ -7633,8 +7660,8 @@ async function restoreAuthSession() {
     void syncLeaderboardEntry();
     return true;
   } catch (error) {
+    // Keep the saved sign-in: something on the page failed, not the student's session.
     console.error("Could not restore the FoldBook session:", error);
-    window.localStorage.removeItem(AUTH_SESSION_KEY);
     return false;
   }
 }

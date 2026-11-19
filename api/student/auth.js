@@ -111,7 +111,7 @@ function readSession(request) {
 
 function cookie(value, request, maxAge = SESSION_SECONDS) {
   const secure = process.env.NODE_ENV === "production" || request.headers["x-forwarded-proto"] === "https";
-  return `${COOKIE}=${value}; HttpOnly; SameSite=Strict; Path=/api/student; Max-Age=${maxAge}${secure ? "; Secure" : ""}`;
+  return `${COOKIE}=${value}; HttpOnly; SameSite=Lax; Path=/api/student; Max-Age=${maxAge}${secure ? "; Secure" : ""}`;
 }
 
 function restConfig() {
