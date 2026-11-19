@@ -189,7 +189,7 @@ test("production output keeps the dark branding and compiles student results int
   assert.match(app, /match_level:\s*level/);
   assert.match(app, /fetch\("\/api\/dr-eco"/);
   assert.doesNotMatch(app, /generativelanguage\.googleapis\.com\/v1beta\/models\/.*:generateContent/);
-  assert.match(app, /from\("student_xp"\)\.upsert/);
+  assert.match(app, /action: "leaderboard", scope: leaderboardScope/);
   assert.match(leaderboardSchema, /enable row level security/);
   assert.match(leaderboardSchema, /create table if not exists public\.student_xp/);
   assert.match(leaderboardSchema, /to anon, authenticated/);

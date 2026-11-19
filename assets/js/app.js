@@ -5767,79 +5767,96 @@ if (!SUPABASE_ANON_KEY_VALID) {
   console.error("The configured Supabase anon key is malformed; opt-in submissions are disabled.");
 }
 
-const LEADERBOARD_CLIENT_ID_KEY = "foldBook.leaderboardClientId";
-function getLeaderboardClientId() {
+const LEADERBOARD_SCOPE_KEY = "foldBook.leaderboardScope";
+let leaderboardScope = (() => { try { return window.localStorage.getItem(LEADERBOARD_SCOPE_KEY) === "level" ? "level" : "all"; } catch { return "all"; } })();
+let leaderboardLoadId = 0;
+
+async function leaderboardRequest(body) {
+  const response = await fetch("/api/student/learning-profile", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(body),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(result.error || `Request failed (${response.status})`);
+    error.status = response.status;
+    throw error;
+  }
+  return result;
+}
+
+function updateLeaderboardScopeButtons() {
+  document.querySelectorAll(".lb-scope-button").forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.scope === leaderboardScope));
+  });
+  const levelButton = document.querySelector("#lbScopeLevel");
+  if (levelButton) levelButton.textContent = currentStudentLevel ? `${currentStudentLevel} only` : "My level";
+}
+
+// Ranks come from the XP each student's account has saved, so the board is the same on every
+// device and shows classmates by first name and initial (or the nickname they chose).
+async function syncLeaderboardEntry() {
+  updateLeaderboardScopeButtons();
+  const nameForm = document.querySelector("#rankNameForm");
+  if (nameForm) nameForm.hidden = !currentStudent;
+  if (!currentStudent) {
+    leaderboardEntries = [];
+    renderLeaderboard();
+    leaderboardStatus.textContent = "Sign in to see how you rank against your classmates.";
+    return;
+  }
+  const loadId = ++leaderboardLoadId;
+  // Save the latest XP first so the board includes what was just earned.
+  try { if (COURSE_CODE_PATTERN.test(currentCourse || "")) await syncLearningProfile("account_stats", currentCourse); } catch { /* the board still loads */ }
   try {
-    const savedId = window.localStorage.getItem(LEADERBOARD_CLIENT_ID_KEY);
-    if (savedId && /^[0-9a-f-]{36}$/i.test(savedId)) return savedId;
-    const clientId = window.crypto && typeof window.crypto.randomUUID === "function"
-      ? window.crypto.randomUUID()
-      : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (character) => {
-        const random = Math.floor(Math.random() * 16);
-        return (character === "x" ? random : (random & 0x3) | 0x8).toString(16);
-      });
-    window.localStorage.setItem(LEADERBOARD_CLIENT_ID_KEY, clientId);
-    return clientId;
+    const result = await leaderboardRequest({ action: "leaderboard", scope: leaderboardScope });
+    if (loadId !== leaderboardLoadId) return;
+    leaderboardEntries = Array.isArray(result.entries) ? result.entries : [];
+    renderLeaderboard();
+    const where = result.scope === "level" && result.level ? `in ${result.level}` : "across all levels";
+    const levelButton = document.querySelector("#lbScopeLevel");
+    if (levelButton && result.level) levelButton.textContent = `${result.level} only`;
+    leaderboardStatus.textContent = leaderboardEntries.length
+      ? `${result.total} ${result.total === 1 ? "student" : "students"} ranked ${where}.${result.you ? "" : " Earn some XP to join the board."}`
+      : `No one ${where} has earned XP yet. Finish a lesson to be first.`;
   } catch (error) {
-    console.error("Could not initialize this browser's leaderboard identity:", error);
-    throw new Error("Leaderboard storage is unavailable in this browser.");
+    if (loadId !== leaderboardLoadId) return;
+    console.error("Leaderboard load failed:", error);
+    leaderboardStatus.textContent = error.status === 401
+      ? "Sign in again to see the rankings."
+      : "Rankings are taking a short break. Your XP is safe, so check back soon.";
   }
 }
 
-async function syncLeaderboardEntry() {
-  if (!currentStudent || !supabaseClient) {
-    leaderboardStatus.textContent = "Leaderboard unavailable until Supabase is configured and you sign in.";
-    return;
-  }
-  const id = getLeaderboardClientId();
-  const alias = (entryId) => `Learner-${String(entryId || "").slice(-4).toUpperCase()}`;
-  // Saving your own XP and reading the board are separate steps: a failed save
-  // (for example a database column mismatch) must not hide the rankings.
-  let saveFailed = false;
+document.querySelectorAll(".lb-scope-button").forEach((button) => {
+  button.addEventListener("click", () => {
+    if (button.dataset.scope === leaderboardScope) return;
+    leaderboardScope = button.dataset.scope === "level" ? "level" : "all";
+    try { window.localStorage.setItem(LEADERBOARD_SCOPE_KEY, leaderboardScope); } catch { /* storage optional */ }
+    void syncLeaderboardEntry();
+  });
+});
+
+document.querySelector("#rankNameForm")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const input = document.querySelector("#rankNameInput");
+  const status = document.querySelector("#rankNameStatus");
+  const button = event.currentTarget.querySelector("button");
+  button.disabled = true;
+  status.textContent = "Saving…";
   try {
-    const { error: upsertError } = await supabaseClient.from("student_xp").upsert({
-      id,
-      display_name: alias(id),
-      xp: studyProgress.xp,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: "id" });
-    if (upsertError) throw upsertError;
+    const result = await leaderboardRequest({ action: "leaderboard-name", name: input.value });
+    input.value = result.name || "";
+    status.textContent = result.name ? `Saved. Classmates now see you as “${result.name}”.` : "Saved. Classmates see your first name and initial.";
+    void syncLeaderboardEntry();
   } catch (error) {
-    saveFailed = true;
-    console.error("Leaderboard XP save failed:", error);
+    status.textContent = error.message;
+  } finally {
+    button.disabled = false;
   }
-  try {
-    // select("*") keeps working even if an older table is missing display_name.
-    const { data, error } = await supabaseClient
-      .from("student_xp")
-      .select("*")
-      .order("xp", { ascending: false })
-      .limit(500);
-    if (error) throw error;
-    const sorted = (Array.isArray(data) ? data : [])
-      .filter((entry) => entry && entry.id && Number.isFinite(Number(entry.xp)))
-      .map((entry) => ({ id: entry.id, xp: Number(entry.xp), name: typeof entry.display_name === "string" && entry.display_name ? entry.display_name : alias(entry.id) }))
-      .sort((left, right) => right.xp - left.xp);
-    const ownRank = sorted.findIndex((entry) => entry.id === id) + 1;
-    leaderboardEntries = sorted.slice(0, 10).map((entry, index) => ({
-      name: entry.name,
-      xp: entry.xp,
-      rank: index + 1,
-      isCurrentUser: entry.id === id,
-    }));
-    if (ownRank > 10) {
-      const ownEntry = sorted[ownRank - 1];
-      leaderboardEntries.push({ name: ownEntry.name, xp: ownEntry.xp, rank: ownRank, isCurrentUser: true });
-    }
-    leaderboardStatus.textContent = saveFailed
-      ? "Your latest XP couldn’t be added to the rankings just now. It’s saved on your device and will sync next time."
-      : "Live XP rankings. Names are shown as anonymous aliases.";
-    renderLeaderboard();
-  } catch (error) {
-    console.error("Leaderboard load failed:", error);
-    leaderboardStatus.textContent = "Rankings are taking a short break. Your XP is safe—check back soon.";
-  }
-}
+});
 
 const chatRegistrationInput = document.querySelector("#chatRegistration");
 const loadMyResultsButton = document.querySelector("#loadMyResults");

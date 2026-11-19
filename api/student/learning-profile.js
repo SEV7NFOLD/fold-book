@@ -53,6 +53,76 @@ function cleanText(value, maxLength) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
 }
 
+// A nickname for the Ranks tab: 2 to 20 letters, numbers, spaces, dots, dashes or underscores.
+function cleanLeaderboardName(value) {
+  const name = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+  return /^[\p{L}\p{N} ._-]{2,20}$/u.test(name) ? name : "";
+}
+
+// "ANNIE bassey ETIM" -> "Annie E.": first name plus the last name's initial, so classmates
+// recognise each other without full names on a shared board.
+function rankName(fullName) {
+  // "Etim, Annie Bassey" is surname first: put the part after the comma first.
+  const [before, after] = String(fullName || "").split(/,(.*)/s);
+  const ordered = after && after.trim() ? `${after} ${before}` : String(fullName || "");
+  const parts = ordered.split(/\s+/).filter((part) => /\p{L}/u.test(part));
+  if (!parts.length) return "Learner";
+  const title = (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+  const first = title(parts[0]);
+  return parts.length > 1 ? `${first} ${parts[parts.length - 1].charAt(0).toUpperCase()}.` : first;
+}
+
+async function restRequest(database, table, query, options = {}) {
+  const response = await fetch(`${database.url}/rest/v1/${table}${query}`, {
+    method: options.method || "GET",
+    headers: {
+      apikey: database.key,
+      Authorization: `Bearer ${database.key}`,
+      ...(options.body ? { "Content-Type": "application/json", Prefer: "return=minimal" } : {}),
+    },
+    ...(options.body ? { body: JSON.stringify(options.body) } : {}),
+  });
+  const text = await response.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { /* plain-text provider error */ }
+  if (!response.ok) {
+    const error = new Error(data?.message || `Request failed (${response.status})`);
+    error.status = response.status;
+    throw error;
+  }
+  return data;
+}
+
+// All-time XP ranks from the XP each signed-in student has synced to their account.
+async function leaderboard(database, registration, scope) {
+  const [profiles, accounts] = await Promise.all([
+    restRequest(database, "student_learning_profiles",
+      "?select=reg_number,xp:study_state->accountStats->>xp,nickname:study_state->>leaderboardName&limit=10000"),
+    restRequest(database, "student_accounts", "?select=reg_number,full_name,academic_level&limit=10000"),
+  ]);
+  const accountByReg = new Map((accounts || []).map((account) => [account.reg_number, account]));
+  const ownLevel = accountByReg.get(registration)?.academic_level || "";
+  const rows = (profiles || [])
+    .map((profile) => {
+      const account = accountByReg.get(profile.reg_number);
+      return account && {
+        reg: profile.reg_number,
+        xp: Math.max(0, Math.floor(Number(profile.xp) || 0)),
+        level: account.academic_level,
+        name: cleanLeaderboardName(profile.nickname) || rankName(account.full_name),
+      };
+    })
+    .filter((row) => row && row.xp > 0 && (scope !== "level" || row.level === ownLevel))
+    .sort((left, right) => right.xp - left.xp || left.name.localeCompare(right.name));
+  const entries = rows.map((row, index) => ({
+    rank: index + 1, name: row.name, xp: row.xp, level: row.level, isCurrentUser: row.reg === registration,
+  }));
+  const own = entries.find((entry) => entry.isCurrentUser) || null;
+  const top = entries.slice(0, 10);
+  if (own && own.rank > 10) top.push(own);
+  return { scope: scope === "level" ? "level" : "all", level: ownLevel, total: entries.length, entries: top, you: own };
+}
+
 function cleanModuleAttempts(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return Object.fromEntries(Object.entries(value).slice(0, 12).flatMap(([id, record]) => {
@@ -119,6 +189,7 @@ function cleanStudentState(value) {
       note: cleanText(learnerProfile.note, 600),
       pace: ["gentle", "balanced", "quick"].includes(learnerProfile.pace) ? learnerProfile.pace : "balanced",
     },
+    leaderboardName: cleanLeaderboardName(value.leaderboardName),
     onboardingComplete: value.onboardingComplete === true || Object.keys(studyPaths).length > 0,
     migrationComplete: value.migrationComplete === true,
     accountStatsReady: value.accountStatsReady === true || Boolean(value.accountStats && typeof value.accountStats === "object"),
@@ -239,6 +310,32 @@ module.exports = async function learningProfileHandler(request, response) {
   let payload;
   try { payload = await readBody(request); }
   catch (error) { return sendJson(response, error instanceof RangeError ? 413 : 400, { error: "Enter a valid learning profile." }); }
+  if (payload?.action === "leaderboard") {
+    try {
+      return sendJson(response, 200, await leaderboard(database, session.registration, payload.scope));
+    } catch (error) {
+      console.error("Leaderboard read failed:", error.message);
+      return sendJson(response, 503, { error: "Rankings are taking a short break. Your XP is safe, so check back soon." });
+    }
+  }
+  if (payload?.action === "leaderboard-name") {
+    const raw = typeof payload.name === "string" ? payload.name.trim() : "";
+    const nickname = cleanLeaderboardName(raw);
+    if (raw && !nickname) return sendJson(response, 400, { error: "Use 2 to 20 letters, numbers or spaces." });
+    try {
+      const existing = (await databaseRequest(database, `?select=study_state&reg_number=eq.${regNumber}&limit=1`))?.[0];
+      if (!existing) return sendJson(response, 409, { error: "Finish one lesson first, then set your name on Ranks." });
+      const state = existing.study_state && typeof existing.study_state === "object" ? existing.study_state : {};
+      await restRequest(database, "student_learning_profiles", `?reg_number=eq.${regNumber}`, {
+        method: "PATCH",
+        body: { study_state: { ...state, leaderboardName: nickname }, updated_at: new Date().toISOString() },
+      });
+      return sendJson(response, 200, { ok: true, name: nickname });
+    } catch (error) {
+      console.error("Leaderboard name save failed:", error.message);
+      return sendJson(response, 503, { error: "Couldn’t save your name just now. Try again." });
+    }
+  }
   if (["list", "join", "state", "answer"].includes(payload?.action)) {
     request.body = payload;
     return require("../../lib/api-handlers/student/quiz.js")(request, response);
@@ -319,3 +416,6 @@ module.exports = async function learningProfileHandler(request, response) {
     });
   }
 };
+
+module.exports.rankName = rankName;
+module.exports.cleanLeaderboardName = cleanLeaderboardName;
