@@ -497,9 +497,28 @@
       </div>
     </section>
 
+    <section id="hostSignIn" class="auth-view" hidden>
+      <div class="auth-screen-card">
+        <span class="section-kicker">LECTURERS & CLASS REPS</span>
+        <h1>FoldBook Host Studio</h1>
+        <p>Create quizzes for your class, let Dr. Eco draft questions from your notes, and see which questions your students found hardest.</p>
+        <form id="hostEmailForm" novalidate>
+          <div class="form-group"><label for="hostEmail">Your email</label><input id="hostEmail" type="email" autocomplete="email" inputmode="email" required></div>
+          <button type="submit" class="results-submit">Send me a sign-in code</button>
+        </form>
+        <form id="hostCodeForm" novalidate hidden>
+          <div class="form-group"><label for="hostCode">6-digit code from your email</label><input id="hostCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required></div>
+          <button type="submit" class="results-submit">Sign in</button>
+          <button type="button" class="card-secondary-button" id="hostChangeEmail">Use a different email</button>
+        </form>
+        <p id="hostSignInStatus" class="auth-status" role="status" aria-live="polite"></p>
+        <p class="text-muted host-signin-note">Not a host yet? Ask the FoldBook team to add your email.</p>
+      </div>
+    </section>
+
     <section id="adminDashboard" class="admin-portal hide sec" hidden>
       <header class="admin-portal-header">
-        <div><span class="section-kicker">AUTHORIZED PERSONNEL</span><h1>SevenFold Admin Portal</h1></div>
+        <div><span class="section-kicker" id="adminPortalKicker">AUTHORIZED PERSONNEL</span><h1 id="adminPortalTitle">SevenFold Admin Portal</h1></div>
         <span class="admin-authorized-badge">✓ Authorized</span>
         <button type="button" class="card-secondary-button" id="adminLogout">Sign Out</button>
       </header>
@@ -513,6 +532,7 @@
           <button type="button" class="admin-nav-button" data-admin-view="mobile-reminders">🔔 Mobile Reminders</button>
           <button type="button" class="admin-nav-button" data-admin-view="students">👥 Student Records</button>
           <button type="button" class="admin-nav-button" data-admin-view="quizzes">🎓 Quiz Studio</button>
+          <button type="button" class="admin-nav-button" data-admin-view="hosts">🧑‍🏫 Quiz Hosts</button>
         </nav>
         <div class="admin-portal-content">
           <section class="admin-view-panel" id="adminView-broadsheets">
@@ -609,8 +629,11 @@
               <label>Number of questions<input id="quizQuestionCount" type="number" min="3" max="20" value="10"></label>
               <label>Time per question<select id="quizQuestionSeconds"><option value="10">10 seconds</option><option value="20" selected>20 seconds</option><option value="30">30 seconds</option><option value="45">45 seconds</option><option value="60">60 seconds</option><option value="90">90 seconds</option></select></label>
             </div>
+            <p id="quizScopeNote" class="quiz-scope-note" hidden></p>
             <div class="admin-material-fields">
-              <button id="generateQuizQuestions" class="card-secondary-button" type="button">✨ Draft with Dr. Eco</button>
+              <button id="generateQuizQuestions" class="card-secondary-button" type="button">✨ Draft from course notes</button>
+              <button id="draftQuizFromFile" class="card-secondary-button" type="button">📎 Draft from my file</button>
+              <input id="quizSourceFile" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp" hidden>
               <button id="createQuiz" class="results-submit" type="button">Preview quiz</button>
             </div>
             <p id="quizEditingBanner" class="quiz-editing-banner" hidden><span></span> <button id="quizCancelEdit" class="card-secondary-button" type="button">Cancel edit</button></p>
@@ -634,6 +657,21 @@
             </section>
             <p id="quizAdminStatus" class="admin-material-status" role="status" aria-live="polite"></p>
             <h3>Your quizzes</h3><div id="quizAdminList"></div>
+          </section>
+          <section class="admin-view-panel" id="adminView-hosts" hidden>
+            <h2>🧑‍🏫 Quiz Hosts</h2>
+            <p>Lecturers and class reps who can create and run their own quizzes. They sign in at <strong>/#host</strong> with a code sent to their email. Lecturers host for the courses you list (leave empty for any course). Class reps host for their own level.</p>
+            <p id="hostsEmailWarning" class="admin-material-status" hidden>Email isn’t set up yet, so hosts can’t get sign-in codes. Add SMTP_USER and SMTP_PASS in Vercel.</p>
+            <form id="hostAddForm" class="admin-material-fields">
+              <label>Name<input id="hostAddName" maxlength="80" placeholder="e.g. Dr. Ima Udo" required></label>
+              <label>Email<input id="hostAddEmail" type="email" placeholder="name@example.com" required></label>
+              <label>Role<select id="hostAddRole"><option value="lecturer">Lecturer</option><option value="rep">Class rep</option></select></label>
+              <label id="hostAddCoursesLabel">Courses<input id="hostAddCourses" placeholder="e.g. ECO 210, ECO 211"></label>
+              <label id="hostAddLevelLabel" hidden>Level<select id="hostAddLevel"><option>100L</option><option>200L</option><option>300L</option><option>400L</option></select></label>
+              <button type="submit" class="results-submit">Add host and email invite</button>
+            </form>
+            <p id="hostsStatus" class="admin-material-status" role="status" aria-live="polite"></p>
+            <div id="hostsList"></div>
           </section>
           <section class="admin-view-panel" id="adminView-students" hidden>
             <h2>Student Records</h2>

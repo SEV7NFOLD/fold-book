@@ -130,7 +130,8 @@
     return data;
   }
   const studentApi = (action, data = {}) => post("/api/student/learning-profile", { action, ...data });
-  const adminApi = (action, data = {}) => post("/api/admin?route=quizzes", { action, ...data });
+  // Admins use the admin quiz route; lecturers and reps signed in as hosts use their own.
+  const adminApi = (action, data = {}) => post(`/api/admin?route=${window.FoldBookQuizRoute || "quizzes"}`, { action, ...data });
 
   // ---------- Overlays ----------
   function showOverlay(overlay) {
@@ -1075,6 +1076,7 @@
           buttons.push(h("button", { type: "button", class: "card-secondary-button", text: "Preview questions", onclick: () => openPreview(quiz, [{ label: "Close", run: async () => closeHost() }]) }));
         }
         if (quiz.status === "finished") buttons.push(h("button", { type: "button", class: "results-submit", text: "View results", onclick: () => openHost(quiz.id) }));
+        if (quiz.status !== "draft") buttons.push(h("button", { type: "button", class: "card-secondary-button", text: "📊 Class report", onclick: () => openReport(quiz) }));
         if (quiz.status === "draft" || quiz.status === "finished") {
           buttons.push(h("button", { type: "button", class: "card-secondary-button lq-delete", text: "Delete", onclick: async () => {
             if (!window.confirm(`Delete “${quiz.title}”? This removes its scores too.`)) return;
@@ -1089,6 +1091,48 @@
           h("div", { class: "quiz-admin-card-actions" }, buttons));
       }));
     } catch (error) { studioStatus(error.message); }
+  }
+
+  // ----- Class report: what a lecturer wants after the quiz -----
+  function reportSummaryText(report) {
+    const lines = [`${report.quiz.title} (${report.quiz.course_code})`, `${report.participants} students took part. Average score: ${report.averagePercent ?? "–"}%.`];
+    if (report.hardest.length) {
+      lines.push("", "Hardest questions:");
+      for (const row of report.hardest) lines.push(`Q${row.index + 1}: ${row.percentCorrect}% correct. ${row.prompt}${row.commonWrongOption ? ` (most chose “${row.commonWrongOption}”)` : ""}`);
+    }
+    lines.push("", "Made with FoldBook");
+    return lines.join("\n");
+  }
+
+  async function openReport(quiz) {
+    stopHostTimers();
+    setHostHeader(quiz.title, "Class report");
+    hostStage().replaceChildren(centerCard(h("p", { class: "lq-muted", text: "Loading the report…" })));
+    showOverlay($("#quizHostOverlay"));
+    try {
+      const report = await adminApi("report", { id: quiz.id });
+      const rows = [...report.questions].sort((a, b) => (a.percentCorrect ?? 101) - (b.percentCorrect ?? 101));
+      const copy = h("button", { type: "button", class: "results-submit", text: "Copy summary for WhatsApp", onclick: async (event) => {
+        try { await navigator.clipboard.writeText(reportSummaryText(report)); event.currentTarget.textContent = "Copied ✓"; }
+        catch { event.currentTarget.textContent = "Couldn’t copy. Select the text instead."; }
+      } });
+      hostStage().replaceChildren(h("div", { class: "lq-report" },
+        h("div", { class: "lq-report-stats" },
+          h("div", null, h("b", { text: String(report.participants) }), h("span", { text: "students took part" })),
+          h("div", null, h("b", { text: report.averagePercent === null ? "–" : `${report.averagePercent}%` }), h("span", { text: "average score" })),
+          h("div", null, h("b", { text: String(report.totalQuestions) }), h("span", { text: "questions" }))),
+        h("h3", { text: report.participants ? "Questions, hardest first" : "No answers yet" }),
+        h("ol", { class: "lq-report-list" }, rows.map((row) => h("li", { class: row.percentCorrect !== null && row.percentCorrect < 50 ? "is-hard" : "" },
+          h("div", { class: "lq-report-row-head" },
+            h("strong", { text: `Q${row.index + 1}` }),
+            h("span", { class: "lq-report-pct", text: row.percentCorrect === null ? "no answers" : `${row.percentCorrect}% correct` })),
+          h("p", { text: row.prompt }),
+          h("p", { class: "lq-muted", text: `Answer: ${row.correctOption}${row.commonWrongOption ? ` · Most common wrong answer: ${row.commonWrongOption}` : ""}` })))),
+        report.top.length ? h("p", { class: "lq-muted", text: `Top scorers: ${report.top.map((player) => player.name).join(", ")}` }) : null,
+        h("div", { class: "lq-report-actions" }, copy, h("button", { type: "button", class: "card-secondary-button", text: "Close", onclick: () => closeHost() }))));
+    } catch (error) {
+      hostStage().replaceChildren(centerCard(h("p", { class: "lq-error", text: error.message })));
+    }
   }
 
   // ----- Studio form: the question editor in app.js owns drafting and editing; this adds preview → create -----
