@@ -3,6 +3,11 @@
 const GEMINI_MODEL = "gemini-3.5-flash-lite";
 const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 const MAX_REQUEST_BYTES = 24 * 1024;
+// A chat message may carry one photo for Dr. Eco to read. The photo is limited separately;
+// the text of the request keeps the 24 KB limit.
+const MAX_IMAGE_BASE64 = 1_400_000;
+const MAX_BODY_BYTES = MAX_REQUEST_BYTES + MAX_IMAGE_BASE64 + 4096;
+const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const REQUEST_TIMEOUT_MS = 30000;
 
 function sendJson(response, status, body) {
@@ -19,7 +24,11 @@ function sendJson(response, status, body) {
 async function readBody(request) {
   if (request.body !== undefined) {
     if (typeof request.body === "string") {
-      if (Buffer.byteLength(request.body) > MAX_REQUEST_BYTES) throw new RangeError("Request body is too large.");
+      const size = Buffer.byteLength(request.body);
+      // Only a request carrying a photo may go past the 24 KB text limit.
+      if (size > MAX_BODY_BYTES || (size > MAX_REQUEST_BYTES && !request.body.includes('"inlineData"'))) {
+        throw new RangeError("Request body is too large.");
+      }
       return JSON.parse(request.body);
     }
     return request.body;
@@ -29,10 +38,12 @@ async function readBody(request) {
   let byteLength = 0;
   for await (const chunk of request) {
     byteLength += chunk.length;
-    if (byteLength > MAX_REQUEST_BYTES) throw new RangeError("Request body is too large.");
+    if (byteLength > MAX_BODY_BYTES) throw new RangeError("Request body is too large.");
     chunks.push(chunk);
   }
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  const text = Buffer.concat(chunks).toString("utf8");
+  if (byteLength > MAX_REQUEST_BYTES && !text.includes('"inlineData"')) throw new RangeError("Request body is too large.");
+  return JSON.parse(text);
 }
 
 // Natural-sounding "Listen" playback: Gemini text-to-speech with the same voices as
@@ -150,9 +161,23 @@ function validatePayload(payload) {
   if (!Array.isArray(instruction) || instruction.length !== 1 || !Array.isArray(contents) || contents.length !== 1) return false;
   if (!instruction.every((part) => typeof part?.text === "string" && part.text.length <= 4000)) return false;
   const userContent = contents[0];
-  if (userContent?.role !== "user" || !Array.isArray(userContent.parts) || userContent.parts.length !== 1) return false;
+  if (userContent?.role !== "user" || !Array.isArray(userContent.parts) || ![1, 2].includes(userContent.parts.length)) return false;
   const question = userContent.parts[0]?.text;
-  return typeof question === "string" && question.length > 0 && question.length <= 20000;
+  if (typeof question !== "string" || question.length === 0 || question.length > 20000) return false;
+  if (userContent.parts.length === 2) {
+    const image = userContent.parts[1]?.inlineData;
+    if (!image || Object.keys(userContent.parts[1]).length !== 1) return false;
+    if (!IMAGE_TYPES.has(image.mimeType) || typeof image.data !== "string") return false;
+    if (image.data.length > MAX_IMAGE_BASE64 || !/^[A-Za-z0-9+/=]+$/.test(image.data)) return false;
+  }
+  return true;
+}
+
+// Size of the request without the photo, which has its own limit.
+function textBytes(payload) {
+  const parts = payload?.contents?.[0]?.parts;
+  if (!Array.isArray(parts) || parts.length < 2 || !parts[1]?.inlineData) return Buffer.byteLength(JSON.stringify(payload));
+  return Buffer.byteLength(JSON.stringify({ ...payload, contents: [{ ...payload.contents[0], parts: [parts[0]] }] }));
 }
 
 module.exports = async function drEcoHandler(request, response) {
@@ -190,7 +215,7 @@ module.exports = async function drEcoHandler(request, response) {
     sendJson(response, status, { error: error instanceof RangeError ? error.message : "Request body must be valid JSON." });
     return;
   }
-  if (Buffer.byteLength(JSON.stringify(payload)) > MAX_REQUEST_BYTES) {
+  if (textBytes(payload) > MAX_REQUEST_BYTES) {
     sendJson(response, 413, { error: "Request body is too large." });
     return;
   }

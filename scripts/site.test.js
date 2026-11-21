@@ -1496,7 +1496,7 @@ test("admin passcode sessions protect server-side course material indexing", asy
     const login = await invoke(adminSessionHandler, makeRequest({ passcode: "test-admin-passcode" }));
     assert.equal(login.status, 200);
     assert.match(login.headers["Set-Cookie"], /HttpOnly/);
-    assert.match(login.headers["Set-Cookie"], /SameSite=Lax/);
+    assert.match(login.headers["Set-Cookie"], /SameSite=Strict/);
     const cookie = login.headers["Set-Cookie"].split(";")[0];
 
     const unauthenticated = await invoke(adminCourseMaterialsHandler, makeRequest({
