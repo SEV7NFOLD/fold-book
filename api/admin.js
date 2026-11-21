@@ -4,6 +4,11 @@ const routes = {
   broadsheets: require("../lib/api-handlers/admin/broadsheets.js"),
   "course-catalog": require("../lib/api-handlers/admin/course-catalog.js"),
   "course-materials": require("../lib/api-handlers/admin/course-materials.js"),
+  // Quiz hosts (lecturers and class reps). They sign in with an email code, not the admin
+  // passcode, and these routes check the host session themselves.
+  "host-auth": require("../lib/api-handlers/host/auth.js"),
+  "host-quizzes": require("../lib/api-handlers/host/quizzes.js"),
+  hosts: require("../lib/api-handlers/admin/hosts.js"),
   materials: require("../lib/api-handlers/admin/materials.js"),
   "material-requests": require("../lib/api-handlers/admin/material-requests.js"),
   quizzes: require("../lib/api-handlers/admin/quizzes.js"),

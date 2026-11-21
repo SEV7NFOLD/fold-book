@@ -2511,3 +2511,29 @@ body.foldbook-notes-open { overflow: hidden; }
 .chat-attachment-save, .chat-attachment-remove { flex: none; min-width: 44px; min-height: 40px; padding: 0 12px; border: 1px solid var(--fb-color-border); border-radius: 10px; background: transparent; color: var(--fb-color-text); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
 .chat-attachment-remove { padding: 0; font-size: 20px; }
 .chat-message-attachment { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 700; opacity: .85; }
+
+/* Quiz hosts: lecturers and class reps get only the Quiz Studio */
+body.host-mode .admin-nav-button:not([data-admin-view="quizzes"]),
+body.host-mode .admin-authorized-badge { display: none; }
+body.host-mode-rep label:has(#quizTarget),
+body.host-mode-rep label:has(#quizLevel),
+body.host-mode-rep label:has(#quizRegistrations) { display: none; }
+.quiz-scope-note { margin: 0 0 14px; padding: 10px 14px; border-left: 3px solid var(--fb-color-lime); border-radius: 8px; background: var(--fb-color-surface); color: var(--fb-color-text); font-size: 15px; }
+.host-signin-note { margin-top: 16px; font-size: 14px; }
+#hostCodeForm .card-secondary-button { margin-top: 10px; width: 100%; }
+
+/* Class report after a quiz */
+.lq-report { width: min(100%, 760px); margin: 0 auto; padding: 8px 4px 24px; display: grid; gap: 16px; }
+.lq-report-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.lq-report-stats div { display: grid; gap: 4px; padding: 14px; border: 1px solid var(--fb-color-border); border-radius: 14px; text-align: center; }
+.lq-report-stats b { font-size: 30px; line-height: 1; }
+.lq-report-stats span { color: var(--fb-color-muted); font-size: 13px; }
+.lq-report h3 { margin: 4px 0 0; font-size: 18px; }
+.lq-report-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.lq-report-list li { padding: 12px 14px; border: 1px solid var(--fb-color-border); border-radius: 12px; }
+.lq-report-list li.is-hard { border-color: #c2413b; }
+.lq-report-list p { margin: 6px 0 0; }
+.lq-report-row-head { display: flex; justify-content: space-between; gap: 12px; }
+.lq-report-pct { font-weight: 700; }
+.lq-report-list li.is-hard .lq-report-pct { color: #ff8a80; }
+.lq-report-actions { display: flex; flex-wrap: wrap; gap: 10px; }
