@@ -2500,3 +2500,14 @@ body.foldbook-notes-open { overflow: hidden; }
 .rank-name-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
 .rank-name-row input { width: 100%; min-width: 0; box-sizing: border-box; min-height: 44px; padding: 0 12px; border: 1px solid var(--fb-color-border); border-radius: 12px; background: var(--fb-color-surface); color: var(--fb-color-text); font: inherit; font-size: 16px; }
 .rank-name-row button { flex: none; width: auto; min-height: 44px; margin: 0; padding: 0 18px; }
+
+/* Chat attachment: a file that goes to Dr. Eco with the next message */
+.chat-attachment-chip { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; padding: 10px 10px 10px 14px; border: 1px solid color-mix(in srgb, var(--fb-color-lime) 45%, var(--fb-color-border)); border-radius: 14px; background: var(--fb-color-surface); }
+.chat-attachment-chip[hidden] { display: none; }
+.chat-attachment-chip.is-error { border-color: #c2413b; }
+.chat-attachment-text { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.chat-attachment-name { overflow: hidden; color: var(--fb-color-text); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.chat-attachment-state { color: var(--fb-color-muted); font-size: 13px; line-height: 1.35; }
+.chat-attachment-save, .chat-attachment-remove { flex: none; min-width: 44px; min-height: 40px; padding: 0 12px; border: 1px solid var(--fb-color-border); border-radius: 10px; background: transparent; color: var(--fb-color-text); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.chat-attachment-remove { padding: 0; font-size: 20px; }
+.chat-message-attachment { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 700; opacity: .85; }
