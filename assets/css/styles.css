@@ -2537,3 +2537,47 @@ body.host-mode-rep label:has(#quizRegistrations) { display: none; }
 .lq-report-pct { font-weight: 700; }
 .lq-report-list li.is-hard .lq-report-pct { color: #ff8a80; }
 .lq-report-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+
+/* Quiz Studio as three steps: what it covers, check the questions, how students take it */
+.quiz-studio { display: grid; gap: 18px; }
+.quiz-studio .qs-intro h2 { margin: 0 0 6px; }
+.quiz-studio .qs-intro p { margin: 0; max-width: 62ch; color: var(--fb-color-muted, var(--muted)); font-size: 15px; line-height: 1.55; }
+.qs-step { display: grid; gap: 14px; padding: 18px; border: 1px solid var(--fb-color-border, var(--border-light)); border-radius: 16px; background: var(--fb-color-surface, var(--bg)); }
+.qs-step h3, .qs-step .quiz-editor-bar h3 { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 18px; }
+.qs-num { display: inline-grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--fb-color-lime, #d9f07c); color: #111; font-size: 14px; font-weight: 800; }
+.qs-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.qs-grid label, .qs-instructions { display: grid; gap: 7px; color: var(--fb-color-text, var(--text)); font-size: 14px; font-weight: 600; }
+.qs-grid .qs-wide { grid-column: 1 / -1; }
+.qs-grid input, .qs-grid select, .qs-grid textarea, .qs-instructions textarea {
+  min-height: 46px; padding: 10px 12px; border: 1px solid var(--fb-color-border, var(--border-light)); border-radius: 10px;
+  background: var(--fb-color-bg, var(--bg)); color: var(--fb-color-text, var(--text)); font: inherit; font-size: 16px; font-weight: 400; }
+.qs-instructions textarea { min-height: 90px; resize: vertical; line-height: 1.45; }
+.qs-source { position: relative; }
+.qs-upload { display: flex; align-items: center; gap: 14px; width: 100%; padding: 16px; border: 1.5px dashed var(--fb-color-border, var(--border-light)); border-radius: 14px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.qs-upload:hover, .qs-upload:focus-visible, .qs-upload.has-file { border-color: var(--fb-color-lime, #d9f07c); }
+.qs-upload.has-file { border-style: solid; padding-right: 60px; }
+.qs-upload-icon { font-size: 26px; }
+.qs-upload strong { display: block; font-size: 15px; }
+.qs-upload small { display: block; margin-top: 3px; color: var(--fb-color-muted, var(--muted)); font-size: 13px; line-height: 1.4; }
+.qs-clear { position: absolute; top: 50%; right: 12px; width: 40px; height: 40px; transform: translateY(-50%); border: 1px solid var(--fb-color-border, var(--border-light)); border-radius: 10px; background: transparent; color: inherit; font-size: 20px; cursor: pointer; }
+.qs-primary { justify-self: start; min-height: 48px; padding: 0 22px; font-size: 16px; }
+.qs-or { margin: -4px 0 0; color: var(--fb-color-muted, var(--muted)); font-size: 14px; }
+.qs-link { padding: 0; border: 0; background: none; color: var(--fb-color-lime, #d9f07c); font: inherit; text-decoration: underline; cursor: pointer; }
+.qs-modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.qs-mode { display: grid; gap: 6px; padding: 16px; border: 1.5px solid var(--fb-color-border, var(--border-light)); border-radius: 14px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.qs-mode strong { font-size: 16px; }
+.qs-mode small { color: var(--fb-color-muted, var(--muted)); font-size: 13px; line-height: 1.45; }
+.qs-mode[aria-checked="true"] { border-color: var(--fb-color-lime, #d9f07c); background: color-mix(in srgb, var(--fb-color-lime, #d9f07c) 10%, transparent); }
+.qs-mode:disabled { opacity: .55; cursor: not-allowed; }
+.qs-status:empty { display: none; }
+.qs-list-heading { margin: 8px 0 0; }
+.quiz-studio .quiz-editor { margin: 0; border: 0; padding: 0; background: none; }
+body.host-mode label:has(#quizRegistrations) { display: none; }
+@media (max-width: 640px) {
+  .qs-step { padding: 14px; }
+  .qs-primary { justify-self: stretch; width: 100%; }
+}
+/* Hosts only have the studio, so no side menu: the studio gets the full width. */
+body.host-mode .admin-portal-nav { display: none; }
+body.host-mode .admin-portal-layout { grid-template-columns: minmax(0, 1fr); }
+body.host-mode .admin-portal-content { max-width: 900px; width: 100%; margin: 0 auto; }

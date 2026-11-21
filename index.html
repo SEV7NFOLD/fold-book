@@ -616,30 +616,39 @@
               <div id="materialRequestsList" class="student-material-admin-list"></div>
             </section>
           </section>
-          <section class="admin-view-panel" id="adminView-quizzes" hidden>
-            <h2>🎓 Dr. Eco Quiz Studio</h2>
-            <p>Draft questions with Dr. Eco or write your own, then preview the quiz exactly as students will see it before creating it. Live contests open a lobby you run question by question, with a timer, answer reveal and leaderboard. Open quizzes let students work at their own pace.</p>
-            <div class="admin-material-fields">
-              <label>Quiz title<input id="quizTitle" maxlength="120" placeholder="e.g. Inflation challenge"></label>
-              <label>Course<select id="quizCourse"></select></label>
-              <label>Who can join<select id="quizTarget"><option value="all">All students</option><option value="level">One level</option><option value="students">Selected students</option></select></label>
-              <label>Level<select id="quizLevel"><option>100L</option><option>200L</option><option>300L</option><option>400L</option></select></label>
-              <label>Registration numbers<textarea id="quizRegistrations" rows="2" placeholder="Only used for selected students"></textarea></label>
-              <label>Quiz mode<select id="quizMode"><option value="contest">Live contest with lobby</option><option value="open">Open quiz (self-paced)</option></select></label>
-              <label>Number of questions<input id="quizQuestionCount" type="number" min="3" max="20" value="10"></label>
-              <label>Time per question<select id="quizQuestionSeconds"><option value="10">10 seconds</option><option value="20" selected>20 seconds</option><option value="30">30 seconds</option><option value="45">45 seconds</option><option value="60">60 seconds</option><option value="90">90 seconds</option></select></label>
+          <section class="admin-view-panel quiz-studio" id="adminView-quizzes" hidden>
+            <div class="qs-intro">
+              <h2 id="quizStudioHeading">🎓 Quiz Studio</h2>
+              <p id="quizStudioIntro">Give Dr. Eco your material and tell him what you want. Check his questions, then run the quiz live in class or let students take it on their own.</p>
             </div>
             <p id="quizScopeNote" class="quiz-scope-note" hidden></p>
-            <div class="admin-material-fields">
-              <button id="generateQuizQuestions" class="card-secondary-button" type="button">✨ Draft from course notes</button>
-              <button id="draftQuizFromFile" class="card-secondary-button" type="button">📎 Draft from my file</button>
-              <input id="quizSourceFile" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp" hidden>
-              <button id="createQuiz" class="results-submit" type="button">Preview quiz</button>
-            </div>
+
+            <section class="qs-step" aria-labelledby="qsStep1">
+              <h3 id="qsStep1"><span class="qs-num">1</span> What should the quiz cover?</h3>
+              <div class="qs-grid">
+                <label>Course<select id="quizCourse"></select></label>
+                <label>Number of questions<input id="quizQuestionCount" type="number" min="3" max="20" value="10" inputmode="numeric"></label>
+              </div>
+              <div class="qs-source">
+                <button id="draftQuizFromFile" class="qs-upload" type="button">
+                  <span class="qs-upload-icon" aria-hidden="true">📎</span>
+                  <span><strong id="quizSourceLabel">Upload your material (optional)</strong><small id="quizSourceHint">A PDF, or a photo of notes, slides or past questions. Without a file, Dr. Eco uses the course notes in FoldBook.</small></span>
+                </button>
+                <button id="quizSourceClear" class="qs-clear" type="button" hidden aria-label="Remove the file">×</button>
+                <input id="quizSourceFile" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp" hidden>
+              </div>
+              <label class="qs-instructions">Tell Dr. Eco what you want
+                <textarea id="quizInstructions" rows="3" maxlength="600" placeholder="e.g. 10 questions on elasticity of supply only, mostly calculations, at 200L level"></textarea>
+              </label>
+              <button id="generateQuizQuestions" class="results-submit qs-primary" type="button">✨ Create questions with Dr. Eco</button>
+              <p class="qs-or">or <button id="quizWriteOwn" class="qs-link" type="button">write your own questions</button></p>
+            </section>
+
+            <section class="qs-step" aria-labelledby="quizEditorHeading">
             <p id="quizEditingBanner" class="quiz-editing-banner" hidden><span></span> <button id="quizCancelEdit" class="card-secondary-button" type="button">Cancel edit</button></p>
             <section class="quiz-editor" aria-labelledby="quizEditorHeading">
               <div class="quiz-editor-bar">
-                <h3 id="quizEditorHeading">Questions</h3>
+                <h3 id="quizEditorHeading"><span class="qs-num">2</span> Check the questions</h3>
                 <div class="quiz-editor-tabs" role="tablist" aria-label="Question view">
                   <button id="quizTabEdit" type="button" role="tab" aria-selected="true" aria-controls="quizEditorList">Edit</button>
                   <button id="quizTabPreview" type="button" role="tab" aria-selected="false" aria-controls="quizPreview">Preview as student</button>
@@ -655,8 +664,26 @@
                 <button id="quizApplyJson" class="card-secondary-button" type="button">Apply JSON</button>
               </details>
             </section>
-            <p id="quizAdminStatus" class="admin-material-status" role="status" aria-live="polite"></p>
-            <h3>Your quizzes</h3><div id="quizAdminList"></div>
+            </section>
+
+            <section class="qs-step" aria-labelledby="qsStep3">
+              <h3 id="qsStep3"><span class="qs-num">3</span> How will students take it?</h3>
+              <div class="qs-modes" role="radiogroup" aria-label="Quiz mode">
+                <button type="button" class="qs-mode" role="radio" aria-checked="true" data-mode="contest"><strong>📽️ Live in class</strong><small>Show the code on the projector. Everyone answers together, with a timer and a leaderboard.</small></button>
+                <button type="button" class="qs-mode" role="radio" aria-checked="false" data-mode="open"><strong>📱 On their own</strong><small>Students join with the code any time and work through it at their own pace.</small></button>
+              </div>
+              <div class="qs-grid">
+                <label>Quiz title<input id="quizTitle" maxlength="120" placeholder="e.g. Elasticity of supply check"></label>
+                <label>Time per question<select id="quizQuestionSeconds"><option value="10">10 seconds</option><option value="20" selected>20 seconds</option><option value="30">30 seconds</option><option value="45">45 seconds</option><option value="60">60 seconds</option><option value="90">90 seconds</option></select></label>
+                <label class="qs-admin-only">Who can join<select id="quizTarget"><option value="all">All students</option><option value="level">One level</option><option value="students">Selected students</option></select></label>
+                <label class="qs-admin-only">Level<select id="quizLevel"><option>100L</option><option>200L</option><option>300L</option><option>400L</option></select></label>
+                <label class="qs-admin-only qs-wide">Registration numbers<textarea id="quizRegistrations" rows="2" placeholder="Only used for selected students"></textarea></label>
+              </div>
+              <select id="quizMode" hidden><option value="contest">Live contest with lobby</option><option value="open">Open quiz (self-paced)</option></select>
+              <button id="createQuiz" class="results-submit qs-primary" type="button">Preview and start</button>
+            </section>
+            <p id="quizAdminStatus" class="admin-material-status qs-status" role="status" aria-live="polite"></p>
+            <h3 class="qs-list-heading">Your quizzes</h3><div id="quizAdminList"></div>
           </section>
           <section class="admin-view-panel" id="adminView-hosts" hidden>
             <h2>🧑‍🏫 Quiz Hosts</h2>
