@@ -1,26 +1,568 @@
 "use strict";
 
-const http = require("node:http");
+const {
+  default: makeWASocket,
+  useMultiFileAuthState,
+  DisconnectReason,
+  fetchLatestBaileysVersion,
+} = require("@whiskeysockets/baileys");
+const { createClient } = require("@supabase/supabase-js");
+const cron = require("node-cron");
+const qrcode = require("qrcode-terminal");
+const fs = require("node:fs");
+const path = require("node:path");
 
-const PORT = Number(process.env.PORT || 10000);
-if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
-  throw new Error("PORT must be a valid TCP port between 1 and 65535.");
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const FOLDBOOK_URL = process.env.FOLDBOOK_URL || "https://foldbook-beta.vercel.app";
+function reminderStudyUrl(courseCode, session) {
+  const character = /^ECO\b/i.test(String(courseCode || "")) ? "eco" : "foldo";
+  const moment = session === "morning" || session === "evening" ? session : "custom";
+  return `${FOLDBOOK_URL.replace(/\/+$/, "")}/?from=reminder&moment=${moment}&character=${character}`;
+}
+const AUTH_DIRECTORY = path.resolve(process.env.WHATSAPP_AUTH_DIRECTORY || "auth_info_baileys");
+const BOT_PHONE_NUMBER = process.env.BOT_PHONE_NUMBER || "";
+const DEFAULT_NUDGE_INTERVAL_HOURS = 10;
+const PAGE_SIZE = 500;
+const SEND_DELAY_MS = 3000;
+const TEST_QUEUE_POLL_MS = 15000;
+const TEST_REMINDER_ARTWORK = ["target.png", "trophy.png"].map((file) => ({
+  file,
+  image: fs.readFileSync(path.join(__dirname, "..", "assets", "brand", file)),
+}));
+const REMINDER_ANIMATIONS = {
+  morning: ["morning-wave.mp4", "study-quest.mp4"],
+  evening: ["evening-winddown.mp4"],
+};
+const REMINDER_ANIMATION_MEDIA = Object.fromEntries(Object.entries(REMINDER_ANIMATIONS).map(([session, files]) => [
+  session,
+  files.flatMap((file) => {
+    const mediaPath = path.join(__dirname, "..", "assets", "whatsapp", file);
+    return fs.existsSync(mediaPath) ? [{ video: fs.readFileSync(mediaPath) }] : [];
+  }),
+]));
+const supabase = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
+  ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
+  : null;
+
+let socket;
+let connected = false;
+let reconnectTimer;
+let reconnectDelayMs = 5000;
+let dispatchInProgress = false;
+let testDispatchInProgress = false;
+let testQueueUnavailableWarned = false;
+let shuttingDown = false;
+const completedScheduleRuns = new Set();
+let reminderSettings = {
+  enabled: true,
+  morning_time: "07:00",
+  evening_time: "19:00",
+  min_interval_hours: DEFAULT_NUDGE_INTERVAL_HOURS,
+  audience: "all",
+  morning_message: "☀️ Good morning, {{name}}! {{streak}}. Your next mini-quest: {{activity}} on {{course}} — {{focus}}. One small step toward {{goal}}.\n\nOpen FoldBook → {{link}}",
+  evening_message: "🌙 Evening checkpoint, {{name}}! {{streak}}. Take one small step: {{activity}} on {{focus}} for {{course}}. You’re moving toward {{goal}}.\n\nOpen FoldBook → {{link}}",
+};
+
+function validateConfiguration() {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in the worker environment.");
+  }
+  try {
+    new URL(FOLDBOOK_URL);
+  } catch {
+    throw new Error("FOLDBOOK_URL must be an absolute URL.");
+  }
+  if (BOT_PHONE_NUMBER && !/^234[789]\d{9}$/.test(BOT_PHONE_NUMBER.replace(/\D/g, ""))) {
+    throw new Error("BOT_PHONE_NUMBER must be a Nigerian WhatsApp number in international format, e.g. 2348012345678.");
+  }
 }
 
-const healthServer = http.createServer((_request, response) => {
-  response.writeHead(200, {
-    "Cache-Control": "no-store",
-    "Content-Type": "text/plain; charset=utf-8",
-  });
-  response.end("FoldBook WhatsApp Worker Active\n");
-});
+function getMessageText(message) {
+  const content = message.message;
+  return content?.conversation
+    || content?.extendedTextMessage?.text
+    || content?.imageMessage?.caption
+    || content?.videoMessage?.caption
+    || "";
+}
 
-healthServer.on("error", (error) => {
-  console.error("HTTP health-check server failed:", error.message);
-  process.exitCode = 1;
-});
-healthServer.listen(PORT, "0.0.0.0", () => {
-  console.log(`HTTP health-check server listening on port ${PORT}`);
-});
+async function handleIncomingMessage(message) {
+  const remoteJid = message.key?.remoteJid || "";
+  if (message.key?.fromMe || !remoteJid.endsWith("@s.whatsapp.net")) return;
 
-require("./worker/worker.js");
+  const text = getMessageText(message).trim();
+  const phoneNumber = remoteJid.slice(0, -"@s.whatsapp.net".length);
+  if (/^(start|subscribe)$/i.test(text)) {
+    const { data, error } = await supabase
+      .from("whatsapp_optins")
+      .update({ opted_in: true, last_nudged_at: null })
+      .eq("phone_number", phoneNumber)
+      .select("phone_number");
+    if (error) {
+      console.error("Could not record a WhatsApp subscription:", error.message);
+      return;
+    }
+    const reply = data?.length
+      ? "You are subscribed to FoldBook study reminders. Reply STOP at any time to unsubscribe."
+      : "We couldn't find a saved FoldBook opt-in for this number. Use the FoldBook result-card form to subscribe.";
+    await socket.sendMessage(remoteJid, { text: reply });
+    return;
+  }
+  if (!/^(stop|unsubscribe|opt\s*out)$/i.test(text)) return;
+
+  const { error } = await supabase
+    .from("whatsapp_optins")
+    .update({ opted_in: false })
+    .eq("phone_number", phoneNumber);
+  if (error) {
+    console.error("Could not record a WhatsApp opt-out:", error.message);
+    return;
+  }
+  await socket.sendMessage(remoteJid, { text: "You are unsubscribed from FoldBook study reminders. Reply START if you want reminders again." });
+}
+
+function generateNudgeMessage(name, streak, courseCode, session = "morning") {
+  const firstName = typeof name === "string" ? name.trim().split(/\s+/)[0] : "";
+  const greeting = firstName || "there";
+  const streakDays = Number.isInteger(streak) && streak > 0 ? streak : 0;
+  const course = typeof courseCode === "string" && courseCode.trim() ? courseCode.trim() : "Economics";
+  const mascot = /^ECO\b/i.test(String(courseCode || "")) ? "Dr. Eco" : "Foldo";
+  const streakLine = streakDays
+    ? `Your ${streakDays}-day streak is looking strong. Keep it glowing with one tiny win.`
+    : "Your next streak starts with one tiny win. Five minutes is plenty.";
+  const messages = session === "evening" ? [
+    `🌙 Evening checkpoint, ${greeting}! ${streakLine}\n\nYour mini-quest: answer one quick ${course} question before you call it a day. You’ve got this ✨`,
+    `✨ ${greeting}, one last little win? Give ${course} five focused minutes and let tomorrow-you wake up proud.\n\nNo marathon required.`,
+    `🐾 ${mascot}’s evening mission for ${greeting}: open ${course}, tackle one idea, then enjoy your night. Small steps count!`,
+  ] : [
+    `☀️ Good morning, ${greeting}! ${streakLine}\n\nToday's mini-quest: warm up with five minutes of ${course}. Ready, set, learn! 🎯`,
+    `🚀 Rise and shine, ${greeting}! ${mascot} has a bite-sized ${course} quest waiting. One lesson now; main-character energy all day.`,
+    `✨ ${mascot} says your morning study streak is calling, ${greeting}! Pop into ${course} for one quick lesson and collect a little win before the day gets busy.`,
+  ];
+  const message = messages[Math.floor(Math.random() * messages.length)];
+  const footer = `\n\nOpen FoldBook → ${reminderStudyUrl(courseCode, session)}`;
+  return `${message}${footer}`;
+}
+
+function delay(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function renderAdminMessage(template, name, streak, courseCode, profile, session = "morning") {
+  const cleanTemplate = String(template || "").replace(/\n?\s*Reply\s+(?:STOP|UNSUBSCRIBE)\b[^\n]*/gi, "").trim();
+  const firstName = typeof name === "string" ? name.trim().split(/\s+/)[0] : "";
+  const streakDays = Number.isInteger(streak) && streak > 0 ? streak : 0;
+  const streakText = streakDays
+    ? `Your ${streakDays}-day streak is glowing. Keep it going with one tiny win`
+    : "Your next streak starts with one tiny win";
+  const course = typeof courseCode === "string" && courseCode.trim() ? courseCode.trim() : "Economics";
+  const path = Array.isArray(profile?.study_path) ? profile.study_path : [];
+  const completed = new Set(Array.isArray(profile?.completed_module_ids) ? profile.completed_module_ids : []);
+  const focus = path.find((step) => !completed.has(step.id)) || null;
+  const activityLabel = {
+    lesson: "a short lesson",
+    chat: "a quick chat with Dr. Eco",
+    live: "a live session with Dr. Eco",
+    article: "a short reading",
+    video: "a recommended video search",
+    test: "a quick practice test",
+  }[focus?.activityType] || (session === "evening" ? "one quick practice question" : "a short lesson");
+  const values = {
+    name: firstName || "there",
+    streak: streakText,
+    course,
+    focus: focus?.title || `a small ${course} win`,
+    activity: activityLabel,
+    goal: typeof profile?.learner_goal === "string" && profile.learner_goal.trim()
+      ? profile.learner_goal.trim().slice(0, 100) : "your learning goal",
+    link: reminderStudyUrl(courseCode, session),
+  };
+  const rendered = cleanTemplate.replace(/\{\{(name|streak|course|link|focus|activity|goal)\}\}/g, (_, key) => values[key]);
+  const personalized = focus && !cleanTemplate.includes("{{focus}}") && !cleanTemplate.includes("{{activity}}")
+    ? `${rendered}\n\nNext in your path: ${activityLabel} — ${focus.title}.`
+    : rendered;
+  return personalized.includes(FOLDBOOK_URL)
+    ? personalized
+    : `${personalized}\n\nOpen FoldBook → ${reminderStudyUrl(courseCode, session)}`;
+}
+
+function reminderMedia(phoneNumber, session, caption) {
+  const day = new Date().toLocaleDateString("en-CA", { timeZone: "Africa/Lagos" });
+  const seed = `${phoneNumber}:${day}:${session}`;
+  const hash = [...seed].reduce((total, character) => total + character.charCodeAt(0), 0);
+  const animations = REMINDER_ANIMATION_MEDIA[session] || [];
+  if (animations.length) {
+    const animation = animations[hash % animations.length];
+    return { video: animation.video, gifPlayback: true, mimetype: "video/mp4", caption };
+  }
+  const artwork = TEST_REMINDER_ARTWORK[hash % TEST_REMINDER_ARTWORK.length];
+  return { image: artwork.image, caption };
+}
+
+async function sendReminderMedia(jid, phoneNumber, session, caption) {
+  try {
+    await socket.sendMessage(jid, reminderMedia(phoneNumber, session, caption));
+    return "animated";
+  } catch (animationError) {
+    console.warn("Could not send animated reminder media; falling back to static artwork:", animationError.message);
+  }
+  try {
+    const artwork = TEST_REMINDER_ARTWORK[0];
+    await socket.sendMessage(jid, { image: artwork.image, caption });
+    return "image";
+  } catch (imageError) {
+    console.warn("Could not send reminder artwork; falling back to text:", imageError.message);
+    await socket.sendMessage(jid, { text: caption });
+    return "text";
+  }
+}
+
+async function loadLearningProfiles(optIns) {
+  const registrationNumbers = [...new Set((optIns || []).map((user) => user.reg_number).filter(Boolean))];
+  if (!registrationNumbers.length) return new Map();
+  const { data, error } = await supabase.from("student_learning_profiles")
+    .select("reg_number,learner_goal,course_code,study_path,completed_module_ids")
+    .in("reg_number", registrationNumbers);
+  if (error) {
+    console.warn("Personalized reminder profiles unavailable; sending course-level reminders:", error.message);
+    return new Map();
+  }
+  return new Map((data || []).map((profile) => [profile.reg_number, profile]));
+}
+
+async function refreshReminderSettings() {
+  const { data, error } = await supabase.from("whatsapp_bot_settings")
+    .select("enabled,morning_time,evening_time,min_interval_hours,audience,morning_message,evening_message")
+    .eq("id", 1).maybeSingle();
+  if (error) throw error;
+  if (data) reminderSettings = { ...reminderSettings, ...data };
+  return reminderSettings;
+}
+
+async function updateWorkerHeartbeat(isConnected) {
+  const { error } = await supabase.from("whatsapp_bot_heartbeat").upsert({
+    id: 1,
+    connected: isConnected,
+    last_seen_at: new Date().toISOString(),
+  }, { onConflict: "id" });
+  if (error) console.warn("Could not update WhatsApp worker heartbeat:", error.message);
+}
+
+async function dispatchDailyNudges(session = "morning") {
+  if (dispatchInProgress) {
+    console.warn("Skipping nudge run because a previous dispatch is still in progress.");
+    return false;
+  }
+  if (!connected || !socket) {
+    console.warn("Skipping nudge run because WhatsApp is not connected.");
+    return false;
+  }
+  dispatchInProgress = true;
+  const cutoff = new Date(Date.now() - reminderSettings.min_interval_hours * 60 * 60 * 1000).toISOString();
+  let afterPhone = "";
+  let recipientCount = 0;
+  let failures = 0;
+  try {
+    while (connected && socket) {
+      let query = supabase
+        .from("whatsapp_optins")
+        .select("phone_number,full_name,streak_count,course_code,last_activity_at,reg_number")
+        .eq("opted_in", true)
+        .or(`last_nudged_at.is.null,last_nudged_at.lt.${cutoff}`)
+        .not("phone_number", "is", null)
+        .order("phone_number")
+        .limit(PAGE_SIZE);
+      if (afterPhone) query = query.gt("phone_number", afterPhone);
+      const { data: optIns, error } = await query;
+      if (error) throw error;
+      const pageLastPhone = optIns?.at(-1)?.phone_number || "";
+      const pageCount = optIns?.length || 0;
+      if (reminderSettings.audience === "inactive") {
+        const inactiveCutoff = Date.now() - 2 * 24 * 60 * 60 * 1000;
+        const inactiveUsers = (optIns || []).filter((user) => !user.last_activity_at || Date.parse(user.last_activity_at) < inactiveCutoff);
+        optIns.splice(0, optIns.length, ...inactiveUsers);
+      }
+      if (!optIns || optIns.length === 0) {
+        if (pageLastPhone && pageCount === PAGE_SIZE) {
+          afterPhone = pageLastPhone;
+          continue;
+        }
+        break;
+      }
+      afterPhone = pageLastPhone;
+      const profiles = await loadLearningProfiles(optIns);
+
+      for (const user of optIns) {
+        if (!connected || !socket) break;
+        if (!/^234[789]\d{9}$/.test(user.phone_number || "")) {
+          console.warn("Skipping a reminder record with an invalid phone number.");
+          continue;
+        }
+        try {
+          const jid = `${user.phone_number}@s.whatsapp.net`;
+          const message = renderAdminMessage(
+              session === "evening" ? reminderSettings.evening_message : reminderSettings.morning_message,
+              user.full_name, user.streak_count, user.course_code,
+              profiles.get(user.reg_number), session,
+            );
+          await sendReminderMedia(jid, user.phone_number, session, message);
+          recipientCount += 1;
+          const { error: updateError } = await supabase
+            .from("whatsapp_optins")
+            .update({ last_nudged_at: new Date().toISOString() })
+            .eq("phone_number", user.phone_number)
+            .eq("opted_in", true);
+          if (updateError) {
+            console.error("Reminder sent but its timestamp could not be saved:", updateError.message);
+          }
+          await delay(SEND_DELAY_MS);
+        } catch (error) {
+          failures += 1;
+          console.error("Could not send a study reminder:", error.message);
+        }
+      }
+      if (optIns.length < PAGE_SIZE) break;
+    }
+  } catch (error) {
+    failures += 1;
+    console.error("Daily WhatsApp nudge dispatch failed:", error.message);
+  } finally {
+    const { error: logError } = await supabase.from("whatsapp_bot_delivery_log").insert({
+      session,
+      status: failures ? (recipientCount ? "sent" : "failed") : "sent",
+      recipient_count: recipientCount,
+      detail: failures ? `${failures} send or dispatch error(s)` : null,
+    });
+    if (logError) console.warn("Could not log reminder delivery:", logError.message);
+    dispatchInProgress = false;
+  }
+  return failures === 0 && connected;
+}
+
+async function processPendingTestReminder() {
+  if (!connected || !socket || testDispatchInProgress) return;
+  testDispatchInProgress = true;
+  let job;
+  try {
+    const { data, error } = await supabase.rpc("claim_whatsapp_bot_test");
+    if (error) {
+      if (!testQueueUnavailableWarned) {
+        console.warn("Admin test reminders are unavailable; apply the WhatsApp test queue SQL migration:", error.message);
+        testQueueUnavailableWarned = true;
+      }
+      return;
+    }
+    testQueueUnavailableWarned = false;
+    job = Array.isArray(data) ? data[0] : data;
+    if (!job) return;
+
+    let resultStatus = "sent";
+    let detail = "Test reminder sent with FoldBook animated media.";
+    try {
+      await refreshReminderSettings();
+      const { data: user, error: userError } = await supabase.from("whatsapp_optins")
+        .select("phone_number,full_name,streak_count,course_code,last_activity_at,reg_number")
+        .eq("phone_number", job.phone_number)
+        .eq("opted_in", true)
+        .maybeSingle();
+      if (userError) throw userError;
+      if (!user) throw new Error("The target number is no longer opted in.");
+      const profiles = await loadLearningProfiles([user]);
+      const template = job.session === "evening" ? reminderSettings.evening_message : reminderSettings.morning_message;
+      const message = renderAdminMessage(template, user.full_name, user.streak_count, user.course_code,
+        profiles.get(user.reg_number), job.session);
+      const mediaKind = await sendReminderMedia(`${user.phone_number}@s.whatsapp.net`, user.phone_number, job.session, message);
+      detail = `Test reminder sent with FoldBook ${mediaKind} media.`;
+    } catch (error) {
+      resultStatus = "failed";
+      detail = error.message || "WhatsApp could not send the test reminder.";
+      console.error("Could not send an admin test reminder:", detail);
+    }
+
+    const { error: updateError } = await supabase.from("whatsapp_bot_test_queue")
+      .update({ status: resultStatus, detail, processed_at: new Date().toISOString() })
+      .eq("id", job.id);
+    if (updateError) console.warn("Could not update the test reminder queue status:", updateError.message);
+    const { error: logError } = await supabase.from("whatsapp_bot_delivery_log").insert({
+      session: "test",
+      status: resultStatus,
+      recipient_count: resultStatus === "sent" ? 1 : 0,
+      detail: resultStatus === "sent" ? detail : detail.slice(0, 500),
+    });
+    if (logError) console.warn("Could not log the test reminder:", logError.message);
+  } catch (error) {
+    if (job?.id) {
+      await supabase.from("whatsapp_bot_test_queue")
+        .update({ status: "failed", detail: (error.message || "Worker failed to process test reminder.").slice(0, 500), processed_at: new Date().toISOString() })
+        .eq("id", job.id);
+    }
+    console.error("Could not process the admin test reminder queue:", error.message);
+  } finally {
+    testDispatchInProgress = false;
+  }
+}
+
+function minutesOfDay(value) {
+  const [hour, minute] = String(value || "").split(":").map(Number);
+  return Number.isInteger(hour) && Number.isInteger(minute) ? hour * 60 + minute : -1;
+}
+
+async function runConfiguredReminderCheck() {
+  try {
+    await refreshReminderSettings();
+    await updateWorkerHeartbeat(connected);
+    const lagosDate = new Date(new Date().toLocaleString("en-US", { timeZone: "Africa/Lagos" }));
+    const currentMinute = lagosDate.getHours() * 60 + lagosDate.getMinutes();
+    const session = [["morning", reminderSettings.morning_time], ["evening", reminderSettings.evening_time]]
+      .find(([, time]) => {
+        const minutesLate = currentMinute - minutesOfDay(time);
+        return minutesLate >= 0 && minutesLate <= 180;
+      })?.[0];
+    if (session && reminderSettings.enabled) {
+      const runKey = `${lagosDate.getFullYear()}-${lagosDate.getMonth()}-${lagosDate.getDate()}:${session}`;
+      if (!completedScheduleRuns.has(runKey)) {
+        if (!connected || !socket) {
+          const disconnectedKey = `${runKey}:disconnected`;
+          if (!completedScheduleRuns.has(disconnectedKey)) {
+            const { error } = await supabase.from("whatsapp_bot_delivery_log").insert({
+              session,
+              status: "failed",
+              recipient_count: 0,
+              detail: "WhatsApp was disconnected at the scheduled time. The worker will retry during the next 3 hours.",
+            });
+            if (error) console.warn("Could not record the disconnected reminder attempt:", error.message);
+            completedScheduleRuns.add(disconnectedKey);
+          }
+          return;
+        }
+        if (await dispatchDailyNudges(session)) completedScheduleRuns.add(runKey);
+      }
+    }
+  } catch (error) {
+    console.error("Could not check configured WhatsApp reminder schedule:", error.message);
+  }
+}
+
+function scheduleReconnect() {
+  if (shuttingDown || reconnectTimer) return;
+  const waitMs = reconnectDelayMs;
+  reconnectDelayMs = Math.min(reconnectDelayMs * 2, 60000);
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    void connectToWhatsApp();
+  }, waitMs);
+}
+
+async function connectToWhatsApp() {
+  if (shuttingDown) return;
+  try {
+    const { version } = await fetchLatestBaileysVersion();
+    const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIRECTORY);
+    const activeSocket = makeWASocket({
+      version,
+      auth: state,
+      printQRInTerminal: false,
+      browser: ["Ubuntu", "Chrome", "110.0.5563.56"],
+      syncFullHistory: false,
+      markOnlineOnConnect: true,
+      generateHighQualityLinkPreview: false,
+      logger: require("pino")({ level: "silent" }),
+    });
+    socket = activeSocket;
+    activeSocket.ev.on("creds.update", saveCreds);
+    activeSocket.ev.on("messages.upsert", async ({ messages, type }) => {
+      if (type !== "notify") return;
+      for (const message of messages) {
+        try {
+          await handleIncomingMessage(message);
+        } catch (error) {
+          console.error("Could not process a WhatsApp reply:", error.message);
+        }
+      }
+    });
+    let pairingCodeRequested = false;
+    activeSocket.ev.on("connection.update", (update) => {
+      const { connection, lastDisconnect, qr } = update;
+      if (qr && BOT_PHONE_NUMBER && !state.creds.registered && !pairingCodeRequested) {
+        pairingCodeRequested = true;
+        void (async () => {
+          try {
+            if (typeof activeSocket.requestPairingCode !== "function") {
+              throw new Error("This Baileys version does not support pairing codes.");
+            }
+            const phoneNumber = BOT_PHONE_NUMBER.replace(/\D/g, "");
+            const pairingCode = await activeSocket.requestPairingCode(phoneNumber);
+            if (shuttingDown || socket !== activeSocket) return;
+            console.log("\n==================================================");
+            console.log(`YOUR WHATSAPP PAIRING CODE IS: ${pairingCode}`);
+            console.log("==================================================\n");
+            console.warn("Treat this pairing code as a password; do not share or publish worker logs.");
+          } catch (error) {
+            pairingCodeRequested = false;
+            console.error("Could not request a WhatsApp pairing code:", error.message);
+          }
+        })();
+      }
+      if (qr && !BOT_PHONE_NUMBER) {
+        console.log("\n==================================================");
+        console.log("SCAN THIS QR CODE WITH YOUR WHATSAPP BOT PHONE:");
+        console.log("==================================================\n");
+        qrcode.generate(qr, { small: true });
+      }
+      if (connection === "open") {
+        connected = true;
+        void updateWorkerHeartbeat(true);
+        reconnectDelayMs = 5000;
+        console.log("FoldBook WhatsApp worker connected.");
+      } else if (connection === "close") {
+        connected = false;
+        void updateWorkerHeartbeat(false);
+        const statusCode = lastDisconnect?.error?.output?.statusCode;
+        const shouldResetAuth = statusCode === DisconnectReason.loggedOut || statusCode === 401;
+        if (socket === activeSocket) socket = null;
+        const disconnectMessage = lastDisconnect?.error?.message;
+        console.warn(`WhatsApp connection closed (status: ${statusCode ?? "unknown"}${disconnectMessage ? `, reason: ${disconnectMessage}` : ""}).`);
+        if (shouldResetAuth) {
+          try {
+            fs.rmSync(AUTH_DIRECTORY, { recursive: true, force: true });
+            console.warn("Saved WhatsApp auth state removed; a fresh QR scan is required.");
+          } catch (error) {
+            console.error("Could not remove the saved WhatsApp auth state:", error.message);
+            return;
+          }
+        }
+        scheduleReconnect();
+      }
+    });
+  } catch (error) {
+    connected = false;
+    console.error("WhatsApp connection could not be initialized:", error.message);
+    scheduleReconnect();
+  }
+}
+
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`Stopping worker after ${signal}.`);
+  for (const task of cronTasks) task.stop();
+  clearInterval(testQueuePoll);
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  connected = false;
+  void updateWorkerHeartbeat(false);
+  if (socket) socket.end(undefined);
+}
+
+validateConfiguration();
+const cronTasks = [
+  cron.schedule("* * * * *", () => { void runConfiguredReminderCheck(); }, { timezone: "Africa/Lagos" }),
+];
+const testQueuePoll = setInterval(() => { void processPendingTestReminder(); }, TEST_QUEUE_POLL_MS);
+testQueuePoll.unref?.();
+
+process.once("SIGINT", () => { void shutdown("SIGINT"); });
+process.once("SIGTERM", () => { void shutdown("SIGTERM"); });
+void connectToWhatsApp();

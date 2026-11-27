@@ -468,6 +468,11 @@
             <input id="authRegNo" name="registration" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="18" placeholder="25/SS/EC/001 or 202610012345AB" aria-describedby="authRegistrationHelp" required>
             <p class="profile-help" id="authRegistrationHelp">Newly admitted students can use their 14-character JAMB number. Use your UNIUYO matric number if you already have one.</p>
           </div>
+          <div class="form-group" id="authEmailGroup">
+            <label for="authEmail" id="authEmailLabel">Email address</label>
+            <input id="authEmail" name="email" type="email" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false" maxlength="254" placeholder="you@example.com" aria-describedby="authEmailHelp" required>
+            <p class="profile-help" id="authEmailHelp">Used only to email you a code if you forget your password. Use an address you can open.</p>
+          </div>
           <div class="form-group" id="authLevelGroup">
             <label for="authLevel">Current academic level</label>
             <select id="authLevel" name="level" required>
@@ -480,7 +485,7 @@
             <input id="authPassword" name="password" type="password" autocomplete="new-password" minlength="8" required>
           </div>
           <div class="form-group" id="authCodeGroup" hidden>
-            <label for="authResetCode">6-digit code from WhatsApp</label>
+            <label for="authResetCode">6-digit code from your email</label>
             <input id="authResetCode" name="resetCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]*" placeholder="123456">
           </div>
           <div class="form-group" id="authConfirmGroup" hidden>
@@ -967,6 +972,16 @@
           <button class="card-secondary-button" id="saveProfileMatric" type="button">Save matric number</button>
           <p class="profile-help">Your JAMB number remains linked so you can continue signing in and keep your saved study progress.</p>
           <p class="profile-status" id="profileMatricStatus" role="status" aria-live="polite"></p>
+        </section>
+        <section class="profile-level-settings" id="profileEmailSettings" aria-labelledby="profileEmailTitle" hidden>
+          <h3 id="profileEmailTitle">Recovery email</h3>
+          <p class="profile-help" id="profileEmailCurrent">Add an email so you can reset your password if you forget it.</p>
+          <label for="profileEmailInput">Email address</label>
+          <input id="profileEmailInput" type="email" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false" maxlength="254" placeholder="you@example.com">
+          <label for="profileEmailPassword">Confirm with your current password</label>
+          <input id="profileEmailPassword" type="password" autocomplete="current-password" minlength="8">
+          <button class="card-secondary-button" id="saveProfileEmail" type="button">Save email</button>
+          <p class="profile-status" id="profileEmailStatus" role="status" aria-live="polite"></p>
         </section>
         <section class="profile-courses" aria-labelledby="profileCoursesTitle">
           <h3 id="profileCoursesTitle">Courses for your level</h3>

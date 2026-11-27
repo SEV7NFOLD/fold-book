@@ -46,14 +46,14 @@ Baileys is an unofficial WhatsApp Web client and may violate WhatsApp terms or l
 
 ### Forgot and reset password
 
-Students who forget their password use **Forgot password?** on the Log in screen. They enter their JAMB or matric number, receive a 6-digit code on the WhatsApp number saved on the account, then choose a new password and are logged in.
+Students who forget their password use **Forgot password?** on the Log in screen. They enter their JAMB or matric number **and the recovery email saved on their account**, receive a 6-digit code by email, then choose a new password and are logged in.
 
-- **Delivery:** accounts store a WhatsApp number but no email, so the code is queued in `whatsapp_bot_outbox` and sent by the Render WhatsApp worker (polled every 4 seconds). **The worker must be running and paired for resets to work.** Unlike study reminders, reset messages ignore the STOP opt-out.
-- **Setup:** run `supabase/student_password_reset.sql` in the Supabase SQL Editor *before* deploying this code, then redeploy Vercel and the Render worker. No new environment variables are needed; codes are hashed with `FOLDBOOK_ADMIN_SESSION_SECRET`.
-- **Rules:** codes expire after 10 minutes, are single-use, and lock after 5 wrong guesses. A new request replaces older codes. Each account can request 3 codes per 15 minutes, with a global cap of 100 per 15 minutes so the form cannot be used to spam students or get the bot number flagged.
-- **Privacy:** the forgot-password step gives the same reply whether or not an account exists, and only a keyed hash of each code is stored. The message text in the outbox is erased as soon as it is sent.
-- **Known limit:** sessions are stateless 30-day signed cookies, so resetting a password does not sign out devices that are already logged in. `student_accounts.password_changed_at` is recorded to support revoking them later.
-- **Account recovery without WhatsApp access:** a student who lost their SIM cannot self-serve; an admin must correct the number in `student_accounts`.
+- **Recovery email:** it is required at signup. Existing students add one in **Profile → Recovery email** (confirmed with their current password). Accounts created before this change have no email, so those students cannot self-serve until they add one while logged in; an admin can also set `student_accounts.email` directly.
+- **Delivery:** the API sends the code with `lib/email.js` (Gmail SMTP through nodemailer), the same sender used for quiz-host sign-in codes. It needs `SMTP_USER` and `SMTP_PASS` in Vercel. Without them the forgot-password form returns a clear 503 for everyone. WhatsApp is not involved, so the Render worker does not need to be running or paired for resets.
+- **Setup:** run `supabase/student_password_reset.sql` in the Supabase SQL Editor *before* deploying this code (it adds `student_accounts.email` and the reset-code table), then redeploy Vercel. Codes are hashed with `FOLDBOOK_ADMIN_SESSION_SECRET`.
+- **Rules:** codes expire after 10 minutes, are single-use, and lock after 5 wrong guesses. A new request replaces older codes. Each account can request 3 codes per 15 minutes, with a global cap of 100 per 15 minutes so the form cannot flood inboxes or use up the sending account's daily email limit.
+- **Privacy:** a code is sent only when the account number and the typed email both match, and the forgot-password step gives the same reply otherwise, so it cannot be used to look up students or emails. Only a keyed hash of each code is stored, and the full recovery email is never sent back to the browser (Profile shows a masked version).
+- **Known limits:** sessions are stateless 30-day signed cookies, so resetting a password does not sign out devices that are already logged in (`student_accounts.password_changed_at` is recorded to support that later). Recovery emails are not verified when saved, so a mistyped address would send codes to someone else's inbox; students should double-check it.
 
 ## Build and preview a deployment
 
