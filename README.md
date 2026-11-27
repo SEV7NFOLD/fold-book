@@ -44,6 +44,17 @@ Deploy the WhatsApp scheduler as a Render Background Worker using the root `rend
 
 Baileys is an unofficial WhatsApp Web client and may violate WhatsApp terms or lead to account restrictions; for a production messaging service, prefer the official WhatsApp Business Platform/Cloud API.
 
+### Forgot and reset password
+
+Students who forget their password use **Forgot password?** on the Log in screen. They enter their JAMB or matric number, receive a 6-digit code on the WhatsApp number saved on the account, then choose a new password and are logged in.
+
+- **Delivery:** accounts store a WhatsApp number but no email, so the code is queued in `whatsapp_bot_outbox` and sent by the Render WhatsApp worker (polled every 4 seconds). **The worker must be running and paired for resets to work.** Unlike study reminders, reset messages ignore the STOP opt-out.
+- **Setup:** run `supabase/student_password_reset.sql` in the Supabase SQL Editor *before* deploying this code, then redeploy Vercel and the Render worker. No new environment variables are needed; codes are hashed with `FOLDBOOK_ADMIN_SESSION_SECRET`.
+- **Rules:** codes expire after 10 minutes, are single-use, and lock after 5 wrong guesses. A new request replaces older codes. Each account can request 3 codes per 15 minutes, with a global cap of 100 per 15 minutes so the form cannot be used to spam students or get the bot number flagged.
+- **Privacy:** the forgot-password step gives the same reply whether or not an account exists, and only a keyed hash of each code is stored. The message text in the outbox is erased as soon as it is sent.
+- **Known limit:** sessions are stateless 30-day signed cookies, so resetting a password does not sign out devices that are already logged in. `student_accounts.password_changed_at` is recorded to support revoking them later.
+- **Account recovery without WhatsApp access:** a student who lost their SIM cannot self-serve; an admin must correct the number in `student_accounts`.
+
 ## Build and preview a deployment
 
 ```sh

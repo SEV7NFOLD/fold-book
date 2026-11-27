@@ -7716,9 +7716,14 @@ document.querySelector("#backToLanding").addEventListener("click", () => {
 
 const appAuthForm = document.querySelector("#appAuthForm");
 let authMode = "signup";
+let resendCooldownTimer = null;
 function setAuthMode(mode) {
+  const previousMode = authMode;
   authMode = mode;
   const signup = mode === "signup";
+  const forgot = mode === "forgot";
+  const reset = mode === "reset";
+  const recovering = forgot || reset;
   for (const id of ["authNameGroup", "authPhoneGroup", "authLevelGroup", "authConsentGroup"]) {
     document.querySelector(`#${id}`).hidden = !signup;
   }
@@ -7727,16 +7732,156 @@ function setAuthMode(mode) {
   document.querySelector("#authLevel").required = signup;
   document.querySelector("#authMarketingConsent").required = signup;
   document.querySelector("#authMarketingConsent").checked = false;
-  document.querySelector("#authPassword").autocomplete = signup ? "new-password" : "current-password";
-  document.querySelector("#authSubmit").textContent = signup ? "Create account" : "Log in";
+  // Password recovery: step 1 ("forgot") asks only for the account number; step 2 ("reset")
+  // asks for the WhatsApp code and a new password.
+  document.querySelector("#authPasswordGroup").hidden = forgot;
+  document.querySelector("#authPassword").required = !forgot;
+  document.querySelector("#authPasswordLabel").textContent = reset ? "New password" : "Password";
+  document.querySelector("#authPassword").autocomplete = signup || reset ? "new-password" : "current-password";
+  document.querySelector("#authCodeGroup").hidden = !reset;
+  document.querySelector("#authConfirmGroup").hidden = !reset;
+  document.querySelector("#authResetCode").required = reset;
+  document.querySelector("#authConfirmPassword").required = reset;
+  if (!reset) {
+    document.querySelector("#authResetCode").value = "";
+    document.querySelector("#authConfirmPassword").value = "";
+  }
+  if (recovering || previousMode === "forgot" || previousMode === "reset") {
+    document.querySelector("#authPassword").value = "";
+  }
+  document.querySelector("#authSubmit").textContent = signup ? "Create account"
+    : forgot ? "Send reset code" : reset ? "Reset password" : "Log in";
   document.querySelector("#authSignupMode").classList.toggle("is-active", signup);
   document.querySelector("#authSignupMode").setAttribute("aria-pressed", String(signup));
-  document.querySelector("#authLoginMode").classList.toggle("is-active", !signup);
-  document.querySelector("#authLoginMode").setAttribute("aria-pressed", String(!signup));
-  document.querySelector("#authStatus").textContent = "";
+  document.querySelector("#authLoginMode").classList.toggle("is-active", mode === "login");
+  document.querySelector("#authLoginMode").setAttribute("aria-pressed", String(mode === "login"));
+  document.querySelector("#authForgotLink").hidden = mode !== "login";
+  document.querySelector("#authBackToLogin").hidden = !recovering;
+  document.querySelector("#authResendCode").hidden = !reset;
+  if (!reset) {
+    clearInterval(resendCooldownTimer);
+    document.querySelector("#authResendCode").disabled = false;
+    document.querySelector("#authResendCode").textContent = "Resend code";
+  }
+  setAuthStatus("");
+}
+function setAuthStatus(message, kind = "error") {
+  const status = document.querySelector("#authStatus");
+  status.textContent = message;
+  status.classList.toggle("is-success", kind === "success");
 }
 document.querySelector("#authSignupMode").addEventListener("click", () => setAuthMode("signup"));
 document.querySelector("#authLoginMode").addEventListener("click", () => setAuthMode("login"));
+document.querySelector("#authForgotLink").addEventListener("click", () => setAuthMode("forgot"));
+document.querySelector("#authBackToLogin").addEventListener("click", () => setAuthMode("login"));
+document.querySelector("#authResendCode").addEventListener("click", () => {
+  void requestPasswordResetCode({ resend: true });
+});
+
+function startResendCooldown(seconds = 60) {
+  const button = document.querySelector("#authResendCode");
+  clearInterval(resendCooldownTimer);
+  let remaining = seconds;
+  const paint = () => {
+    button.disabled = remaining > 0;
+    button.textContent = remaining > 0 ? `Resend code (${remaining}s)` : "Resend code";
+  };
+  paint();
+  resendCooldownTimer = setInterval(() => {
+    remaining -= 1;
+    paint();
+    if (remaining <= 0) clearInterval(resendCooldownTimer);
+  }, 1000);
+}
+
+// Step 1: ask the server to WhatsApp a reset code. The server answers the same way
+// whether or not the account exists, so this message is deliberately non-committal.
+async function requestPasswordResetCode({ resend = false } = {}) {
+  const registration = normalizeStudentIdentifier(document.querySelector("#authRegNo").value);
+  if (!registration) {
+    setAuthStatus("Enter a valid JAMB number or UNIUYO matric number.");
+    document.querySelector("#authRegNo").focus();
+    return;
+  }
+  const submitButton = document.querySelector("#authSubmit");
+  const resendButton = document.querySelector("#authResendCode");
+  submitButton.disabled = true;
+  resendButton.disabled = true;
+  setAuthStatus("Sending your reset code…", "success");
+  try {
+    const response = await fetch("/api/student/auth", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "forgot-password", registration }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || "Could not start a password reset.");
+    if (!resend) setAuthMode("reset");
+    setAuthStatus(result.message || "If an account matches, a reset code is on its way to its WhatsApp number.", "success");
+    startResendCooldown();
+    document.querySelector("#authResetCode").focus();
+  } catch (error) {
+    setAuthStatus(error.message);
+    resendButton.disabled = false;
+  } finally {
+    submitButton.disabled = false;
+  }
+}
+
+// Step 2: check the code, set the new password, then log the student straight in.
+async function submitPasswordReset() {
+  const registration = normalizeStudentIdentifier(document.querySelector("#authRegNo").value);
+  const code = document.querySelector("#authResetCode").value.replace(/\s+/g, "");
+  const newPassword = document.querySelector("#authPassword").value;
+  const confirmation = document.querySelector("#authConfirmPassword").value;
+  if (!registration) {
+    setAuthStatus("Enter a valid JAMB number or UNIUYO matric number.");
+    return;
+  }
+  if (!/^\d{6}$/.test(code)) {
+    setAuthStatus("Enter the 6-digit code from your WhatsApp message.");
+    document.querySelector("#authResetCode").focus();
+    return;
+  }
+  if (newPassword.length < 8 || newPassword.length > 128) {
+    setAuthStatus("Use a new password between 8 and 128 characters.");
+    document.querySelector("#authPassword").focus();
+    return;
+  }
+  if (newPassword !== confirmation) {
+    setAuthStatus("The two passwords do not match.");
+    document.querySelector("#authConfirmPassword").focus();
+    return;
+  }
+  const submitButton = document.querySelector("#authSubmit");
+  submitButton.disabled = true;
+  setAuthStatus("Resetting your password…", "success");
+  let reset = false;
+  try {
+    const response = await fetch("/api/student/auth", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "reset-password", registration, code, newPassword }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || "Could not reset your password.");
+    reset = true;
+  } catch (error) {
+    setAuthStatus(error.message);
+  } finally {
+    submitButton.disabled = false;
+  }
+  if (!reset) return;
+  clearInterval(resendCooldownTimer);
+  document.querySelector("#authResendCode").textContent = "Resend code";
+  // Switch to login mode and sign in with the password that was just set.
+  setAuthMode("login");
+  setAuthStatus("Password updated. Logging you in…", "success");
+  await handleAuthSubmit("", registration, "", "", newPassword);
+}
+
 function isMasterAdminRegistration(registration) {
   return registration === "101010";
 }
@@ -7747,6 +7892,7 @@ async function handleAuthSubmit(fullName, regNumber, phone, passcode, password) 
   const rawPhone = typeof phone === "string" ? phone.trim() : "";
   const status = document.querySelector("#authStatus");
   status.textContent = "";
+  status.classList.remove("is-success");
 
   if (isMasterAdminRegistration(rawRegistration)
     || window.location.hash === "#admin" || window.location.hash === "#adminDashboard") {
@@ -7906,6 +8052,14 @@ async function handleAuthSubmit(fullName, regNumber, phone, passcode, password) 
 
 appAuthForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (authMode === "forgot") {
+    await requestPasswordResetCode();
+    return;
+  }
+  if (authMode === "reset") {
+    await submitPasswordReset();
+    return;
+  }
   await handleAuthSubmit(
     document.querySelector("#authFullName").value,
     document.querySelector("#authRegNo").value,

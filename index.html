@@ -475,9 +475,17 @@
               <option value="300L">300 Level</option><option value="400L">400 Level</option>
             </select>
           </div>
-          <div class="form-group">
-            <label for="authPassword">Password</label>
+          <div class="form-group" id="authPasswordGroup">
+            <label for="authPassword" id="authPasswordLabel">Password</label>
             <input id="authPassword" name="password" type="password" autocomplete="new-password" minlength="8" required>
+          </div>
+          <div class="form-group" id="authCodeGroup" hidden>
+            <label for="authResetCode">6-digit code from WhatsApp</label>
+            <input id="authResetCode" name="resetCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]*" placeholder="123456">
+          </div>
+          <div class="form-group" id="authConfirmGroup" hidden>
+            <label for="authConfirmPassword">Confirm new password</label>
+            <input id="authConfirmPassword" name="confirmPassword" type="password" autocomplete="new-password" minlength="8">
           </div>
           <div class="form-group" id="authPhoneGroup">
             <label for="authWhatsapp">WhatsApp Phone Number</label>
@@ -488,6 +496,11 @@
             <input id="adminPasscode" name="adminPasscode" type="password" autocomplete="current-password">
           </div>
           <label class="whatsapp-consent" id="authConsentGroup"><input type="checkbox" id="authMarketingConsent" required> I agree that FoldBook may save this number and send me up to two WhatsApp study reminders per day. I can reply STOP at any time.</label>
+          <div class="auth-recovery-links">
+            <button type="button" class="auth-link-button" id="authForgotLink" hidden>Forgot password?</button>
+            <button type="button" class="auth-link-button" id="authResendCode" hidden>Resend code</button>
+            <button type="button" class="auth-link-button" id="authBackToLogin" hidden>Back to log in</button>
+          </div>
           <p class="verification-status" id="authStatus" role="status" aria-live="polite"></p>
           <div class="auth-actions">
             <button type="button" class="card-secondary-button" id="backToLanding">Back</button>
