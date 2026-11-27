@@ -26,9 +26,12 @@ const DEFAULT_NUDGE_INTERVAL_HOURS = 10;
 const PAGE_SIZE = 500;
 const SEND_DELAY_MS = 3000;
 const TEST_QUEUE_POLL_MS = 15000;
+// The repo root holds assets/. This file normally lives in worker/ (root = one level up), but
+// resolve it either way so the worker still starts if it is run from the repo root.
+const APP_ROOT = [path.join(__dirname, ".."), __dirname].find((dir) => fs.existsSync(path.join(dir, "assets", "brand"))) || path.join(__dirname, "..");
 const TEST_REMINDER_ARTWORK = ["target.png", "trophy.png"].map((file) => ({
   file,
-  image: fs.readFileSync(path.join(__dirname, "..", "assets", "brand", file)),
+  image: fs.readFileSync(path.join(APP_ROOT, "assets", "brand", file)),
 }));
 const REMINDER_ANIMATIONS = {
   morning: ["morning-wave.mp4", "study-quest.mp4"],
@@ -37,7 +40,7 @@ const REMINDER_ANIMATIONS = {
 const REMINDER_ANIMATION_MEDIA = Object.fromEntries(Object.entries(REMINDER_ANIMATIONS).map(([session, files]) => [
   session,
   files.flatMap((file) => {
-    const mediaPath = path.join(__dirname, "..", "assets", "whatsapp", file);
+    const mediaPath = path.join(APP_ROOT, "assets", "whatsapp", file);
     return fs.existsSync(mediaPath) ? [{ video: fs.readFileSync(mediaPath) }] : [];
   }),
 ]));
