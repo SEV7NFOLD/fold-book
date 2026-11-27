@@ -409,6 +409,11 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid 
 .auth-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 15px; }
 .auth-actions .results-submit { min-height: 36px; cursor: pointer; }
 .auth-actions button:disabled { cursor: wait; opacity: .6; }
+.auth-recovery-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; margin-top: 12px; }
+.auth-link-button { padding: 4px 0; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 12px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.auth-link-button:hover:not(:disabled), .auth-link-button:focus-visible { color: var(--text); }
+.auth-link-button:disabled { cursor: default; opacity: .55; text-decoration: none; }
+.verification-status.is-success { color: var(--accent); }
 
 .top-inner { width: min(100% - 48px, 1320px); }
 .top .brand { font-size: 13px; letter-spacing: .04em; }

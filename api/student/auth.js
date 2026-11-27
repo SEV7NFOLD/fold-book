@@ -1,6 +1,6 @@
 "use strict";
 
-const { createHmac, randomBytes, scrypt, timingSafeEqual } = require("node:crypto");
+const { createHmac, randomBytes, randomInt, scrypt, timingSafeEqual } = require("node:crypto");
 const { promisify } = require("node:util");
 const { isSameOrigin } = require("../../lib/admin-auth.js");
 
@@ -8,6 +8,8 @@ const scryptAsync = promisify(scrypt);
 const COOKIE = "foldbook_student";
 const SESSION_SECONDS = 60 * 60 * 24 * 30;
 const PASSWORD_BYTES = 64;
+const RESET_CODE_MINUTES = 10;
+const RESET_REQUEST_MESSAGE = "If a FoldBook account matches that number, a 6-digit reset code is on its way to the WhatsApp number saved on it. It can take up to a minute. If you asked a few minutes ago, use that code or wait before asking again.";
 
 function isSameOriginRequest(request) {
   if (request.headers.origin) return isSameOrigin(request);
@@ -144,6 +146,22 @@ async function supabaseRequest(config, table, query, options = {}) {
 
 async function derivePassword(password, salt) {
   return scryptAsync(password, salt, PASSWORD_BYTES, { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
+}
+
+// Reset codes are stored only as a keyed hash. The prefix keeps this HMAC separate from
+// the session-cookie HMAC that uses the same server secret.
+function resetCodeHash(registration, code) {
+  return createHmac("sha256", sessionSecret()).update(`student-password-reset:${registration}:${code}`).digest("hex");
+}
+
+async function findAccountByIdentifier(config, registration) {
+  const filters = new URLSearchParams({
+    select: "reg_number",
+    or: `(reg_number.eq.${registration},jamb_reg_number.eq.${registration},matric_number.eq.${registration})`,
+    limit: "1",
+  });
+  const rows = await supabaseRequest(config, "student_accounts", `?${filters.toString()}`);
+  return rows?.[0] || null;
 }
 
 module.exports = async function studentAuthHandler(request, response) {
@@ -345,6 +363,68 @@ module.exports = async function studentAuthHandler(request, response) {
       }
       console.error("Student level update failed:", message);
       return sendJson(response, 503, { error: "Could not save your level right now. Please try again shortly." });
+    }
+  }
+
+  if (mode === "forgot-password") {
+    const identifier = normalizeStudentIdentifier(payload.registration);
+    if (!identifier) {
+      return sendJson(response, 400, { error: "Enter a valid JAMB registration number (14 characters) or UNIUYO matric number." });
+    }
+    try {
+      const account = await findAccountByIdentifier(config, identifier.registration);
+      if (account) {
+        const code = String(randomInt(100000, 1000000));
+        // The browser gets the same answer whether or not an account exists, or the
+        // request was rate limited, so this form cannot be used to look up students.
+        await supabaseRequest(config, "rpc/request_foldbook_student_password_reset", "", {
+          method: "POST",
+          body: {
+            p_reg_number: account.reg_number,
+            p_code_hash: resetCodeHash(account.reg_number, code),
+            p_message: `FoldBook password reset code: ${code}\n\nIt expires in ${RESET_CODE_MINUTES} minutes. If you did not ask to reset your password, ignore this message and do not share the code with anyone.`,
+          },
+        });
+      }
+      return sendJson(response, 200, { ok: true, message: RESET_REQUEST_MESSAGE });
+    } catch (error) {
+      console.error("Student password reset request failed:", error.message);
+      return sendJson(response, 503, { error: "Could not start a password reset right now. Please try again shortly." });
+    }
+  }
+
+  if (mode === "reset-password") {
+    const identifier = normalizeStudentIdentifier(payload.registration);
+    const code = String(payload.code || "").replace(/\s+/g, "");
+    const newPassword = typeof payload.newPassword === "string" ? payload.newPassword : "";
+    if (!identifier) {
+      return sendJson(response, 400, { error: "Enter a valid JAMB registration number (14 characters) or UNIUYO matric number." });
+    }
+    if (!/^\d{6}$/.test(code)) return sendJson(response, 400, { error: "Enter the 6-digit code sent to your WhatsApp." });
+    if (newPassword.length < 8 || newPassword.length > 128) {
+      return sendJson(response, 400, { error: "Use a new password between 8 and 128 characters." });
+    }
+    try {
+      const account = await findAccountByIdentifier(config, identifier.registration);
+      const expired = { error: "That code has expired or was used too many times. Ask for a new code." };
+      if (!account) return sendJson(response, 400, expired);
+      const salt = randomBytes(16).toString("hex");
+      const hash = (await derivePassword(newPassword, salt)).toString("hex");
+      const outcome = await supabaseRequest(config, "rpc/reset_foldbook_student_password", "", {
+        method: "POST",
+        body: {
+          p_reg_number: account.reg_number,
+          p_code_hash: resetCodeHash(account.reg_number, code),
+          p_password_salt: salt,
+          p_password_hash: hash,
+        },
+      });
+      if (outcome === "ok") return sendJson(response, 200, { ok: true });
+      if (outcome === "invalid") return sendJson(response, 400, { error: "That code is not right. Check the WhatsApp message and try again." });
+      return sendJson(response, 400, expired);
+    } catch (error) {
+      console.error("Student password reset failed:", error.message);
+      return sendJson(response, 503, { error: "Could not reset your password right now. Please try again shortly." });
     }
   }
 
