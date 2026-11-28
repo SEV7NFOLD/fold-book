@@ -26,11 +26,12 @@ const DEFAULT_NUDGE_INTERVAL_HOURS = 10;
 const PAGE_SIZE = 500;
 const SEND_DELAY_MS = 3000;
 const TEST_QUEUE_POLL_MS = 15000;
-// Password-reset codes are time-sensitive, so the outbox is polled much faster.
-const OUTBOX_POLL_MS = 4000;
+// The repo root holds assets/. This file normally lives in worker/ (root = one level up), but
+// resolve it either way so the worker still starts if it is run from the repo root.
+const APP_ROOT = [path.join(__dirname, ".."), __dirname].find((dir) => fs.existsSync(path.join(dir, "assets", "brand"))) || path.join(__dirname, "..");
 const TEST_REMINDER_ARTWORK = ["target.png", "trophy.png"].map((file) => ({
   file,
-  image: fs.readFileSync(path.join(__dirname, "..", "assets", "brand", file)),
+  image: fs.readFileSync(path.join(APP_ROOT, "assets", "brand", file)),
 }));
 const REMINDER_ANIMATIONS = {
   morning: ["morning-wave.mp4", "study-quest.mp4"],
@@ -39,7 +40,7 @@ const REMINDER_ANIMATIONS = {
 const REMINDER_ANIMATION_MEDIA = Object.fromEntries(Object.entries(REMINDER_ANIMATIONS).map(([session, files]) => [
   session,
   files.flatMap((file) => {
-    const mediaPath = path.join(__dirname, "..", "assets", "whatsapp", file);
+    const mediaPath = path.join(APP_ROOT, "assets", "whatsapp", file);
     return fs.existsSync(mediaPath) ? [{ video: fs.readFileSync(mediaPath) }] : [];
   }),
 ]));
@@ -56,8 +57,6 @@ let reconnectDelayMs = 5000;
 let dispatchInProgress = false;
 let testDispatchInProgress = false;
 let testQueueUnavailableWarned = false;
-let outboxDispatchInProgress = false;
-let outboxUnavailableWarned = false;
 let shuttingDown = false;
 const completedScheduleRuns = new Set();
 let reminderSettings = {
@@ -409,53 +408,6 @@ async function processPendingTestReminder() {
   }
 }
 
-// Sends queued one-off transactional texts (currently password-reset codes). Unlike study
-// reminders these ignore the STOP opt-out: the person just asked for this message on the
-// number saved on their account. The message body holds a live code, so it is erased from
-// the database as soon as the job is processed, and it is never written to the logs.
-async function processPendingOutbox() {
-  if (!connected || !socket || outboxDispatchInProgress) return;
-  outboxDispatchInProgress = true;
-  let job;
-  try {
-    const { data, error } = await supabase.rpc("claim_whatsapp_bot_outbox");
-    if (error) {
-      if (!outboxUnavailableWarned) {
-        console.warn("WhatsApp outbox is unavailable; apply supabase/student_password_reset.sql:", error.message);
-        outboxUnavailableWarned = true;
-      }
-      return;
-    }
-    outboxUnavailableWarned = false;
-    job = Array.isArray(data) ? data[0] : data;
-    if (!job) return;
-
-    let status = "sent";
-    let detail = "Sent.";
-    try {
-      if (!job.body) throw new Error("The outbox message was empty.");
-      await socket.sendMessage(`${job.phone_number}@s.whatsapp.net`, { text: job.body });
-    } catch (error) {
-      status = "failed";
-      detail = String(error.message || "WhatsApp could not send the message.").slice(0, 300);
-      console.error(`Could not send a queued ${job.kind} message:`, detail);
-    }
-    const { error: updateError } = await supabase.from("whatsapp_bot_outbox")
-      .update({ status, detail, body: null, processed_at: new Date().toISOString() })
-      .eq("id", job.id);
-    if (updateError) console.warn("Could not update the WhatsApp outbox status:", updateError.message);
-  } catch (error) {
-    if (job?.id) {
-      await supabase.from("whatsapp_bot_outbox")
-        .update({ status: "failed", detail: String(error.message || "Worker failed.").slice(0, 300), body: null, processed_at: new Date().toISOString() })
-        .eq("id", job.id);
-    }
-    console.error("Could not process the WhatsApp outbox:", error.message);
-  } finally {
-    outboxDispatchInProgress = false;
-  }
-}
-
 function minutesOfDay(value) {
   const [hour, minute] = String(value || "").split(":").map(Number);
   return Number.isInteger(hour) && Number.isInteger(minute) ? hour * 60 + minute : -1;
@@ -601,7 +553,6 @@ async function shutdown(signal) {
   console.log(`Stopping worker after ${signal}.`);
   for (const task of cronTasks) task.stop();
   clearInterval(testQueuePoll);
-  clearInterval(outboxPoll);
   if (reconnectTimer) clearTimeout(reconnectTimer);
   connected = false;
   void updateWorkerHeartbeat(false);
@@ -614,8 +565,6 @@ const cronTasks = [
 ];
 const testQueuePoll = setInterval(() => { void processPendingTestReminder(); }, TEST_QUEUE_POLL_MS);
 testQueuePoll.unref?.();
-const outboxPoll = setInterval(() => { void processPendingOutbox(); }, OUTBOX_POLL_MS);
-outboxPoll.unref?.();
 
 process.once("SIGINT", () => { void shutdown("SIGINT"); });
 process.once("SIGTERM", () => { void shutdown("SIGTERM"); });
