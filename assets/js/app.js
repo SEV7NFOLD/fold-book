@@ -2404,6 +2404,7 @@ function showStage(stage, updateHash = true) {
   document.dispatchEvent(new CustomEvent("foldbook:stage", { detail: { stage } }));
   if (updateHash) window.location.hash = `#${stage}`;
   if (typeof window.scrollTo === "function") window.scrollTo(0, 0);
+  if (stage === "authView") { try { renderAuthChrome(); } catch { /* screen setup runs later at startup */ } }
 }
 
 // Live quizzes: student play, preview, Quiz Studio list and host screen live in assets/js/live-quiz.js.
@@ -3289,6 +3290,11 @@ function renderProfile() {
       : "";
     if (document.activeElement !== matricInput) matricInput.value = currentStudent?.matricRegistration || "";
   }
+  const emailSettings = document.querySelector("#profileEmailSettings");
+  if (emailSettings) {
+    emailSettings.hidden = !currentStudent || isMasterAdmin;
+    if (!emailSettings.hidden) void loadRecoveryEmailStatus();
+  }
   const levelChangeCount = Math.max(0, Math.min(6, Math.floor(Number(user?.levelChangeCount) || 0)));
   const levelChangesRemaining = 6 - levelChangeCount;
   if (levelSettings && levelSelect && levelSave && levelLimit) {
@@ -3409,6 +3415,71 @@ document.querySelector("#saveProfileMatric").addEventListener("click", async () 
     status.textContent = "Matric number linked. Your JAMB sign-in and saved learning progress are unchanged.";
   } catch (error) {
     console.error("Could not link the student matric number:", error);
+    status.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+let recoveryEmailLoadedFor = "";
+async function loadRecoveryEmailStatus() {
+  const registration = currentStudent?.registration || "";
+  if (!registration || recoveryEmailLoadedFor === registration) return;
+  recoveryEmailLoadedFor = registration;
+  const current = document.querySelector("#profileEmailCurrent");
+  try {
+    const response = await fetch("/api/student/auth", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ mode: "recovery-email-status" }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || "Could not check your recovery email.");
+    current.textContent = result.recoveryEmail
+      ? `Password reset codes go to ${result.recoveryEmail}. Enter a new address below to change it.`
+      : "No recovery email yet. Add one so you can reset your password if you forget it.";
+  } catch (error) {
+    recoveryEmailLoadedFor = "";
+    console.warn("Could not load the recovery email status:", error.message);
+  }
+}
+
+document.querySelector("#saveProfileEmail").addEventListener("click", async () => {
+  if (!currentStudent || isMasterAdmin) return;
+  const emailInput = document.querySelector("#profileEmailInput");
+  const passwordInput = document.querySelector("#profileEmailPassword");
+  const button = document.querySelector("#saveProfileEmail");
+  const status = document.querySelector("#profileEmailStatus");
+  const email = normalizeAuthEmail(emailInput.value);
+  if (!email) {
+    status.textContent = "Enter a valid email address.";
+    emailInput.focus();
+    return;
+  }
+  if (passwordInput.value.length < 8) {
+    status.textContent = "Enter your current password to confirm this change.";
+    passwordInput.focus();
+    return;
+  }
+  button.disabled = true;
+  status.textContent = "Saving your recovery email…";
+  try {
+    const response = await fetch("/api/student/auth", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ mode: "set-recovery-email", email, password: passwordInput.value }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.ok) throw new Error(result.error || "Could not save your recovery email.");
+    passwordInput.value = "";
+    emailInput.value = "";
+    document.querySelector("#profileEmailCurrent").textContent =
+      `Password reset codes go to ${result.recoveryEmail}. Enter a new address below to change it.`;
+    status.textContent = "Recovery email saved.";
+  } catch (error) {
+    console.error("Could not save the recovery email:", error);
     status.textContent = error.message;
   } finally {
     button.disabled = false;
@@ -7575,9 +7646,11 @@ function loadSavedStudentProfile(registration) {
   }
 }
 
+const RETURNING_DEVICE_KEY = "foldBook.hasSignedIn";
 function persistAuthSession() {
   if (!currentStudent || !S.user) return;
   try {
+    window.localStorage.setItem(RETURNING_DEVICE_KEY, "1");
     window.localStorage.setItem(studentProfileStorageKey(currentStudent.registration), JSON.stringify({
       avatarUrl: S.user.avatarUrl || "",
       avatarLottie: S.user.avatarLottie || "",
@@ -7693,23 +7766,25 @@ loadMyResultsButton.addEventListener("click", () => void loadMyResults());
 
 document.querySelector("#landingCheckResults").addEventListener("click", () => {
   pendingResultsAfterAuth = true;
-  setAuthMode("signup");
+  setAuthMode(preferredAuthMode());
   document.querySelector("#authStatus").textContent = "Create an account or log in to open your private results page.";
   adminPasscodeGroup.hidden = true;
   adminPasscodeInput.value = "";
   showStage("authView");
-  document.querySelector("#authFullName").focus();
+  focusFirstAuthField();
 });
 
 document.querySelector("#launchApp").addEventListener("click", () => {
   document.querySelector("#authStatus").textContent = "";
-  setAuthMode("signup");
+  setAuthMode(preferredAuthMode());
   adminPasscodeGroup.hidden = true;
   adminPasscodeInput.value = "";
   showStage("authView");
-  document.querySelector("#authFullName").focus();
+  focusFirstAuthField();
 });
 document.querySelector("#backToLanding").addEventListener("click", () => {
+  // In sign-up, Back steps back through the form before leaving it.
+  if (authMode === "signup" && authStep > 1 && adminPasscodeGroup.hidden) { setAuthStep(authStep - 1); return; }
   pendingResultsAfterAuth = false;
   showStage("landingView");
 });
@@ -7717,6 +7792,10 @@ document.querySelector("#backToLanding").addEventListener("click", () => {
 const appAuthForm = document.querySelector("#appAuthForm");
 let authMode = "signup";
 let resendCooldownTimer = null;
+function normalizeAuthEmail(value) {
+  const email = String(value || "").trim().toLowerCase();
+  return email.length <= 254 && /^[^@\s,;()<>"]+@[^@\s,;()<>"]+\.[^@\s,;()<>"]+$/.test(email) ? email : "";
+}
 function setAuthMode(mode) {
   const previousMode = authMode;
   authMode = mode;
@@ -7727,13 +7806,17 @@ function setAuthMode(mode) {
   for (const id of ["authNameGroup", "authPhoneGroup", "authLevelGroup", "authConsentGroup"]) {
     document.querySelector(`#${id}`).hidden = !signup;
   }
+  document.querySelector("#authEmailGroup").hidden = !(signup || forgot);
+  document.querySelector("#authEmail").required = signup || forgot;
+  document.querySelector("#authEmailLabel").textContent = forgot ? "Recovery email on your account" : "Email address";
+  document.querySelector("#authEmailHelp").hidden = !signup;
   document.querySelector("#authFullName").required = signup;
   document.querySelector("#authWhatsapp").required = signup;
   document.querySelector("#authLevel").required = signup;
   document.querySelector("#authMarketingConsent").required = signup;
   document.querySelector("#authMarketingConsent").checked = false;
-  // Password recovery: step 1 ("forgot") asks only for the account number; step 2 ("reset")
-  // asks for the WhatsApp code and a new password.
+  // Password recovery: step 1 ("forgot") asks for the account number and the email saved on the
+  // account; step 2 ("reset") asks for the emailed code and a new password.
   document.querySelector("#authPasswordGroup").hidden = forgot;
   document.querySelector("#authPassword").required = !forgot;
   document.querySelector("#authPasswordLabel").textContent = reset ? "New password" : "Password";
@@ -7764,7 +7847,85 @@ function setAuthMode(mode) {
     document.querySelector("#authResendCode").textContent = "Resend code";
   }
   setAuthStatus("");
+  authStep = 1;
+  renderAuthChrome();
 }
+
+/* ---------- Login and sign-up screen: headings, mascots and sign-up steps ---------- */
+let authStep = 1;
+const AUTH_COPY = {
+  login: { kicker: "WELCOME BACK", title: "Log in to FoldBook", intro: "Use your matric or JAMB number and your password.", line: "Welcome back! Your streak has been waiting for you. 🔥", state: "greet" },
+  signup: { kicker: "NEW HERE", title: "Create your study profile", intro: "Three quick steps and Dr. Eco will build a study path for your level.", line: "Let’s set you up. It takes about a minute.", state: "greet" },
+  forgot: { kicker: "PASSWORD HELP", title: "Forgot your password?", intro: "Enter your number and the recovery email on your account. We’ll email you a 6-digit code.", line: "No wahala, we’ll get you back in. 🔑", state: "encourage" },
+  reset: { kicker: "PASSWORD HELP", title: "Choose a new password", intro: "Enter the code from your email and pick a new password.", line: "Almost there. Pick a password you’ll remember.", state: "encourage" },
+};
+const SIGNUP_STEP_LINES = ["", "Let’s set you up. It takes about a minute.", "Where should Dr. Eco send your study reminders?", "Last step. Keep your password safe! 🔒"];
+function preferredAuthMode() {
+  try { return window.localStorage.getItem(RETURNING_DEVICE_KEY) ? "login" : "signup"; } catch { return "signup"; }
+}
+function focusFirstAuthField() {
+  const field = [...appAuthForm.querySelectorAll("input, select")].find((input) => input.offsetParent && !input.disabled && input.type !== "checkbox");
+  field?.focus({ preventScroll: true });
+}
+function renderAuthChrome() {
+  const admin = !adminPasscodeGroup.hidden;
+  const copy = AUTH_COPY[authMode] || AUTH_COPY.login;
+  const stepped = authMode === "signup" && !admin;
+  document.querySelector("#authKicker").textContent = admin ? "ADMIN ACCESS" : copy.kicker;
+  document.querySelector("#authTitle").textContent = admin ? "Admin sign-in" : copy.title;
+  if (!pendingResultsAfterAuth) document.querySelector("#authIntroCopy").textContent = admin ? "Enter the admin passcode to open the portal." : copy.intro;
+  document.querySelector("#authMascotLine").textContent = stepped ? SIGNUP_STEP_LINES[authStep] : copy.line;
+  document.querySelector("#authSteps").hidden = !stepped;
+  document.querySelector("#authRegistrationHelp").hidden = authMode !== "signup";
+  document.querySelectorAll("#authSteps li").forEach((item) => {
+    const step = Number(item.dataset.step);
+    item.classList.toggle("is-current", step === authStep);
+    item.classList.toggle("is-done", step < authStep);
+  });
+  appAuthForm.querySelectorAll("[data-auth-step]").forEach((group) => {
+    group.classList.toggle("auth-step-off", stepped && Number(group.dataset.authStep) !== authStep);
+  });
+  if (stepped) document.querySelector("#authSubmit").textContent = authStep < 3 ? "Continue" : "Create account";
+  document.querySelector("#backToLanding").textContent = stepped && authStep > 1 ? "Back" : "Back to home";
+  const foldo = document.querySelector("#authFoldo");
+  if (foldo && !document.querySelector("#authView").hidden && foldo.offsetWidth >= 96) {
+    window.playFoldBookMascot?.("foldo", copy.state, foldo, { flameDays: studyProgress?.streak || 0 });
+  }
+}
+function setAuthStep(step) {
+  authStep = Math.max(1, Math.min(3, step));
+  setAuthStatus("");
+  renderAuthChrome();
+  focusFirstAuthField();
+}
+// Check only the fields on the current sign-up step before moving on.
+function authStepProblem(step) {
+  if (step === 1) {
+    if (normalizeNameTokens(document.querySelector("#authFullName").value).length < 2) return ["#authFullName", "Enter your first name and surname."];
+    if (!normalizeStudentIdentifier(document.querySelector("#authRegNo").value)) return ["#authRegNo", "Enter a valid JAMB number (14 characters) or UNIUYO matric number."];
+  }
+  if (step === 2) {
+    if (!normalizeWhatsAppPhone(document.querySelector("#authWhatsapp").value)) return ["#authWhatsapp", "Enter a Nigerian WhatsApp number, like 08012345678."];
+    if (!normalizeAuthEmail(document.querySelector("#authEmail").value)) return ["#authEmail", "Enter an email address you can open."];
+  }
+  return null;
+}
+// Runs before the normal submit handler: in sign-up steps 1 and 2, "Continue" moves on.
+document.addEventListener("submit", (event) => {
+  if (event.target !== appAuthForm || authMode !== "signup" || !adminPasscodeGroup.hidden || authStep >= 3) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  const problem = authStepProblem(authStep);
+  if (problem) { setAuthStatus(problem[1]); document.querySelector(problem[0]).focus(); return; }
+  setAuthStep(authStep + 1);
+}, true);
+document.querySelectorAll(".auth-reveal").forEach((button) => button.addEventListener("click", () => {
+  const input = document.querySelector(`#${button.dataset.reveal}`);
+  const show = input.type === "password";
+  input.type = show ? "text" : "password";
+  button.textContent = show ? "Hide" : "Show";
+  button.setAttribute("aria-label", show ? "Hide password" : "Show password");
+}));
 function setAuthStatus(message, kind = "error") {
   const status = document.querySelector("#authStatus");
   status.textContent = message;
@@ -7794,13 +7955,19 @@ function startResendCooldown(seconds = 60) {
   }, 1000);
 }
 
-// Step 1: ask the server to WhatsApp a reset code. The server answers the same way
+// Step 1: ask the server to email a reset code. The server answers the same way
 // whether or not the account exists, so this message is deliberately non-committal.
 async function requestPasswordResetCode({ resend = false } = {}) {
   const registration = normalizeStudentIdentifier(document.querySelector("#authRegNo").value);
+  const email = normalizeAuthEmail(document.querySelector("#authEmail").value);
   if (!registration) {
     setAuthStatus("Enter a valid JAMB number or UNIUYO matric number.");
     document.querySelector("#authRegNo").focus();
+    return;
+  }
+  if (!email) {
+    setAuthStatus("Enter the recovery email address on your FoldBook account.");
+    document.querySelector("#authEmail").focus();
     return;
   }
   const submitButton = document.querySelector("#authSubmit");
@@ -7813,12 +7980,12 @@ async function requestPasswordResetCode({ resend = false } = {}) {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode: "forgot-password", registration }),
+      body: JSON.stringify({ mode: "forgot-password", registration, email }),
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.error || "Could not start a password reset.");
     if (!resend) setAuthMode("reset");
-    setAuthStatus(result.message || "If an account matches, a reset code is on its way to its WhatsApp number.", "success");
+    setAuthStatus(result.message || "If those details match an account, a reset code is on its way to that email inbox.", "success");
     startResendCooldown();
     document.querySelector("#authResetCode").focus();
   } catch (error) {
@@ -7840,7 +8007,7 @@ async function submitPasswordReset() {
     return;
   }
   if (!/^\d{6}$/.test(code)) {
-    setAuthStatus("Enter the 6-digit code from your WhatsApp message.");
+    setAuthStatus("Enter the 6-digit code from your email.");
     document.querySelector("#authResetCode").focus();
     return;
   }
@@ -7951,6 +8118,12 @@ async function handleAuthSubmit(fullName, regNumber, phone, passcode, password) 
     document.querySelector("#authMarketingConsent").focus();
     return;
   }
+  const signupEmail = normalizeAuthEmail(document.querySelector("#authEmail").value);
+  if (authMode === "signup" && !signupEmail) {
+    status.textContent = "Enter a valid email address. It is how you reset your password if you forget it.";
+    document.querySelector("#authEmail").focus();
+    return;
+  }
 
   const submitButton = document.querySelector("#authSubmit");
   submitButton.disabled = true;
@@ -7965,6 +8138,7 @@ async function handleAuthSubmit(fullName, regNumber, phone, passcode, password) 
         fullName: name,
         registration,
         phone: rawPhone,
+        email: authMode === "signup" ? signupEmail : undefined,
         level,
         password,
         consent: document.querySelector("#authMarketingConsent").checked,
@@ -8073,8 +8247,11 @@ async function restoreAuthSession() {
   let savedSession;
   try {
     savedSession = window.localStorage.getItem(AUTH_SESSION_KEY);
-    if (!savedSession) return false;
-    const localSession = JSON.parse(savedSession);
+    // Phones (iPhones especially) can clear site storage while the sign-in cookie is still
+    // valid, so a missing local copy is not a reason to send the student to the login page:
+    // the server is asked either way.
+    let localSession = {};
+    try { localSession = savedSession ? JSON.parse(savedSession) || {} : {}; } catch { localSession = {}; }
     if (localSession.role === "admin") {
       window.localStorage.removeItem(AUTH_SESSION_KEY);
       return false;
@@ -8093,10 +8270,11 @@ async function restoreAuthSession() {
       }
       if (attempt < 2) await new Promise((resolve) => window.setTimeout(resolve, 1200 * (attempt + 1)));
     }
+    if (!serverStudent && !savedSession) return false;
     const session = { ...localSession, ...(serverStudent || {}), role: "student" };
     const registration = normalizeStudentIdentifier(session.registration || "");
-    if (session.role !== "student" || !registration || typeof session.name !== "string"
-      || normalizeNameTokens(session.name).length < 2) {
+    // A name with one word (some accounts have one) must not sign the student out.
+    if (!registration || typeof session.name !== "string" || !session.name.trim()) {
       window.localStorage.removeItem(AUTH_SESSION_KEY);
       return false;
     }

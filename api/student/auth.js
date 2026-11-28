@@ -3,13 +3,15 @@
 const { createHmac, randomBytes, randomInt, scrypt, timingSafeEqual } = require("node:crypto");
 const { promisify } = require("node:util");
 const { isSameOrigin } = require("../../lib/admin-auth.js");
+// Used through the module object so tests can swap sendEmail without touching real SMTP.
+const mailer = require("../../lib/email.js");
 
 const scryptAsync = promisify(scrypt);
 const COOKIE = "foldbook_student";
 const SESSION_SECONDS = 60 * 60 * 24 * 30;
 const PASSWORD_BYTES = 64;
 const RESET_CODE_MINUTES = 10;
-const RESET_REQUEST_MESSAGE = "If a FoldBook account matches that number, a 6-digit reset code is on its way to the WhatsApp number saved on it. It can take up to a minute. If you asked a few minutes ago, use that code or wait before asking again.";
+const RESET_REQUEST_MESSAGE = "If that JAMB or matric number matches the recovery email you entered, a 6-digit reset code is on its way to that inbox. It can take a minute, so check your spam folder too. If you asked a few minutes ago, use that code or wait before asking again.";
 
 function isSameOriginRequest(request) {
   if (request.headers.origin) return isSameOrigin(request);
@@ -66,6 +68,19 @@ function normalizePhone(value) {
   const digits = String(value || "").replace(/\D/g, "");
   const formatted = digits.startsWith("0") ? `234${digits.slice(1)}` : digits;
   return /^234[789]\d{9}$/.test(formatted) ? formatted : "";
+}
+
+function normalizeEmail(value) {
+  const email = String(value || "").trim().toLowerCase();
+  return email.length <= 254 && /^[^@\s,;()<>"]+@[^@\s,;()<>"]+\.[^@\s,;()<>"]+$/.test(email) ? email : "";
+}
+
+// "ada.obi@gmail.com" -> "a•••@gmail.com": enough for a student to recognise it, not enough to harvest it.
+function maskEmail(value) {
+  const email = normalizeEmail(value);
+  if (!email) return "";
+  const [name, domain] = email.split("@");
+  return `${name.slice(0, 1)}•••@${domain}`;
 }
 
 function normalizeLevel(value) {
@@ -165,7 +180,10 @@ async function findAccountByIdentifier(config, registration) {
 }
 
 module.exports = async function studentAuthHandler(request, response) {
-  if (!isSameOriginRequest(request)) return sendJson(response, 403, { error: "A same-origin request is required." });
+  // Reading your own session (GET) only returns your own profile to your own cookie, so it
+  // doesn't need the same-origin check. Some older Android browsers and in-app browsers send
+  // neither Origin nor Sec-Fetch-Site on same-site GETs, and failed it on every app start.
+  if (request.method !== "GET" && !isSameOriginRequest(request)) return sendJson(response, 403, { error: "A same-origin request is required." });
   const secret = sessionSecret();
   const config = restConfig();
   if (!secret || !config) return sendJson(response, 503, { error: "Student sign-in is not configured on the server." });
@@ -317,6 +335,47 @@ module.exports = async function studentAuthHandler(request, response) {
     }
   }
 
+  if (mode === "recovery-email-status") {
+    const session = readSession(request);
+    if (!session) return sendJson(response, 401, { error: "Please sign in again." });
+    try {
+      const rows = await supabaseRequest(config, "student_accounts",
+        `?select=email&reg_number=eq.${encodeURIComponent(session.registration)}&limit=1`);
+      return sendJson(response, 200, { recoveryEmail: maskEmail(rows?.[0]?.email) });
+    } catch (error) {
+      console.error("Recovery email status failed:", error.message);
+      return sendJson(response, 503, { error: "Could not check your recovery email right now." });
+    }
+  }
+
+  if (mode === "set-recovery-email") {
+    const session = readSession(request);
+    const email = normalizeEmail(payload.email);
+    const password = typeof payload.password === "string" ? payload.password : "";
+    if (!session) return sendJson(response, 401, { error: "Please sign in again before changing your recovery email." });
+    if (!email) return sendJson(response, 400, { error: "Enter a valid email address." });
+    if (password.length < 8 || password.length > 128) return sendJson(response, 400, { error: "Enter your current password to confirm this change." });
+    try {
+      const rows = await supabaseRequest(config, "student_accounts",
+        `?select=reg_number,password_salt,password_hash&reg_number=eq.${encodeURIComponent(session.registration)}&limit=1`);
+      const account = rows?.[0];
+      if (!account) return sendJson(response, 401, { error: "Your student account could not be found. Please sign in again." });
+      const candidate = await derivePassword(password, account.password_salt);
+      const stored = Buffer.from(account.password_hash, "hex");
+      if (candidate.length !== stored.length || !timingSafeEqual(candidate, stored)) {
+        return sendJson(response, 401, { error: "That password does not match this account." });
+      }
+      await supabaseRequest(config, "student_accounts", `?reg_number=eq.${encodeURIComponent(session.registration)}`, {
+        method: "PATCH",
+        body: { email, updated_at: new Date().toISOString() },
+      });
+      return sendJson(response, 200, { ok: true, recoveryEmail: maskEmail(email) });
+    } catch (error) {
+      console.error("Could not save the recovery email:", error.message);
+      return sendJson(response, 503, { error: "Could not save your recovery email right now. Please try again shortly." });
+    }
+  }
+
   if (mode === "change-level") {
     const session = readSession(request);
     const level = normalizeLevel(payload.level);
@@ -368,23 +427,48 @@ module.exports = async function studentAuthHandler(request, response) {
 
   if (mode === "forgot-password") {
     const identifier = normalizeStudentIdentifier(payload.registration);
+    const email = normalizeEmail(payload.email);
     if (!identifier) {
       return sendJson(response, 400, { error: "Enter a valid JAMB registration number (14 characters) or UNIUYO matric number." });
+    }
+    if (!email) return sendJson(response, 400, { error: "Enter the recovery email address on your FoldBook account." });
+    // Checked before any account lookup, so a missing mail setup is the same for everyone.
+    if (!mailer.emailConfigured()) {
+      return sendJson(response, 503, { error: "Password reset email isn't set up yet. Please contact the FoldBook team." });
     }
     try {
       const account = await findAccountByIdentifier(config, identifier.registration);
       if (account) {
         const code = String(randomInt(100000, 1000000));
-        // The browser gets the same answer whether or not an account exists, or the
-        // request was rate limited, so this form cannot be used to look up students.
-        await supabaseRequest(config, "rpc/request_foldbook_student_password_reset", "", {
+        // The browser gets the same answer whether or not the account or email matches, or
+        // the request was rate limited, so this form cannot be used to look up students.
+        const outcome = await supabaseRequest(config, "rpc/request_foldbook_student_password_reset", "", {
           method: "POST",
           body: {
             p_reg_number: account.reg_number,
+            p_email: email,
             p_code_hash: resetCodeHash(account.reg_number, code),
-            p_message: `FoldBook password reset code: ${code}\n\nIt expires in ${RESET_CODE_MINUTES} minutes. If you did not ask to reset your password, ignore this message and do not share the code with anyone.`,
           },
         });
+        if (outcome === "queued") {
+          try {
+            await mailer.sendEmail({
+              to: email,
+              subject: "Your FoldBook password reset code",
+              text: `Your FoldBook password reset code is ${code}.\n\nIt expires in ${RESET_CODE_MINUTES} minutes and works once. If you did not ask to reset your password, ignore this email and do not share the code with anyone.`,
+              html: mailer.emailLayout({
+                heading: "Reset your FoldBook password",
+                lines: [
+                  `Use this code to choose a new password. It expires in ${RESET_CODE_MINUTES} minutes and works once.`,
+                ],
+                code,
+              }) + "<p style=\"max-width:520px;margin:0 auto;padding:0 24px;font-size:13px;color:#8a8494\">If you did not ask to reset your password, ignore this email and do not share the code with anyone.</p>",
+            });
+          } catch (mailError) {
+            // Do not tell the browser: a failure here would reveal that the account exists.
+            console.error("Student password reset email failed:", mailError.message);
+          }
+        }
       }
       return sendJson(response, 200, { ok: true, message: RESET_REQUEST_MESSAGE });
     } catch (error) {
@@ -400,7 +484,7 @@ module.exports = async function studentAuthHandler(request, response) {
     if (!identifier) {
       return sendJson(response, 400, { error: "Enter a valid JAMB registration number (14 characters) or UNIUYO matric number." });
     }
-    if (!/^\d{6}$/.test(code)) return sendJson(response, 400, { error: "Enter the 6-digit code sent to your WhatsApp." });
+    if (!/^\d{6}$/.test(code)) return sendJson(response, 400, { error: "Enter the 6-digit code from your email." });
     if (newPassword.length < 8 || newPassword.length > 128) {
       return sendJson(response, 400, { error: "Use a new password between 8 and 128 characters." });
     }
@@ -420,7 +504,7 @@ module.exports = async function studentAuthHandler(request, response) {
         },
       });
       if (outcome === "ok") return sendJson(response, 200, { ok: true });
-      if (outcome === "invalid") return sendJson(response, 400, { error: "That code is not right. Check the WhatsApp message and try again." });
+      if (outcome === "invalid") return sendJson(response, 400, { error: "That code is not right. Check the email and try again." });
       return sendJson(response, 400, expired);
     } catch (error) {
       console.error("Student password reset failed:", error.message);
@@ -441,6 +525,10 @@ module.exports = async function studentAuthHandler(request, response) {
       const fullName = typeof payload.fullName === "string" ? payload.fullName.trim().replace(/\s+/g, " ") : "";
       const phone = normalizePhone(payload.phone);
       const level = normalizeLevel(payload.level);
+      const email = normalizeEmail(payload.email);
+      if (!email) {
+        return sendJson(response, 400, { error: "Enter a valid email address. It is how you reset your password if you forget it." });
+      }
       if (fullName.length < 3 || fullName.length > 120 || nameTokens(fullName).length < 2 || !phone || !level || payload.consent !== true) {
         return sendJson(response, 400, { error: "Enter your full name, level, a valid WhatsApp number, and agree to study reminders." });
       }
@@ -467,6 +555,16 @@ module.exports = async function studentAuthHandler(request, response) {
           p_password_hash: hash,
         },
       });
+      // Saved separately so the existing create-account function and signature stay as they are.
+      try {
+        await supabaseRequest(config, "student_accounts", `?reg_number=eq.${encodeURIComponent(registration)}`, {
+          method: "PATCH",
+          body: { email },
+        });
+      } catch (emailError) {
+        // The account exists; the student can add the email later from Profile.
+        console.error("Could not save the signup recovery email:", emailError.message);
+      }
       response.setHeader("Set-Cookie", cookie(encodeSession(account), request));
       return sendJson(response, 200, {
         student: {
@@ -520,3 +618,4 @@ module.exports.readSession = readSession;
 module.exports.isSameOriginRequest = isSameOriginRequest;
 module.exports.sendJson = sendJson;
 module.exports.normalizeStudentIdentifier = normalizeStudentIdentifier;
+module.exports.normalizeEmail = normalizeEmail;

@@ -1,13 +1,16 @@
--- Forgot / reset password for student accounts, delivered by WhatsApp.
+-- Forgot / reset password for student accounts, delivered by EMAIL.
 -- Apply once in the FoldBook Supabase SQL Editor (after student_auth.sql and
--- student_jamb_onboarding.sql) BEFORE deploying the matching api/student/auth.js and
--- worker/worker.js changes.
+-- student_jamb_onboarding.sql). Safe to run more than once, and safe to run after the
+-- earlier WhatsApp version of this file: it removes the WhatsApp outbox.
 --
--- Student accounts only store a WhatsApp number (no email), so the 6-digit reset code is
--- queued in a private outbox that the Render WhatsApp worker drains and sends.
+-- Students add a recovery email at signup (or later in Profile). A reset code is only
+-- issued when the typed email matches the one saved on the account, and the API emails it.
 
 alter table public.student_accounts
+  add column if not exists email text;
+alter table public.student_accounts
   add column if not exists password_changed_at timestamptz;
+create index if not exists student_accounts_email_idx on public.student_accounts (lower(email));
 
 -- ---------------------------------------------------------------------------
 -- One row per issued reset code. Only a keyed hash of the code is stored.
@@ -30,90 +33,35 @@ revoke all on public.student_password_resets from public, anon, authenticated;
 grant all on public.student_password_resets to service_role;
 
 -- ---------------------------------------------------------------------------
--- Private outbox of one-off WhatsApp text messages for the Render worker.
--- The body (which contains the code) is erased as soon as the job is processed.
+-- The earlier WhatsApp version queued codes in an outbox for the Render bot. Not used now.
 -- ---------------------------------------------------------------------------
-create table if not exists public.whatsapp_bot_outbox (
-  id bigint generated always as identity primary key,
-  phone_number text not null check (phone_number ~ '^234[789][0-9]{9}$'),
-  kind text not null check (kind in ('password_reset')),
-  body text,
-  status text not null default 'queued' check (status in ('queued', 'processing', 'sent', 'failed')),
-  detail text,
-  created_at timestamptz not null default now(),
-  expires_at timestamptz not null,
-  processing_at timestamptz,
-  processed_at timestamptz
-);
-
-create index if not exists whatsapp_bot_outbox_pending_idx
-  on public.whatsapp_bot_outbox (id)
-  where status in ('queued', 'processing');
-
-alter table public.whatsapp_bot_outbox enable row level security;
-revoke all on public.whatsapp_bot_outbox from public, anon, authenticated;
-grant all on public.whatsapp_bot_outbox to service_role;
-grant usage, select on sequence public.whatsapp_bot_outbox_id_seq to service_role;
-
--- Atomically claim the next job. Jobs whose code has already expired are failed and
--- scrubbed instead of being sent, and a job abandoned mid-send by a worker restart is
--- picked up again after two minutes.
-create or replace function public.claim_whatsapp_bot_outbox()
-returns setof public.whatsapp_bot_outbox
-language plpgsql
-security invoker
-set search_path = pg_catalog, public
-as $$
-begin
-  update public.whatsapp_bot_outbox
-  set status = 'failed', detail = 'Expired before it could be sent.', body = null, processed_at = now()
-  where status in ('queued', 'processing') and expires_at <= now();
-
-  return query
-  with next_job as (
-    select id
-    from public.whatsapp_bot_outbox
-    where status = 'queued'
-       or (status = 'processing' and processing_at < now() - interval '2 minutes')
-    order by id
-    for update skip locked
-    limit 1
-  )
-  update public.whatsapp_bot_outbox as queued
-  set status = 'processing', processing_at = now()
-  from next_job
-  where queued.id = next_job.id
-  returning queued.*;
-end;
-$$;
-
-revoke execute on function public.claim_whatsapp_bot_outbox() from public, anon, authenticated;
-grant execute on function public.claim_whatsapp_bot_outbox() to service_role;
+drop function if exists public.claim_whatsapp_bot_outbox();
+drop table if exists public.whatsapp_bot_outbox;
 
 -- ---------------------------------------------------------------------------
--- Issue a reset code: rate limit, store the hash, queue the WhatsApp message.
+-- Issue a reset code when the account number and the recovery email both match.
 -- Returns 'queued', 'rate_limited' or 'unknown'. The API never tells the browser which.
 -- ---------------------------------------------------------------------------
-create or replace function public.request_foldbook_student_password_reset(
+drop function if exists public.request_foldbook_student_password_reset(text, text, text);
+create function public.request_foldbook_student_password_reset(
   p_reg_number text,
-  p_code_hash text,
-  p_message text
+  p_email text,
+  p_code_hash text
 ) returns text
 language plpgsql
 set search_path = pg_catalog, public
 as $$
 declare
-  v_phone text;
+  v_email text;
   v_recent integer;
 begin
-  -- Housekeeping so these tables never grow without bound.
+  -- Housekeeping so the table never grows without bound.
   delete from public.student_password_resets where created_at < now() - interval '1 day';
-  delete from public.whatsapp_bot_outbox where created_at < now() - interval '1 day';
 
-  select phone_number into v_phone
+  select email into v_email
   from public.student_accounts
   where reg_number = p_reg_number;
-  if v_phone is null or v_phone !~ '^234[789][0-9]{9}$' then
+  if v_email is null or lower(trim(v_email)) <> lower(trim(p_email)) then
     return 'unknown';
   end if;
 
@@ -125,8 +73,7 @@ begin
     return 'rate_limited';
   end if;
 
-  -- ...and a global ceiling, so the form cannot be used to spam many students' phones
-  -- (or get the bot's WhatsApp number flagged).
+  -- ...and a global ceiling, so the form cannot flood inboxes or use up the daily email limit.
   select count(*) into v_recent
   from public.student_password_resets
   where created_at > now() - interval '15 minutes';
@@ -141,9 +88,6 @@ begin
 
   insert into public.student_password_resets (reg_number, code_hash, expires_at)
   values (p_reg_number, p_code_hash, now() + interval '10 minutes');
-
-  insert into public.whatsapp_bot_outbox (phone_number, kind, body, expires_at)
-  values (v_phone, 'password_reset', p_message, now() + interval '10 minutes');
 
   return 'queued';
 end;
@@ -207,3 +151,5 @@ revoke all on function public.reset_foldbook_student_password(text, text, text, 
   from public, anon, authenticated;
 grant execute on function public.reset_foldbook_student_password(text, text, text, text)
   to service_role;
+
+notify pgrst, 'reload schema';

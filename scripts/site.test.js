@@ -1611,15 +1611,18 @@ test("production preview serves public pages but keeps raw CSV and source files 
   assert.match((await apiResponse.json()).error, /GEMINI_API_KEY/);
 });
 
-test("student password reset sends a hashed WhatsApp code, locks out guessing, and sets a new password", async () => {
+test("student password reset emails a hashed code only to the email on file, locks out guessing, and sets a new password", async () => {
   const crypto = require("node:crypto");
   const studentAuthHandler = require("../api/student/auth.js");
+  const mailer = require("../lib/email.js");
   const secret = "test-session-secret-that-is-at-least-32-bytes";
   const saved = {
     secret: process.env.FOLDBOOK_ADMIN_SESSION_SECRET,
     url: process.env.SUPABASE_URL,
     key: process.env.SUPABASE_SERVICE_ROLE_KEY,
     fetch: global.fetch,
+    sendEmail: mailer.sendEmail,
+    emailConfigured: mailer.emailConfigured,
   };
   process.env.FOLDBOOK_ADMIN_SESSION_SECRET = secret;
   process.env.SUPABASE_URL = "https://fold-book-test.supabase.co";
@@ -1635,27 +1638,37 @@ test("student password reset sends a hashed WhatsApp code, locks out guessing, a
     level_change_count: 0,
     jamb_reg_number: "",
     matric_number: "25/SS/EC/001",
+    email: "Ada.Student@Example.com",
     password_salt: oldSalt,
     password_hash: derive("old-password-123", oldSalt).toString("hex"),
   };
 
   // In-memory stand-in for the Supabase REST + RPC surface, mirroring the SQL semantics.
-  const db = { codes: [], outbox: [], requestCalls: 0 };
+  const db = { codes: [], requestCalls: 0, patches: [] };
+  const sent = [];
+  let mailConfigured = true;
+  mailer.emailConfigured = () => mailConfigured;
+  mailer.sendEmail = async (message) => { sent.push(message); };
   const reply = (body) => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
   global.fetch = async (url, init = {}) => {
     const target = new URL(url);
-    if (target.pathname === "/rest/v1/student_accounts") {
-      return reply(target.searchParams.get("or").includes(account.reg_number) ? [account] : []);
-    }
     const body = init.body ? JSON.parse(init.body) : {};
+    if (target.pathname === "/rest/v1/student_accounts") {
+      if (init.method === "PATCH") { db.patches.push(body); Object.assign(account, body); return reply([]); }
+      if (target.searchParams.get("select") === "email") return reply([{ email: account.email }]);
+      const filter = target.searchParams.get("or");
+      if (filter) return reply(filter.includes(account.reg_number) ? [account] : []);
+      return reply([account]);
+    }
     if (target.pathname === "/rest/v1/rpc/request_foldbook_student_password_reset") {
       db.requestCalls += 1;
+      if (String(account.email).toLowerCase() !== String(body.p_email).trim().toLowerCase()) return reply("unknown");
       if (db.codes.filter((row) => row.reg === body.p_reg_number).length >= 3) return reply("rate_limited");
       for (const row of db.codes) if (row.reg === body.p_reg_number) row.used = true;
       db.codes.push({ reg: body.p_reg_number, hash: body.p_code_hash, attempts: 0, used: false });
-      db.outbox.push({ phone: account.phone_number, body: body.p_message });
       return reply("queued");
     }
+    if (target.pathname === "/rest/v1/rpc/create_foldbook_student_account") return reply(null);
     if (target.pathname === "/rest/v1/rpc/reset_foldbook_student_password") {
       const row = [...db.codes].reverse().find((entry) => entry.reg === body.p_reg_number && !entry.used);
       if (!row || row.attempts >= 5) return reply("expired");
@@ -1668,35 +1681,45 @@ test("student password reset sends a hashed WhatsApp code, locks out guessing, a
     return new Response("{}", { status: 404 });
   };
 
-  const call = async (body) => {
+  const call = async (body, cookie) => {
     const response = {
       headers: {}, status: 0,
       writeHead(status, headers) { this.status = status; Object.assign(this.headers, headers); },
       setHeader(name, value) { this.headers[name] = value; },
       end(text) { this.body = text; },
     };
-    await studentAuthHandler({ method: "POST", headers: { origin: "https://fold-book.example", host: "fold-book.example" }, body }, response);
+    const headers = { origin: "https://fold-book.example", host: "fold-book.example" };
+    if (cookie) headers.cookie = cookie;
+    await studentAuthHandler({ method: "POST", headers, body }, response);
     return { status: response.status, json: JSON.parse(response.body), cookie: response.headers["Set-Cookie"] };
   };
-  const latestCode = () => db.outbox.at(-1).body.match(/\b(\d{6})\b/)[1];
+  const latestCode = () => sent.at(-1).text.match(/\b(\d{6})\b/)[1];
+  const forgot = (registration, email) => call({ mode: "forgot-password", registration, email });
+  const goodEmail = "ada.student@example.com";
 
   try {
-    // Unknown and known accounts get the identical public answer.
-    const unknown = await call({ mode: "forgot-password", registration: "25/SS/EC/999" });
-    const known = await call({ mode: "forgot-password", registration: "25/SS/EC/001" });
+    // Wrong email, wrong account and the real pair all get the identical public answer.
+    const wrongEmail = await forgot("25/SS/EC/001", "someone.else@example.com");
+    const unknown = await forgot("25/SS/EC/999", goodEmail);
+    const known = await forgot("25/SS/EC/001", goodEmail);
+    assert.equal(wrongEmail.status, 200);
     assert.equal(unknown.status, 200);
     assert.deepEqual(known.json, unknown.json);
-    assert.equal(db.requestCalls, 1, "Only the real account queues a code.");
+    assert.deepEqual(wrongEmail.json, unknown.json);
+    assert.equal(sent.length, 1, "Only the matching account and email gets a message.");
+    assert.equal(db.codes.length, 1);
 
-    // The code goes to WhatsApp only: never in the HTTP response, and only hashed in storage.
+    // The code is emailed to the address typed (case-insensitive match), never in the HTTP
+    // response, and only hashed in storage.
     const code = latestCode();
+    assert.equal(sent[0].to, goodEmail);
     assert.ok(!JSON.stringify(known.json).includes(code));
-    assert.equal(db.outbox[0].phone, "2348012345678");
     assert.ok(!db.codes[0].hash.includes(code));
     assert.equal(db.codes[0].hash, crypto.createHmac("sha256", secret).update(`student-password-reset:25/SS/EC/001:${code}`).digest("hex"));
 
     // Bad input is rejected before touching the database.
-    assert.equal((await call({ mode: "forgot-password", registration: "not-a-number" })).status, 400);
+    assert.equal((await forgot("not-a-number", goodEmail)).status, 400);
+    assert.equal((await forgot("25/SS/EC/001", "not-an-email")).status, 400);
     assert.equal((await call({ mode: "reset-password", registration: "25/SS/EC/001", code: "12ab56", newPassword: "new-password-456" })).status, 400);
     assert.equal((await call({ mode: "reset-password", registration: "25/SS/EC/001", code, newPassword: "short" })).status, 400);
 
@@ -1714,7 +1737,7 @@ test("student password reset sends a hashed WhatsApp code, locks out guessing, a
     assert.equal(derive("old-password-123", account.password_salt).toString("hex"), account.password_hash, "Password is unchanged after a lockout.");
 
     // Asking again issues a fresh code. The right code sets the new password exactly once.
-    await call({ mode: "forgot-password", registration: "25/SS/EC/001" });
+    await forgot("25/SS/EC/001", goodEmail);
     const freshCode = latestCode();
     const reset = await call({ mode: "reset-password", registration: "25/SS/EC/001", code: freshCode, newPassword: "new-password-456" });
     assert.equal(reset.status, 200);
@@ -1730,12 +1753,50 @@ test("student password reset sends a hashed WhatsApp code, locks out guessing, a
     assert.match(login.cookie, /HttpOnly/);
 
     // Hitting the per-account rate limit still looks identical to the browser.
-    await call({ mode: "forgot-password", registration: "25/SS/EC/001" });
-    const limited = await call({ mode: "forgot-password", registration: "25/SS/EC/001" });
+    await forgot("25/SS/EC/001", goodEmail);
+    const limited = await forgot("25/SS/EC/001", goodEmail);
     assert.equal(limited.status, 200);
     assert.deepEqual(limited.json, unknown.json);
+
+    // An email delivery failure must not reveal that the account exists.
+    mailer.sendEmail = async () => { throw new Error("SMTP down"); };
+    db.codes.length = 0;
+    const mailFailure = await forgot("25/SS/EC/001", goodEmail);
+    assert.equal(mailFailure.status, 200);
+    assert.deepEqual(mailFailure.json, unknown.json);
+
+    // Missing mail setup is reported the same way to everyone, before any lookup.
+    mailConfigured = false;
+    const lookupsBefore = db.requestCalls;
+    assert.equal((await forgot("25/SS/EC/001", goodEmail)).status, 503);
+    assert.equal((await forgot("25/SS/EC/999", goodEmail)).status, 503);
+    assert.equal(db.requestCalls, lookupsBefore);
+    mailConfigured = true;
+
+    // Signup requires a valid email and saves it on the new account.
+    assert.equal((await call({ mode: "signup", registration: "25/SS/EC/002", password: "new-password-456", fullName: "New Student", phone: "08012345678", level: "100L", consent: true })).status, 400);
+    assert.equal((await call({ mode: "signup", registration: "25/SS/EC/002", password: "new-password-456", fullName: "New Student", phone: "08012345678", level: "100L", consent: true, email: "nope" })).status, 400);
+    const created = await call({ mode: "signup", registration: "25/SS/EC/002", password: "new-password-456", fullName: "New Student", phone: "08012345678", level: "100L", consent: true, email: " New.Student@Example.com " });
+    assert.equal(created.status, 200);
+    assert.deepEqual(db.patches.at(-1), { email: "new.student@example.com" });
+
+    // Signed-in students can see a masked recovery email and change it only with their password.
+    const cookieHeader = login.cookie.split(";")[0];
+    const status = await call({ mode: "recovery-email-status" }, cookieHeader);
+    assert.equal(status.status, 200);
+    assert.match(status.json.recoveryEmail, /^\w•••@example\.com$/);
+    assert.ok(!JSON.stringify(status.json).includes("student"), "The full address is never returned.");
+    assert.equal((await call({ mode: "recovery-email-status" })).status, 401, "Anonymous callers cannot read it.");
+    assert.equal((await call({ mode: "set-recovery-email", email: "fresh@example.com", password: "new-password-456" })).status, 401);
+    assert.equal((await call({ mode: "set-recovery-email", email: "fresh@example.com", password: "wrong-password-000" }, cookieHeader)).status, 401);
+    assert.equal((await call({ mode: "set-recovery-email", email: "bad", password: "new-password-456" }, cookieHeader)).status, 400);
+    const changed = await call({ mode: "set-recovery-email", email: "Fresh@Example.com", password: "new-password-456" }, cookieHeader);
+    assert.equal(changed.status, 200);
+    assert.equal(account.email, "fresh@example.com");
   } finally {
     global.fetch = saved.fetch;
+    mailer.sendEmail = saved.sendEmail;
+    mailer.emailConfigured = saved.emailConfigured;
     for (const [name, value] of [["FOLDBOOK_ADMIN_SESSION_SECRET", saved.secret], ["SUPABASE_URL", saved.url], ["SUPABASE_SERVICE_ROLE_KEY", saved.key]]) {
       if (value === undefined) delete process.env[name];
       else process.env[name] = value;
@@ -1743,15 +1804,12 @@ test("student password reset sends a hashed WhatsApp code, locks out guessing, a
   }
 });
 
-test("WhatsApp worker drains the password-reset outbox and erases the code afterwards", () => {
-  const workerSource = fs.readFileSync(path.join(root, "worker", "worker.js"), "utf8");
-  assert.match(workerSource, /rpc\("claim_whatsapp_bot_outbox"\)/);
-  assert.match(workerSource, /sendMessage\(`\$\{job\.phone_number\}@s\.whatsapp\.net`, \{ text: job\.body \}\)/);
-  assert.match(workerSource, /update\(\{ status, detail, body: null/, "The message body (with the live code) is wiped after sending.");
-  assert.doesNotMatch(workerSource, /console\.(log|warn|error)\([^)]*job\.body/, "The code is never logged.");
+test("password reset SQL keeps its tables private and the worker no longer carries reset code", () => {
   const sql = fs.readFileSync(path.join(root, "supabase", "student_password_reset.sql"), "utf8");
-  for (const table of ["student_password_resets", "whatsapp_bot_outbox"]) {
-    assert.match(sql, new RegExp(`alter table public\\.${table} enable row level security`));
-    assert.match(sql, new RegExp(`revoke all on public\\.${table} from public, anon, authenticated`));
-  }
+  assert.match(sql, /alter table public\.student_password_resets enable row level security/);
+  assert.match(sql, /revoke all on public\.student_password_resets from public, anon, authenticated/);
+  assert.match(sql, /add column if not exists email text/);
+  assert.doesNotMatch(sql, /create table[^;]*whatsapp_bot_outbox/i, "Reset codes are not queued through WhatsApp.");
+  const workerSource = fs.readFileSync(path.join(root, "worker", "worker.js"), "utf8");
+  assert.doesNotMatch(workerSource, /outbox/i);
 });
