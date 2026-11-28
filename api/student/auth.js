@@ -180,7 +180,10 @@ async function findAccountByIdentifier(config, registration) {
 }
 
 module.exports = async function studentAuthHandler(request, response) {
-  if (!isSameOriginRequest(request)) return sendJson(response, 403, { error: "A same-origin request is required." });
+  // Reading your own session (GET) only returns your own profile to your own cookie, so it
+  // doesn't need the same-origin check. Some older Android browsers and in-app browsers send
+  // neither Origin nor Sec-Fetch-Site on same-site GETs, and failed it on every app start.
+  if (request.method !== "GET" && !isSameOriginRequest(request)) return sendJson(response, 403, { error: "A same-origin request is required." });
   const secret = sessionSecret();
   const config = restConfig();
   if (!secret || !config) return sendJson(response, 503, { error: "Student sign-in is not configured on the server." });

@@ -2404,6 +2404,7 @@ function showStage(stage, updateHash = true) {
   document.dispatchEvent(new CustomEvent("foldbook:stage", { detail: { stage } }));
   if (updateHash) window.location.hash = `#${stage}`;
   if (typeof window.scrollTo === "function") window.scrollTo(0, 0);
+  if (stage === "authView") { try { renderAuthChrome(); } catch { /* screen setup runs later at startup */ } }
 }
 
 // Live quizzes: student play, preview, Quiz Studio list and host screen live in assets/js/live-quiz.js.
@@ -7645,9 +7646,11 @@ function loadSavedStudentProfile(registration) {
   }
 }
 
+const RETURNING_DEVICE_KEY = "foldBook.hasSignedIn";
 function persistAuthSession() {
   if (!currentStudent || !S.user) return;
   try {
+    window.localStorage.setItem(RETURNING_DEVICE_KEY, "1");
     window.localStorage.setItem(studentProfileStorageKey(currentStudent.registration), JSON.stringify({
       avatarUrl: S.user.avatarUrl || "",
       avatarLottie: S.user.avatarLottie || "",
@@ -7763,23 +7766,25 @@ loadMyResultsButton.addEventListener("click", () => void loadMyResults());
 
 document.querySelector("#landingCheckResults").addEventListener("click", () => {
   pendingResultsAfterAuth = true;
-  setAuthMode("signup");
+  setAuthMode(preferredAuthMode());
   document.querySelector("#authStatus").textContent = "Create an account or log in to open your private results page.";
   adminPasscodeGroup.hidden = true;
   adminPasscodeInput.value = "";
   showStage("authView");
-  document.querySelector("#authFullName").focus();
+  focusFirstAuthField();
 });
 
 document.querySelector("#launchApp").addEventListener("click", () => {
   document.querySelector("#authStatus").textContent = "";
-  setAuthMode("signup");
+  setAuthMode(preferredAuthMode());
   adminPasscodeGroup.hidden = true;
   adminPasscodeInput.value = "";
   showStage("authView");
-  document.querySelector("#authFullName").focus();
+  focusFirstAuthField();
 });
 document.querySelector("#backToLanding").addEventListener("click", () => {
+  // In sign-up, Back steps back through the form before leaving it.
+  if (authMode === "signup" && authStep > 1 && adminPasscodeGroup.hidden) { setAuthStep(authStep - 1); return; }
   pendingResultsAfterAuth = false;
   showStage("landingView");
 });
@@ -7842,7 +7847,85 @@ function setAuthMode(mode) {
     document.querySelector("#authResendCode").textContent = "Resend code";
   }
   setAuthStatus("");
+  authStep = 1;
+  renderAuthChrome();
 }
+
+/* ---------- Login and sign-up screen: headings, mascots and sign-up steps ---------- */
+let authStep = 1;
+const AUTH_COPY = {
+  login: { kicker: "WELCOME BACK", title: "Log in to FoldBook", intro: "Use your matric or JAMB number and your password.", line: "Welcome back! Your streak has been waiting for you. 🔥", state: "greet" },
+  signup: { kicker: "NEW HERE", title: "Create your study profile", intro: "Three quick steps and Dr. Eco will build a study path for your level.", line: "Let’s set you up. It takes about a minute.", state: "greet" },
+  forgot: { kicker: "PASSWORD HELP", title: "Forgot your password?", intro: "Enter your number and the recovery email on your account. We’ll email you a 6-digit code.", line: "No wahala, we’ll get you back in. 🔑", state: "encourage" },
+  reset: { kicker: "PASSWORD HELP", title: "Choose a new password", intro: "Enter the code from your email and pick a new password.", line: "Almost there. Pick a password you’ll remember.", state: "encourage" },
+};
+const SIGNUP_STEP_LINES = ["", "Let’s set you up. It takes about a minute.", "Where should Dr. Eco send your study reminders?", "Last step. Keep your password safe! 🔒"];
+function preferredAuthMode() {
+  try { return window.localStorage.getItem(RETURNING_DEVICE_KEY) ? "login" : "signup"; } catch { return "signup"; }
+}
+function focusFirstAuthField() {
+  const field = [...appAuthForm.querySelectorAll("input, select")].find((input) => input.offsetParent && !input.disabled && input.type !== "checkbox");
+  field?.focus({ preventScroll: true });
+}
+function renderAuthChrome() {
+  const admin = !adminPasscodeGroup.hidden;
+  const copy = AUTH_COPY[authMode] || AUTH_COPY.login;
+  const stepped = authMode === "signup" && !admin;
+  document.querySelector("#authKicker").textContent = admin ? "ADMIN ACCESS" : copy.kicker;
+  document.querySelector("#authTitle").textContent = admin ? "Admin sign-in" : copy.title;
+  if (!pendingResultsAfterAuth) document.querySelector("#authIntroCopy").textContent = admin ? "Enter the admin passcode to open the portal." : copy.intro;
+  document.querySelector("#authMascotLine").textContent = stepped ? SIGNUP_STEP_LINES[authStep] : copy.line;
+  document.querySelector("#authSteps").hidden = !stepped;
+  document.querySelector("#authRegistrationHelp").hidden = authMode !== "signup";
+  document.querySelectorAll("#authSteps li").forEach((item) => {
+    const step = Number(item.dataset.step);
+    item.classList.toggle("is-current", step === authStep);
+    item.classList.toggle("is-done", step < authStep);
+  });
+  appAuthForm.querySelectorAll("[data-auth-step]").forEach((group) => {
+    group.classList.toggle("auth-step-off", stepped && Number(group.dataset.authStep) !== authStep);
+  });
+  if (stepped) document.querySelector("#authSubmit").textContent = authStep < 3 ? "Continue" : "Create account";
+  document.querySelector("#backToLanding").textContent = stepped && authStep > 1 ? "Back" : "Back to home";
+  const foldo = document.querySelector("#authFoldo");
+  if (foldo && !document.querySelector("#authView").hidden && foldo.offsetWidth >= 96) {
+    window.playFoldBookMascot?.("foldo", copy.state, foldo, { flameDays: studyProgress?.streak || 0 });
+  }
+}
+function setAuthStep(step) {
+  authStep = Math.max(1, Math.min(3, step));
+  setAuthStatus("");
+  renderAuthChrome();
+  focusFirstAuthField();
+}
+// Check only the fields on the current sign-up step before moving on.
+function authStepProblem(step) {
+  if (step === 1) {
+    if (normalizeNameTokens(document.querySelector("#authFullName").value).length < 2) return ["#authFullName", "Enter your first name and surname."];
+    if (!normalizeStudentIdentifier(document.querySelector("#authRegNo").value)) return ["#authRegNo", "Enter a valid JAMB number (14 characters) or UNIUYO matric number."];
+  }
+  if (step === 2) {
+    if (!normalizeWhatsAppPhone(document.querySelector("#authWhatsapp").value)) return ["#authWhatsapp", "Enter a Nigerian WhatsApp number, like 08012345678."];
+    if (!normalizeAuthEmail(document.querySelector("#authEmail").value)) return ["#authEmail", "Enter an email address you can open."];
+  }
+  return null;
+}
+// Runs before the normal submit handler: in sign-up steps 1 and 2, "Continue" moves on.
+document.addEventListener("submit", (event) => {
+  if (event.target !== appAuthForm || authMode !== "signup" || !adminPasscodeGroup.hidden || authStep >= 3) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  const problem = authStepProblem(authStep);
+  if (problem) { setAuthStatus(problem[1]); document.querySelector(problem[0]).focus(); return; }
+  setAuthStep(authStep + 1);
+}, true);
+document.querySelectorAll(".auth-reveal").forEach((button) => button.addEventListener("click", () => {
+  const input = document.querySelector(`#${button.dataset.reveal}`);
+  const show = input.type === "password";
+  input.type = show ? "text" : "password";
+  button.textContent = show ? "Hide" : "Show";
+  button.setAttribute("aria-label", show ? "Hide password" : "Show password");
+}));
 function setAuthStatus(message, kind = "error") {
   const status = document.querySelector("#authStatus");
   status.textContent = message;
@@ -8164,8 +8247,11 @@ async function restoreAuthSession() {
   let savedSession;
   try {
     savedSession = window.localStorage.getItem(AUTH_SESSION_KEY);
-    if (!savedSession) return false;
-    const localSession = JSON.parse(savedSession);
+    // Phones (iPhones especially) can clear site storage while the sign-in cookie is still
+    // valid, so a missing local copy is not a reason to send the student to the login page:
+    // the server is asked either way.
+    let localSession = {};
+    try { localSession = savedSession ? JSON.parse(savedSession) || {} : {}; } catch { localSession = {}; }
     if (localSession.role === "admin") {
       window.localStorage.removeItem(AUTH_SESSION_KEY);
       return false;
@@ -8184,10 +8270,11 @@ async function restoreAuthSession() {
       }
       if (attempt < 2) await new Promise((resolve) => window.setTimeout(resolve, 1200 * (attempt + 1)));
     }
+    if (!serverStudent && !savedSession) return false;
     const session = { ...localSession, ...(serverStudent || {}), role: "student" };
     const registration = normalizeStudentIdentifier(session.registration || "");
-    if (session.role !== "student" || !registration || typeof session.name !== "string"
-      || normalizeNameTokens(session.name).length < 2) {
+    // A name with one word (some accounts have one) must not sign the student out.
+    if (!registration || typeof session.name !== "string" || !session.name.trim()) {
       window.localStorage.removeItem(AUTH_SESSION_KEY);
       return false;
     }

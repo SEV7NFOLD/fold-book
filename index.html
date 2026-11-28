@@ -449,69 +449,98 @@
       </section>
     </section>
 
-    <section id="authView" class="auth-view" hidden>
-      <div class="auth-screen-card">
-        <span class="section-kicker">STUDENT & ADMIN ACCESS</span>
-        <h1>Welcome to FoldBook</h1>
-        <p id="authIntroCopy">Create a study profile to open your learning workspace. Sign in to check results inside FoldBook.</p>
-        <div class="auth-mode-switch" role="group" aria-label="Student account access">
-          <button type="button" class="auth-mode-button is-active" id="authSignupMode" aria-pressed="true">Create account</button>
-          <button type="button" class="auth-mode-button" id="authLoginMode" aria-pressed="false">Log in</button>
+    <section id="authView" class="auth-view auth-v2" hidden>
+      <div class="auth-shell">
+        <aside class="auth-brand" aria-hidden="true">
+          <div class="auth-brand-top"><img src="assets/brand/foldbook-pwa-icon.svg" alt="" width="36" height="36"><span>FoldBook</span></div>
+          <div class="auth-cast">
+            <div class="auth-bubble" id="authMascotLine">Let’s set you up. It takes about a minute.</div>
+            <div class="auth-characters">
+              <div class="auth-foldo" id="authFoldo"><img class="foldbook-fallback" src="assets/brand/foldo-mark-dark.svg" alt=""></div>
+              <img class="auth-eco" src="assets/brand/eco-avatar.svg" alt="">
+            </div>
+          </div>
+          <ul class="auth-perks">
+            <li><strong>Dr. Eco knows your course.</strong> Answers from your department’s own notes, at your level.</li>
+            <li><strong>Your notes, in one place.</strong> Ask for a course or a topic and read it right here.</li>
+            <li><strong>Study that sticks.</strong> Short lessons, streaks and the weekly league.</li>
+          </ul>
+          <p class="auth-brand-foot">Built by SEV7N FOLD</p>
+        </aside>
+
+        <div class="auth-panel">
+          <div class="auth-mode-switch" role="group" aria-label="Student account access">
+            <button type="button" class="auth-mode-button" id="authLoginMode" aria-pressed="false">Log in</button>
+            <button type="button" class="auth-mode-button is-active" id="authSignupMode" aria-pressed="true">Create account</button>
+          </div>
+          <div class="auth-panel-head">
+            <span class="section-kicker" id="authKicker">NEW HERE</span>
+            <h1 id="authTitle">Create your study profile</h1>
+            <p id="authIntroCopy">Create a study profile to open your learning workspace. Sign in to check results inside FoldBook.</p>
+          </div>
+          <ol class="auth-steps" id="authSteps" aria-label="Sign-up steps">
+            <li data-step="1" class="is-current"><span>1</span>About you</li>
+            <li data-step="2"><span>2</span>Contact</li>
+            <li data-step="3"><span>3</span>Password</li>
+          </ol>
+          <form id="appAuthForm" novalidate>
+            <div class="form-group" id="authNameGroup" data-auth-step="1">
+              <label for="authFullName">Full name</label>
+              <input id="authFullName" name="fullName" type="text" autocomplete="name" placeholder="First name and surname" required>
+            </div>
+            <div class="form-group" data-auth-step="1">
+              <label for="authRegNo">Matric or JAMB registration number</label>
+              <input id="authRegNo" name="registration" type="text" autocomplete="username" autocapitalize="characters" spellcheck="false" maxlength="18" placeholder="25/SS/EC/001 or 202610012345AB" aria-describedby="authRegistrationHelp" required>
+              <p class="profile-help" id="authRegistrationHelp">New students can use their 14-character JAMB number. Use your UNIUYO matric number if you have one.</p>
+            </div>
+            <div class="form-group" id="authLevelGroup" data-auth-step="1">
+              <label for="authLevel">Current level</label>
+              <select id="authLevel" name="level" required>
+                <option value="100L">100 Level</option><option value="200L">200 Level</option>
+                <option value="300L">300 Level</option><option value="400L">400 Level</option>
+              </select>
+            </div>
+            <div class="form-group" id="authPhoneGroup" data-auth-step="2">
+              <label for="authWhatsapp">WhatsApp number</label>
+              <input id="authWhatsapp" name="whatsapp" type="tel" autocomplete="tel" inputmode="tel" placeholder="08012345678" required>
+            </div>
+            <div class="form-group" id="authEmailGroup" data-auth-step="2">
+              <label for="authEmail" id="authEmailLabel">Email address</label>
+              <input id="authEmail" name="email" type="email" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false" maxlength="254" placeholder="you@example.com" aria-describedby="authEmailHelp" required>
+              <p class="profile-help" id="authEmailHelp">Only used to send you a code if you forget your password.</p>
+            </div>
+            <div class="form-group" id="authCodeGroup" hidden>
+              <label for="authResetCode">6-digit code from your email</label>
+              <input id="authResetCode" name="resetCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]*" placeholder="123456">
+            </div>
+            <div class="form-group" id="authPasswordGroup" data-auth-step="3">
+              <label for="authPassword" id="authPasswordLabel">Password</label>
+              <div class="auth-password-field">
+                <input id="authPassword" name="password" type="password" autocomplete="new-password" minlength="8" required>
+                <button type="button" class="auth-reveal" data-reveal="authPassword" aria-label="Show password">Show</button>
+              </div>
+            </div>
+            <div class="form-group" id="authConfirmGroup" hidden>
+              <label for="authConfirmPassword">Confirm new password</label>
+              <input id="authConfirmPassword" name="confirmPassword" type="password" autocomplete="new-password" minlength="8">
+            </div>
+            <div class="form-group" id="adminPasscodeGroup" hidden>
+              <label for="adminPasscode">Admin passcode</label>
+              <input id="adminPasscode" name="adminPasscode" type="password" autocomplete="current-password">
+            </div>
+            <label class="whatsapp-consent" id="authConsentGroup" data-auth-step="3"><input type="checkbox" id="authMarketingConsent" required> I agree that FoldBook may save my number and send me up to two WhatsApp study reminders a day. I can reply STOP any time.</label>
+            <div class="auth-recovery-links">
+              <button type="button" class="auth-link-button" id="authForgotLink" hidden>Forgot password?</button>
+              <button type="button" class="auth-link-button" id="authResendCode" hidden>Resend code</button>
+              <button type="button" class="auth-link-button" id="authBackToLogin" hidden>Back to log in</button>
+            </div>
+            <p class="verification-status" id="authStatus" role="status" aria-live="polite"></p>
+            <div class="auth-actions">
+              <button type="button" class="card-secondary-button" id="backToLanding">Back</button>
+              <button type="submit" class="results-submit" id="authSubmit">Create account</button>
+            </div>
+          </form>
         </div>
-        <form id="appAuthForm" novalidate>
-          <div class="form-group" id="authNameGroup">
-            <label for="authFullName">Full Name</label>
-            <input id="authFullName" name="fullName" type="text" autocomplete="name" required>
-          </div>
-          <div class="form-group">
-            <label for="authRegNo">Matric or JAMB Registration Number</label>
-            <input id="authRegNo" name="registration" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="18" placeholder="25/SS/EC/001 or 202610012345AB" aria-describedby="authRegistrationHelp" required>
-            <p class="profile-help" id="authRegistrationHelp">Newly admitted students can use their 14-character JAMB number. Use your UNIUYO matric number if you already have one.</p>
-          </div>
-          <div class="form-group" id="authEmailGroup">
-            <label for="authEmail" id="authEmailLabel">Email address</label>
-            <input id="authEmail" name="email" type="email" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false" maxlength="254" placeholder="you@example.com" aria-describedby="authEmailHelp" required>
-            <p class="profile-help" id="authEmailHelp">Used only to email you a code if you forget your password. Use an address you can open.</p>
-          </div>
-          <div class="form-group" id="authLevelGroup">
-            <label for="authLevel">Current academic level</label>
-            <select id="authLevel" name="level" required>
-              <option value="100L">100 Level</option><option value="200L">200 Level</option>
-              <option value="300L">300 Level</option><option value="400L">400 Level</option>
-            </select>
-          </div>
-          <div class="form-group" id="authPasswordGroup">
-            <label for="authPassword" id="authPasswordLabel">Password</label>
-            <input id="authPassword" name="password" type="password" autocomplete="new-password" minlength="8" required>
-          </div>
-          <div class="form-group" id="authCodeGroup" hidden>
-            <label for="authResetCode">6-digit code from your email</label>
-            <input id="authResetCode" name="resetCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]*" placeholder="123456">
-          </div>
-          <div class="form-group" id="authConfirmGroup" hidden>
-            <label for="authConfirmPassword">Confirm new password</label>
-            <input id="authConfirmPassword" name="confirmPassword" type="password" autocomplete="new-password" minlength="8">
-          </div>
-          <div class="form-group" id="authPhoneGroup">
-            <label for="authWhatsapp">WhatsApp Phone Number</label>
-            <input id="authWhatsapp" name="whatsapp" type="tel" autocomplete="tel" inputmode="tel" placeholder="08012345678" required>
-          </div>
-          <div class="form-group" id="adminPasscodeGroup" hidden>
-            <label for="adminPasscode">Admin Passcode</label>
-            <input id="adminPasscode" name="adminPasscode" type="password" autocomplete="current-password">
-          </div>
-          <label class="whatsapp-consent" id="authConsentGroup"><input type="checkbox" id="authMarketingConsent" required> I agree that FoldBook may save this number and send me up to two WhatsApp study reminders per day. I can reply STOP at any time.</label>
-          <div class="auth-recovery-links">
-            <button type="button" class="auth-link-button" id="authForgotLink" hidden>Forgot password?</button>
-            <button type="button" class="auth-link-button" id="authResendCode" hidden>Resend code</button>
-            <button type="button" class="auth-link-button" id="authBackToLogin" hidden>Back to log in</button>
-          </div>
-          <p class="verification-status" id="authStatus" role="status" aria-live="polite"></p>
-          <div class="auth-actions">
-            <button type="button" class="card-secondary-button" id="backToLanding">Back</button>
-            <button type="submit" class="results-submit" id="authSubmit">Create account</button>
-          </div>
-        </form>
       </div>
     </section>
 
